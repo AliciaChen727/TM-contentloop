@@ -33,6 +33,8 @@ export default function DashboardPage() {
   const [igPosts, setIgPosts] = useState<IgPost[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('combined')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'post' | 'reels'>('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -55,6 +57,22 @@ export default function DashboardPage() {
     })
     return unsub
   }, [router])
+
+  // Filtered posts for table
+  const filteredFb = useMemo(() => {
+    let arr = fbPosts
+    if (typeFilter === 'reels') return []
+    if (search) arr = arr.filter(p => p.message.toLowerCase().includes(search.toLowerCase()))
+    return arr
+  }, [fbPosts, typeFilter, search])
+
+  const filteredIg = useMemo(() => {
+    let arr = igPosts
+    if (typeFilter === 'post') arr = arr.filter(p => p.mediaType !== 'REELS' && p.mediaType !== 'VIDEO')
+    if (typeFilter === 'reels') arr = arr.filter(p => p.mediaType === 'REELS' || p.mediaType === 'VIDEO')
+    if (search) arr = arr.filter(p => p.caption.toLowerCase().includes(search.toLowerCase()))
+    return arr
+  }, [igPosts, typeFilter, search])
 
   // Daily aggregated data for chart
   const dailyData = useMemo<DailyPoint[]>(() => {
@@ -167,28 +185,32 @@ export default function DashboardPage() {
               <ContentChart data={dailyData} />
             </div>
 
-            {/* Tab + Table */}
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex gap-1 rounded-lg bg-gray-200 p-1">
-                <button onClick={() => setActiveTab('combined')} className={tabClass('combined')}>
-                  FB + IG
+            {/* Tab + Filter toolbar */}
+            <div className="ads-posts-toolbar" style={{ marginBottom: 12 }}>
+              <div className="ads-posts-platform-tabs">
+                <button onClick={() => setActiveTab('combined')} className={`ads-posts-platform-tab ${activeTab === 'combined' ? 'active' : ''}`}>FB + IG</button>
+                <button onClick={() => setActiveTab('fb')} className={`ads-posts-platform-tab ${activeTab === 'fb' ? 'active' : ''}`}>
+                  Facebook <span className="badge">{fbPosts.length}</span>
                 </button>
-                <button onClick={() => setActiveTab('fb')} className={tabClass('fb')}>
-                  Facebook
-                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">{fbPosts.length}</span>
-                </button>
-                <button onClick={() => setActiveTab('ig')} className={tabClass('ig')}>
-                  Instagram
-                  <span className="rounded-full bg-pink-100 px-1.5 py-0.5 text-xs text-pink-700">{igPosts.length}</span>
+                <button onClick={() => setActiveTab('ig')} className={`ads-posts-platform-tab ${activeTab === 'ig' ? 'active' : ''}`}>
+                  Instagram <span className="badge">{igPosts.length}</span>
                 </button>
               </div>
-              <p className="text-xs text-gray-400">點擊欄位標題可排序</p>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['all', 'post', 'reels'] as const).map(v => (
+                  <button key={v} className={`ads-posts-type-chip ${typeFilter === v ? 'active' : ''}`} onClick={() => setTypeFilter(v)}>
+                    {v === 'all' ? '全部' : v === 'post' ? '貼文' : 'Reels'}
+                  </button>
+                ))}
+              </div>
+              <input className="ads-posts-search" placeholder="搜尋貼文內容…" value={search} onChange={e => setSearch(e.target.value)} />
+              <p style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>點擊欄位標題可排序</p>
             </div>
 
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              {activeTab === 'combined' && <CombinedPostsTable fbPosts={fbPosts} igPosts={igPosts} />}
-              {activeTab === 'fb' && <FbPostsTable posts={fbPosts} />}
-              {activeTab === 'ig' && <IgPostsTable posts={igPosts} />}
+              {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} />}
+              {activeTab === 'fb' && <FbPostsTable posts={filteredFb} />}
+              {activeTab === 'ig' && <IgPostsTable posts={filteredIg} />}
             </div>
           </>
         )}
