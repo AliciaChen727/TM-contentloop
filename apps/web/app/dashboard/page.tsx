@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
@@ -8,20 +8,29 @@ import { auth, db } from '@/lib/firebase/client'
 import { FbPostsTable } from '@/components/dashboard/FbPostsTable'
 import { IgPostsTable } from '@/components/dashboard/IgPostsTable'
 import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
+import { ContentChart } from '@/components/dashboard/ContentChart'
+import type { DailyPoint } from '@/components/dashboard/ContentChart'
 
-interface PageTokenData {
-  pageName: string
-  pageId: string
-  igUserId: string | null
+interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
+
+interface FbPost {
+  id: string; message: string; createdTime: string; permalink: string
+  insights: { reactions: number; comments: number; shares: number }
+}
+interface IgPost {
+  id: string; caption: string; mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'REELS'; permalink: string; timestamp: string
+  insights: { reach: number; likes: number; comments: number; saved: number; shares: number; views: number }
 }
 
 type Tab = 'fb' | 'ig' | 'combined'
 
+const fmtBig = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toLocaleString('zh-TW')
+
 export default function DashboardPage() {
   const router = useRouter()
   const [pageData, setPageData] = useState<PageTokenData | null>(null)
-  const [fbPosts, setFbPosts] = useState<unknown[]>([])
-  const [igPosts, setIgPosts] = useState<unknown[]>([])
+  const [fbPosts, setFbPosts] = useState<FbPost[]>([])
+  const [igPosts, setIgPosts] = useState<IgPost[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('combined')
 
@@ -42,11 +51,47 @@ export default function DashboardPage() {
 
       if (fbRes.ok) { const d = await fbRes.json(); setFbPosts(d.posts ?? []) }
       if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
-
       setLoading(false)
     })
     return unsub
   }, [router])
+
+  // Daily aggregated data for chart
+  const dailyData = useMemo<DailyPoint[]>(() => {
+    const byDate = new Map<string, { reach: number; likes: number; comments: number; shares: number }>()
+    for (const fb of fbPosts) {
+      const d = fb.createdTime.slice(0, 10)
+      const e = byDate.get(d) ?? { reach: 0, likes: 0, comments: 0, shares: 0 }
+      byDate.set(d, { ...e, likes: e.likes + (fb.insights?.reactions ?? 0), comments: e.comments + (fb.insights?.comments ?? 0), shares: e.shares + (fb.insights?.shares ?? 0) })
+    }
+    for (const ig of igPosts) {
+      const d = ig.timestamp.slice(0, 10)
+      const e = byDate.get(d) ?? { reach: 0, likes: 0, comments: 0, shares: 0 }
+      byDate.set(d, { ...e, reach: e.reach + (ig.insights?.reach ?? 0), likes: e.likes + (ig.insights?.likes ?? 0), comments: e.comments + (ig.insights?.comments ?? 0), shares: e.shares + (ig.insights?.shares ?? 0) })
+    }
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([fullDate, d]) => ({
+        date: fullDate.slice(5).replace('-', '/'),
+        fullDate,
+        reach: d.reach,
+        likes: d.likes,
+        comments: d.comments,
+        shares: d.shares,
+        engRate: d.reach > 0 ? Number(((d.likes + d.comments + d.shares) / d.reach * 100).toFixed(2)) : 0,
+      }))
+  }, [fbPosts, igPosts])
+
+  // Summary stats
+  const stats = useMemo(() => {
+    const totalReach = igPosts.reduce((s, p) => s + (p.insights?.reach ?? 0), 0)
+    const totalLikes = fbPosts.reduce((s, p) => s + (p.insights?.reactions ?? 0), 0) + igPosts.reduce((s, p) => s + (p.insights?.likes ?? 0), 0)
+    const totalComments = fbPosts.reduce((s, p) => s + (p.insights?.comments ?? 0), 0) + igPosts.reduce((s, p) => s + (p.insights?.comments ?? 0), 0)
+    const totalShares = fbPosts.reduce((s, p) => s + (p.insights?.shares ?? 0), 0) + igPosts.reduce((s, p) => s + (p.insights?.shares ?? 0), 0)
+    const avgEngRate = totalReach > 0 ? ((totalLikes + totalComments + totalShares) / totalReach * 100) : 0
+    const reelsCount = igPosts.filter(p => p.mediaType === 'REELS' || p.mediaType === 'VIDEO').length
+    return { totalReach, totalLikes, totalComments, totalShares, avgEngRate, totalPosts: fbPosts.length + igPosts.length, reelsCount }
+  }, [fbPosts, igPosts])
 
   async function handleSignOut() {
     await signOut(auth)
@@ -55,11 +100,14 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-gray-50">
         <p className="text-sm text-gray-400">載入中⋯⋯</p>
       </main>
     )
   }
+
+  const tabClass = (t: Tab) =>
+    `flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${activeTab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -76,9 +124,7 @@ export default function DashboardPage() {
             >
               📊 廣告儀表板
             </button>
-            <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-gray-600">
-              登出
-            </button>
+            <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-gray-600">登出</button>
           </div>
         </div>
       </header>
@@ -96,56 +142,53 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* Filter Bar */}
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex gap-1 rounded-lg bg-gray-200 p-1">
-                <button
-                  onClick={() => setActiveTab('combined')}
-                  className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
-                    activeTab === 'combined'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  FB + IG
-                </button>
-                <button
-                  onClick={() => setActiveTab('fb')}
-                  className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
-                    activeTab === 'fb'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Facebook
-                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">
-                    {fbPosts.length}
-                  </span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('ig')}
-                  className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
-                    activeTab === 'ig'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Instagram
-                  <span className="rounded-full bg-pink-100 px-1.5 py-0.5 text-xs text-pink-700">
-                    {igPosts.length}
-                  </span>
-                </button>
-              </div>
-              <p className="text-xs text-gray-400">每日凌晨 3 點自動更新</p>
+            {/* Summary Strip */}
+            <div className="ads-posts-summary-strip" style={{ marginBottom: 20 }}>
+              {[
+                { label: '總貼文數', value: stats.totalPosts, sub: `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文` },
+                { label: '總觸及 (IG)', value: fmtBig(stats.totalReach), sub: '來自 IG 貼文' },
+                { label: '總按讚', value: fmtBig(stats.totalLikes), sub: `留言 ${stats.totalComments} · 分享 ${stats.totalShares}` },
+                { label: '平均互動率', value: `${stats.avgEngRate.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
+              ].map(s => (
+                <div key={s.label} className="ads-posts-sum-card">
+                  <div className="ads-posts-sum-label">{s.label}</div>
+                  <div className="ads-posts-sum-value">{s.value}</div>
+                  <div className="ads-posts-sum-sub">{s.sub}</div>
+                </div>
+              ))}
             </div>
 
-            {/* Content */}
+            {/* Chart Card */}
+            <div className="ads-card ads-card-pad" style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ad-text)' }}>成效趨勢</span>
+                <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>每日凌晨 3 點自動更新</span>
+              </div>
+              <ContentChart data={dailyData} />
+            </div>
+
+            {/* Tab + Table */}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex gap-1 rounded-lg bg-gray-200 p-1">
+                <button onClick={() => setActiveTab('combined')} className={tabClass('combined')}>
+                  FB + IG
+                </button>
+                <button onClick={() => setActiveTab('fb')} className={tabClass('fb')}>
+                  Facebook
+                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">{fbPosts.length}</span>
+                </button>
+                <button onClick={() => setActiveTab('ig')} className={tabClass('ig')}>
+                  Instagram
+                  <span className="rounded-full bg-pink-100 px-1.5 py-0.5 text-xs text-pink-700">{igPosts.length}</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">點擊欄位標題可排序</p>
+            </div>
+
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              {activeTab === 'combined' && (
-                <CombinedPostsTable fbPosts={fbPosts as never[]} igPosts={igPosts as never[]} />
-              )}
-              {activeTab === 'fb' && <FbPostsTable posts={fbPosts as never[]} />}
-              {activeTab === 'ig' && <IgPostsTable posts={igPosts as never[]} />}
+              {activeTab === 'combined' && <CombinedPostsTable fbPosts={fbPosts} igPosts={igPosts} />}
+              {activeTab === 'fb' && <FbPostsTable posts={fbPosts} />}
+              {activeTab === 'ig' && <IgPostsTable posts={igPosts} />}
             </div>
           </>
         )}

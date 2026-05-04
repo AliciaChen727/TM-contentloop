@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 
-interface LineConfig { key: string; label: string; color: string; isCurr?: boolean }
+interface LineConfig { key: string; label: string; color: string; isCurr?: boolean; isInt?: boolean }
 interface DataPoint { [key: string]: number | string }
 
 function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)) }
@@ -91,7 +91,7 @@ export function SvgChart({ data, lines, height = 160, roasTarget }: {
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: l.color, display: 'inline-block' }} />
               <span style={{ fontSize: 11, color: '#5C5750' }}>{l.label}</span>
               <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: l.color }}>
-                {l.isCurr ? fmtK(tooltip.d[l.key] as number) : (tooltip.d[l.key] as number).toFixed(2)}
+                {l.isCurr ? fmtK(tooltip.d[l.key] as number) : l.isInt ? (tooltip.d[l.key] as number).toLocaleString('zh-TW') : (tooltip.d[l.key] as number).toFixed(2)}
               </span>
             </div>
           ))}
