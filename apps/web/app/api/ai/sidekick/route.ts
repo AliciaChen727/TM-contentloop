@@ -41,7 +41,7 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 
   return `${role}
 
-你的回應格式必須是繁體中文，並以以下 JSON 格式回傳（不要加任何 markdown code block，直接輸出 JSON）：
+你的回應格式必須是繁體中文。直接輸出純 JSON，不要加任何 markdown、不要加 ```json、不要加任何說明文字，只輸出 JSON 物件本身：
 {
   "type": "analysis" | "recommendation" | "warning" | "actions" | "general",
   "summary": "一句話摘要",
@@ -90,12 +90,13 @@ export async function POST(req: NextRequest) {
   })
 
   const rawText = claudeRes.content[0].type === 'text' ? claudeRes.content[0].text : ''
+  const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
 
   let parsed: object
   try {
-    parsed = JSON.parse(rawText)
+    parsed = JSON.parse(cleaned)
   } catch {
-    parsed = { type: 'general', summary: rawText, bullets: [], stats: [], actions: [] }
+    parsed = { type: 'general', summary: cleaned, bullets: [], stats: [], actions: [] }
   }
 
   // Save to Firestore for Cowork memory
