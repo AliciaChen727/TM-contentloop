@@ -13,7 +13,7 @@ import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
-import type { NavId } from '@/components/ads/types'
+import type { NavId, Post } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
@@ -29,17 +29,69 @@ const NAV_LABELS: Record<NavId, string> = {
   posts: '內容表現', time: '最佳時段', budget: '預算模擬',
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapFbPost(p: any): Post {
+  return {
+    id: p.id,
+    date: p.createdTime?.slice(0, 10) ?? '',
+    platform: 'FB',
+    title: p.message || '（無文字內容）',
+    reach: null,
+    likes: p.insights?.reactions ?? 0,
+    comments: p.insights?.comments ?? 0,
+    saves: null,
+    shares: p.insights?.shares ?? 0,
+    plays: null,
+    type: 'post',
+    url: p.permalink || '#',
+    hasAd: false,
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapIgPost(p: any): Post {
+  const isVideo = p.mediaType === 'REELS' || p.mediaType === 'VIDEO'
+  return {
+    id: p.id,
+    date: p.timestamp?.slice(0, 10) ?? '',
+    platform: 'IG',
+    title: p.caption || '（無文字內容）',
+    reach: p.insights?.reach ?? 0,
+    likes: p.insights?.likes ?? 0,
+    comments: p.insights?.comments ?? 0,
+    saves: p.insights?.saved ?? 0,
+    shares: p.insights?.shares ?? 0,
+    plays: isVideo && (p.insights?.views ?? 0) > 0 ? p.insights.views : null,
+    type: isVideo ? 'reels' : 'post',
+    url: p.permalink || '#',
+    hasAd: false,
+  }
+}
+
 export default function AdsPage() {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
   const [active, setActive] = useState<NavId>('overview')
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
+  const [realPosts, setRealPosts] = useState<Post[] | null>(null)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => {
-      if (!u) router.replace('/auth/login')
-      else setAuthed(true)
+    const unsub = onAuthStateChanged(auth, async u => {
+      if (!u) { router.replace('/auth/login'); return }
+      setAuthed(true)
+
+      const idToken = await u.getIdToken()
+      const headers = { Authorization: `Bearer ${idToken}` }
+      const [fbRes, igRes] = await Promise.all([
+        fetch('/api/insights/fb', { headers }),
+        fetch('/api/insights/ig', { headers }),
+      ])
+
+      const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.map(mapFbPost) : []
+      const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.map(mapIgPost) : []
+      const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
+      setRealPosts(merged.length > 0 ? merged : null)
     })
     return unsub
   }, [router])
@@ -63,8 +115,8 @@ export default function AdsPage() {
       {/* Left Nav */}
       <nav className="ads-nav">
         <div className="ads-nav-logo">
-          <div className="brand">Content<span>Loop</span></div>
-          <div className="sub">廣告投手儀表板</div>
+          <div className="brand" style={{ fontSize: 13 }}>Legacy <span>Toastmasters</span></div>
+          <div className="sub">廣告儀表板</div>
         </div>
         <div style={{ flex: 1, overflow: 'auto', paddingTop: 8 }}>
           <div className="ads-nav-section">主要功能</div>
@@ -76,7 +128,7 @@ export default function AdsPage() {
             </div>
           ))}
           <div className="ads-nav-section" style={{ marginTop: 8 }}>頻道</div>
-          {[['Meta', '#888'], ['Facebook', '#1877F2'], ['Instagram', '#E1306C']] .map(([l, c]) => (
+          {[['Meta', '#888'], ['Facebook', '#1877F2'], ['Instagram', '#E1306C']].map(([l, c]) => (
             <div key={l} className="ads-nav-item" style={{ paddingLeft: 14, cursor: 'default' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: c, width: 16, display: 'inline-block' }}>{l[0]}</span>
               {l}
@@ -98,7 +150,7 @@ export default function AdsPage() {
         </div>
         <div className="ads-nav-footer">
           <div>最後更新</div>
-          <div style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 11 }}>2026-05-05 09:32</div>
+          <div style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 11 }}>2026-05-05 03:00</div>
         </div>
       </nav>
 
@@ -124,7 +176,7 @@ export default function AdsPage() {
           {active === 'overview' && <OverviewSection data={MOCK_DATA} onAskAI={openSidekick} />}
           {active === 'diagnosis' && <DiagnosisSection data={MOCK_DATA} onAskAI={openSidekick} />}
           {active === 'creative' && <CreativeSection data={MOCK_DATA} onAskAI={openSidekick} />}
-          {active === 'posts' && <PostsSection onAskAI={openSidekick} />}
+          {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts ?? undefined} />}
           {active === 'time' && <BestTimeSection data={MOCK_DATA} />}
           {active === 'budget' && <BudgetSection data={MOCK_DATA} />}
         </main>

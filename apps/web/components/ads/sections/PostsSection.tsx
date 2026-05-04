@@ -25,7 +25,8 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: { k: SortKey; label: str
   )
 }
 
-export function PostsSection({ onAskAI }: { onAskAI: (q: string) => void }) {
+export function PostsSection({ onAskAI, posts: propPosts }: { onAskAI: (q: string) => void; posts?: Post[] }) {
+  const posts = propPosts ?? POSTS_DATA
   const [platform, setPlatform] = useState<Platform>('all')
   const [view, setView] = useState<View>('raw')
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -39,7 +40,7 @@ export function PostsSection({ onAskAI }: { onAskAI: (q: string) => void }) {
   }
 
   const filtered = useMemo(() => {
-    let arr: Post[] = [...POSTS_DATA]
+    let arr: Post[] = [...posts]
     if (platform === 'fb') arr = arr.filter(p => p.platform === 'FB' || p.platform === 'FB+IG')
     if (platform === 'ig') arr = arr.filter(p => p.platform === 'IG' || p.platform === 'FB+IG')
     if (typeFilter === 'post') arr = arr.filter(p => p.type === 'post')
@@ -56,15 +57,17 @@ export function PostsSection({ onAskAI }: { onAskAI: (q: string) => void }) {
   }, [platform, sortKey, sortDir, typeFilter, search])
 
   const adPosts = useMemo(() => filtered.filter(p => p.hasAd), [filtered])
-  const maxRoas = Math.max(...adPosts.map(p => p.adRoas ?? 0))
-  const fbCount = POSTS_DATA.filter(p => p.platform === 'FB' || p.platform === 'FB+IG').length
-  const igCount = POSTS_DATA.filter(p => p.platform === 'IG' || p.platform === 'FB+IG').length
-  const totalReach = POSTS_DATA.reduce((s, p) => s + (p.reach ?? 0), 0)
-  const totalLikes = POSTS_DATA.reduce((s, p) => s + p.likes, 0)
-  const totalComments = POSTS_DATA.reduce((s, p) => s + p.comments, 0)
-  const totalShares = POSTS_DATA.reduce((s, p) => s + p.shares, 0)
-  const reachPosts = POSTS_DATA.filter(p => (p.reach ?? 0) > 0)
-  const avgEng = reachPosts.reduce((s, p) => s + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length
+  const maxRoas = Math.max(0, ...adPosts.map(p => p.adRoas ?? 0))
+  const fbCount = posts.filter(p => p.platform === 'FB' || p.platform === 'FB+IG').length
+  const igCount = posts.filter(p => p.platform === 'IG' || p.platform === 'FB+IG').length
+  const totalReach = posts.reduce((s, p) => s + (p.reach ?? 0), 0)
+  const totalLikes = posts.reduce((s, p) => s + p.likes, 0)
+  const totalComments = posts.reduce((s, p) => s + p.comments, 0)
+  const totalShares = posts.reduce((s, p) => s + p.shares, 0)
+  const reachPosts = posts.filter(p => (p.reach ?? 0) > 0)
+  const avgEng = reachPosts.length > 0
+    ? reachPosts.reduce((s, p) => s + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length
+    : 0
 
   const roasColor = (r: number) => r >= 4.5 ? 'var(--ad-green)' : r >= 3.5 ? 'var(--ad-blue)' : r >= 2.5 ? 'var(--ad-orange)' : 'var(--ad-red)'
 
@@ -72,7 +75,7 @@ export function PostsSection({ onAskAI }: { onAskAI: (q: string) => void }) {
     <div>
       <div className="ads-posts-summary-strip">
         {[
-          { label: '總貼文數', value: POSTS_DATA.length, sub: `${POSTS_DATA.filter(p => p.type === 'reels').length} Reels · ${POSTS_DATA.filter(p => p.type === 'post').length} 貼文` },
+          { label: '總貼文數', value: posts.length, sub: `${posts.filter(p => p.type === 'reels').length} Reels · ${posts.filter(p => p.type === 'post').length} 貼文` },
           { label: '總觸及', value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach, sub: '所有貼文合計' },
           { label: '總按讚', value: totalLikes.toLocaleString(), sub: `留言 ${totalComments} · 分享 ${totalShares}` },
           { label: '平均互動率', value: `${avgEng.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },

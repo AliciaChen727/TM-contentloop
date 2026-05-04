@@ -5,6 +5,19 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* ── Ads Dashboard Design Tokens (global) ── */
+  --ad-bg: #F5F4F1; --ad-surface: #FFFFFF; --ad-surface2: #F0EEE9;
+  --ad-border: #E2DED8; --ad-text: #1A1814; --ad-text2: #5C5750; --ad-text3: #9A9490;
+  --ad-blue: #3B6FD4; --ad-blue-light: #EBF1FC; --ad-blue-mid: #C2D4F5;
+  --ad-green: #2E8B57; --ad-green-light: #E8F5EE;
+  --ad-orange: #C96A1A; --ad-orange-light: #FDF0E4;
+  --ad-red: #C0392B; --ad-red-light: #FDECEA;
+  --ad-purple: #7C3AED; --ad-purple-light: #F3EEFF;
+  --ad-nav-w: 220px; --ad-sk-w: 440px; --ad-radius: 10px;
+  --ad-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 8px rgba(0,0,0,0.04);
+  --ad-shadow-md: 0 4px 16px rgba(0,0,0,0.1);
+  --font-dm-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-dm-mono: 'DM Mono', 'Courier New', monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,22 +37,6 @@ body {
   .text-balance {
     text-wrap: balance;
   }
-}
-
-/* ── Ads Dashboard Design Tokens ── */
-.ads-root {
-  --ad-bg: #F5F4F1; --ad-surface: #FFFFFF; --ad-surface2: #F0EEE9;
-  --ad-border: #E2DED8; --ad-text: #1A1814; --ad-text2: #5C5750; --ad-text3: #9A9490;
-  --ad-blue: #3B6FD4; --ad-blue-light: #EBF1FC; --ad-blue-mid: #C2D4F5;
-  --ad-green: #2E8B57; --ad-green-light: #E8F5EE;
-  --ad-orange: #C96A1A; --ad-orange-light: #FDF0E4;
-  --ad-red: #C0392B; --ad-red-light: #FDECEA;
-  --ad-purple: #7C3AED; --ad-purple-light: #F3EEFF;
-  --ad-nav-w: 220px; --ad-sk-w: 440px; --ad-radius: 10px;
-  --ad-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 8px rgba(0,0,0,0.04);
-  --ad-shadow-md: 0 4px 16px rgba(0,0,0,0.1);
-  --font-dm-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-dm-mono: 'DM Mono', 'Courier New', monospace;
 }
 
 /* ── Ads Layout Shell ── */

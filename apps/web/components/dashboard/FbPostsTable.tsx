@@ -1,9 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 
 interface FbPost {
   id: string
@@ -19,21 +16,26 @@ interface FbPost {
 
 type SortKey = 'createdTime' | 'reactions' | 'comments' | 'shares'
 
-function fmt(n: number) {
-  return n.toLocaleString()
-}
+const fmt = (n: number) => n.toLocaleString('zh-TW')
 
 function fullDate(iso: string) {
   return new Date(iso).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit',
   })
 }
 
-function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
-  if (!active) return <span className="ml-1 text-gray-300">↕</span>
-  return <span className="ml-1">{dir === 'desc' ? '↓' : '↑'}</span>
+function SortTh({ k, label, sortKey, sortDir, onSort, className }: {
+  k: SortKey; label: string; sortKey: SortKey; sortDir: 'asc' | 'desc'
+  onSort: (k: SortKey) => void; className?: string
+}) {
+  return (
+    <th className={`${sortKey === k ? 'sorted' : ''} ${className ?? ''}`} onClick={() => onSort(k)} style={{ cursor: 'pointer' }}>
+      {label}
+      <span style={{ marginLeft: 4, opacity: sortKey === k ? 1 : 0.4, fontSize: 10, color: sortKey === k ? 'var(--ad-blue)' : undefined }}>
+        {sortKey === k ? (sortDir === 'desc' ? '↓' : '↑') : '↕'}
+      </span>
+    </th>
+  )
 }
 
 export function FbPostsTable({ posts }: { posts: FbPost[] }) {
@@ -41,16 +43,12 @@ export function FbPostsTable({ posts }: { posts: FbPost[] }) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   if (!posts.length) {
-    return <p className="py-8 text-center text-sm text-gray-400">尚無 FB 貼文資料</p>
+    return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>尚無 FB 貼文資料</p>
   }
 
   function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir(d => d === 'desc' ? 'asc' : 'desc')
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
+    if (key === sortKey) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    else { setSortKey(key); setSortDir('desc') }
   }
 
   const sorted = [...posts].sort((a, b) => {
@@ -65,57 +63,45 @@ export function FbPostsTable({ posts }: { posts: FbPost[] }) {
     return sortDir === 'desc' ? bv - av : av - bv
   })
 
-  const col = (key: SortKey, label: string) => (
-    <TableHead
-      className="text-right cursor-pointer select-none hover:text-gray-700"
-      onClick={() => handleSort(key)}
-    >
-      {label}
-      <SortIcon active={sortKey === key} dir={sortDir} />
-    </TableHead>
-  )
-
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-100">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-gray-50 text-xs">
-            <TableHead
-              className="w-[110px] cursor-pointer select-none hover:text-gray-700"
-              onClick={() => handleSort('createdTime')}
-            >
-              日期
-              <SortIcon active={sortKey === 'createdTime'} dir={sortDir} />
-            </TableHead>
-            <TableHead className="max-w-[260px]">內容</TableHead>
-            {col('reactions', '按讚')}
-            {col('comments', '留言')}
-            {col('shares', '分享')}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((post) => (
-            <TableRow key={post.id} className="text-sm">
-              <TableCell className="text-gray-400 whitespace-nowrap">
-                {fullDate(post.createdTime)}
-              </TableCell>
-              <TableCell className="max-w-[260px]">
+    <div style={{ overflowX: 'auto' }}>
+      <table className="ads-posts-table">
+        <thead>
+          <tr>
+            <SortTh k="createdTime" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'left' }}>內容</th>
+            <SortTh k="reactions" label="按讚" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="comments" label="留言" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(post => (
+            <tr key={post.id}>
+              <td className="ads-posts-date">{fullDate(post.createdTime)}</td>
+              <td style={{ maxWidth: 280 }}>
                 <a
                   href={post.permalink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="line-clamp-2 text-gray-700 hover:text-blue-600"
+                  style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
                 >
                   {post.message || '（無文字內容）'}
                 </a>
-              </TableCell>
-              <TableCell className="text-right">{fmt(post.insights.reactions)}</TableCell>
-              <TableCell className="text-right">{fmt(post.insights.comments)}</TableCell>
-              <TableCell className="text-right">{fmt(post.insights.shares)}</TableCell>
-            </TableRow>
+                <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, marginTop: 3, background: 'var(--ad-surface2)', color: 'var(--ad-text3)' }}>
+                  📝 貼文
+                </span>
+              </td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.reactions)}</td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.comments)}</td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.shares)}</td>
+            </tr>
           ))}
-        </TableBody>
-      </Table>
+        </tbody>
+      </table>
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)' }}>
+        共 {posts.length} 筆記錄
+      </div>
     </div>
   )
 }

@@ -1,9 +1,6 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 
 interface FbPost {
   id: string
@@ -29,18 +26,16 @@ interface CombinedRow {
   fbOnly: boolean
   igOnly: boolean
   reach: number
-  likes: number     // fb.reactions + ig.likes
-  comments: number  // fb.comments + ig.comments
+  likes: number
+  comments: number
   saved: number
-  shares: number    // fb.shares + ig.shares
+  shares: number
   views: number
 }
 
 type SortKey = 'date' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'views'
 
-function fmt(n: number) {
-  return n.toLocaleString()
-}
+const fmt = (n: number) => n.toLocaleString('zh-TW')
 
 function fullDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('zh-TW', {
@@ -48,15 +43,24 @@ function fullDate(dateStr: string) {
   })
 }
 
-function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
-  if (!active) return <span className="ml-1 text-gray-300">↕</span>
-  return <span className="ml-1">{dir === 'desc' ? '↓' : '↑'}</span>
+function SortTh({ k, label, sortKey, sortDir, onSort }: {
+  k: SortKey; label: string; sortKey: SortKey; sortDir: 'asc' | 'desc'
+  onSort: (k: SortKey) => void
+}) {
+  return (
+    <th className={sortKey === k ? 'sorted' : ''} onClick={() => onSort(k)} style={{ cursor: 'pointer' }}>
+      {label}
+      <span style={{ marginLeft: 4, opacity: sortKey === k ? 1 : 0.4, fontSize: 10, color: sortKey === k ? 'var(--ad-blue)' : undefined }}>
+        {sortKey === k ? (sortDir === 'desc' ? '↓' : '↑') : '↕'}
+      </span>
+    </th>
+  )
 }
 
-function platformBadge(row: CombinedRow) {
-  if (row.fbOnly) return <span className="text-[10px] text-blue-400 ml-1">FB only</span>
-  if (row.igOnly) return <span className="text-[10px] text-pink-400 ml-1">IG only</span>
-  return null
+function PlatBadge({ row }: { row: CombinedRow }) {
+  if (row.fbOnly) return <span className="ads-posts-platform-badge fb" style={{ marginLeft: 6 }}>FB</span>
+  if (row.igOnly) return <span className="ads-posts-platform-badge ig" style={{ marginLeft: 6 }}>IG</span>
+  return <span className="ads-posts-platform-badge both" style={{ marginLeft: 6 }}>FB+IG</span>
 }
 
 export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; igPosts: IgPost[] }) {
@@ -65,11 +69,9 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
 
   const rows = useMemo<CombinedRow[]>(() => {
     const byDate = new Map<string, { fb?: FbPost; ig?: IgPost }>()
-
     for (const fb of fbPosts) {
       const d = fb.createdTime.slice(0, 10)
       const entry = byDate.get(d) ?? {}
-      // keep only the first fb post per date
       if (!entry.fb) byDate.set(d, { ...entry, fb })
     }
     for (const ig of igPosts) {
@@ -77,7 +79,6 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
       const entry = byDate.get(d) ?? {}
       if (!entry.ig) byDate.set(d, { ...entry, ig })
     }
-
     return Array.from(byDate.entries()).map(([date, { fb, ig }]) => ({
       date,
       content: ig?.caption || fb?.message || '（無文字內容）',
@@ -94,16 +95,12 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
   }, [fbPosts, igPosts])
 
   if (!rows.length) {
-    return <p className="py-8 text-center text-sm text-gray-400">尚無整合貼文資料</p>
+    return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>尚無整合貼文資料</p>
   }
 
   function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir(d => d === 'desc' ? 'asc' : 'desc')
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
+    if (key === sortKey) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    else { setSortKey(key); setSortDir('desc') }
   }
 
   const sorted = [...rows].sort((a, b) => {
@@ -112,90 +109,79 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
     return sortDir === 'desc' ? bv - av : av - bv
   })
 
-  // totals row
   const totals = rows.reduce(
     (acc, r) => ({
-      reach: acc.reach + r.reach,
-      likes: acc.likes + r.likes,
-      comments: acc.comments + r.comments,
-      saved: acc.saved + r.saved,
-      shares: acc.shares + r.shares,
-      views: acc.views + r.views,
+      reach: acc.reach + r.reach, likes: acc.likes + r.likes,
+      comments: acc.comments + r.comments, saved: acc.saved + r.saved,
+      shares: acc.shares + r.shares, views: acc.views + r.views,
     }),
     { reach: 0, likes: 0, comments: 0, saved: 0, shares: 0, views: 0 }
   )
 
-  const col = (key: SortKey, label: string) => (
-    <TableHead
-      className="text-right cursor-pointer select-none hover:text-gray-700"
-      onClick={() => handleSort(key)}
-    >
-      {label}
-      <SortIcon active={sortKey === key} dir={sortDir} />
-    </TableHead>
-  )
-
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-100">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-gray-50 text-xs">
-            <TableHead
-              className="w-[110px] cursor-pointer select-none hover:text-gray-700"
-              onClick={() => handleSort('date')}
-            >
-              日期
-              <SortIcon active={sortKey === 'date'} dir={sortDir} />
-            </TableHead>
-            <TableHead className="max-w-[240px]">內容</TableHead>
-            {col('reach', '觸及')}
-            {col('likes', '按讚')}
-            {col('comments', '留言')}
-            {col('saved', '收藏')}
-            {col('shares', '分享')}
-            {col('views', '播放')}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((row) => (
-            <TableRow key={row.date} className="text-sm">
-              <TableCell className="text-gray-400 whitespace-nowrap">
+    <div style={{ overflowX: 'auto' }}>
+      <table className="ads-posts-table">
+        <thead>
+          <tr>
+            <SortTh k="date" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'left' }}>內容</th>
+            <SortTh k="reach" label="觸及" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="likes" label="按讚" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="comments" label="留言" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="saved" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(row => (
+            <tr key={row.date}>
+              <td className="ads-posts-date" style={{ whiteSpace: 'nowrap' }}>
                 {fullDate(row.date)}
-                {platformBadge(row)}
-              </TableCell>
-              <TableCell className="max-w-[240px]">
+                <PlatBadge row={row} />
+              </td>
+              <td style={{ maxWidth: 260 }}>
                 <a
                   href={row.permalink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="line-clamp-2 text-gray-700 hover:text-purple-600"
+                  style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
                 >
                   {row.content}
                 </a>
-              </TableCell>
-              <TableCell className="text-right font-medium">{row.igOnly || (!row.fbOnly) ? fmt(row.reach) : '—'}</TableCell>
-              <TableCell className="text-right">{fmt(row.likes)}</TableCell>
-              <TableCell className="text-right">{fmt(row.comments)}</TableCell>
-              <TableCell className="text-right">{row.igOnly || (!row.fbOnly) ? fmt(row.saved) : '—'}</TableCell>
-              <TableCell className="text-right">{fmt(row.shares)}</TableCell>
-              <TableCell className="text-right">
-                {row.views > 0 ? fmt(row.views) : '—'}
-              </TableCell>
-            </TableRow>
+              </td>
+              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: row.reach > 200 ? 'var(--ad-green)' : undefined }}>
+                {row.igOnly || !row.fbOnly ? fmt(row.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+              </td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.likes)}</td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.comments)}</td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>
+                {row.igOnly || !row.fbOnly ? fmt(row.saved) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+              </td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.shares)}</td>
+              <td className="ads-posts-num" style={{ textAlign: 'right' }}>
+                {row.views > 0 ? fmt(row.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+              </td>
+            </tr>
           ))}
-          {/* totals row */}
-          <TableRow className="bg-gray-50 text-sm font-semibold border-t-2">
-            <TableCell className="text-gray-500">合計</TableCell>
-            <TableCell />
-            <TableCell className="text-right">{fmt(totals.reach)}</TableCell>
-            <TableCell className="text-right">{fmt(totals.likes)}</TableCell>
-            <TableCell className="text-right">{fmt(totals.comments)}</TableCell>
-            <TableCell className="text-right">{fmt(totals.saved)}</TableCell>
-            <TableCell className="text-right">{fmt(totals.shares)}</TableCell>
-            <TableCell className="text-right">{totals.views > 0 ? fmt(totals.views) : '—'}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+          <tr style={{ background: 'var(--ad-surface2)', fontWeight: 600, borderTop: '2px solid var(--ad-border)' }}>
+            <td className="ads-posts-date">合計</td>
+            <td />
+            <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.reach)}</td>
+            <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.likes)}</td>
+            <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.comments)}</td>
+            <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.saved)}</td>
+            <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.shares)}</td>
+            <td className="ads-posts-num" style={{ textAlign: 'right' }}>
+              {totals.views > 0 ? fmt(totals.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)', display: 'flex', justifyContent: 'space-between' }}>
+        <span>共 {rows.length} 筆記錄</span>
+        <span>點擊內容標題可前往原始貼文連結</span>
+      </div>
     </div>
   )
 }
