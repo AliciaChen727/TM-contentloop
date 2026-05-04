@@ -91,7 +91,7 @@ export default function AdsPage() {
       const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.map(mapFbPost) : []
       const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.map(mapIgPost) : []
       const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
-      setRealPosts(merged.length > 0 ? merged : null)
+      setRealPosts(merged)
     })
     return unsub
   }, [router])
@@ -176,7 +176,7 @@ export default function AdsPage() {
           {active === 'overview' && <OverviewSection data={MOCK_DATA} onAskAI={openSidekick} />}
           {active === 'diagnosis' && <DiagnosisSection data={MOCK_DATA} onAskAI={openSidekick} />}
           {active === 'creative' && <CreativeSection data={MOCK_DATA} onAskAI={openSidekick} />}
-          {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts ?? undefined} />}
+          {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts} />}
           {active === 'time' && <BestTimeSection data={MOCK_DATA} />}
           {active === 'budget' && <BudgetSection data={MOCK_DATA} />}
         </main>
