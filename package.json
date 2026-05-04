@@ -1,0 +1,14 @@
+{
+  "name": "contentloop",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "functions"
+  ],
+  "scripts": {
+    "dev": "yarn workspace @contentloop/web dev",
+    "build": "yarn workspace @contentloop/web build",
+    "lint": "yarn workspace @contentloop/web lint"
+  },
+  "packageManager": "yarn@1.22.22"
+}
