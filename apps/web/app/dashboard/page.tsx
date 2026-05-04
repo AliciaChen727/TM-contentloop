@@ -11,6 +11,7 @@ import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
 import { ContentChart } from '@/components/dashboard/ContentChart'
 import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
+import type { MetricsContext } from '@/components/ads/AiSidekick'
 
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
 
@@ -275,7 +276,22 @@ export default function DashboardPage() {
         )}
       </div>
       <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
-      <AiSidekick open={skOpen} onClose={() => setSkOpen(false)} contextPage="posts" initialPrompt={skInitPrompt} />
+      <AiSidekick
+        open={skOpen}
+        onClose={() => setSkOpen(false)}
+        contextPage="posts"
+        initialPrompt={skInitPrompt}
+        metricsContext={{
+          totalPosts: stats.totalPosts,
+          totalReach: stats.totalReach,
+          totalLikes: stats.totalLikes,
+          totalComments: stats.totalComments,
+          totalShares: stats.totalShares,
+          avgEngRate: stats.avgEngRate,
+          reelsCount: stats.reelsCount,
+          dateRange: dateMode === 'preset' ? (days === 0 ? '全部時間' : `近 ${days} 天`) : `${customStart} ~ ${customEnd}`,
+        } satisfies MetricsContext}
+      />
     </main>
   )
 }
