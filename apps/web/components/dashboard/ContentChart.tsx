@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { SvgChart } from '@/components/ads/SvgCharts'
 
 export interface DailyPoint {
