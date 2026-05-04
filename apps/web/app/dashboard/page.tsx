@@ -69,9 +69,17 @@ export default function DashboardPage() {
             <h1 className="text-lg font-bold text-gray-900">ContentLoop</h1>
             {pageData && <p className="text-xs text-gray-400">{pageData.pageName}</p>}
           </div>
-          <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-gray-600">
-            登出
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push('/dashboard/ads')}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors"
+            >
+              📊 廣告儀表板
+            </button>
+            <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-gray-600">
+              登出
+            </button>
+          </div>
         </div>
       </header>
 
