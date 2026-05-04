@@ -41,7 +41,7 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 
   return `${role}
 
-你的回應格式必須是繁體中文。直接輸出純 JSON，不要加任何 markdown、不要加 ```json、不要加任何說明文字，只輸出 JSON 物件本身：
+你的回應格式必須是繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止輸出任何說明文字，只輸出 JSON 本身：
 {
   "type": "analysis" | "recommendation" | "warning" | "actions" | "general",
   "summary": "一句話摘要",
