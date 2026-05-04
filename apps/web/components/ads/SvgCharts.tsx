@@ -60,9 +60,9 @@ export function SvgChart({ data, lines, height = 160, roasTarget, yFmt }: {
               </g>
             )
           })}
-          {data.filter((_, i) => i % 5 === 0).map(d => {
-            const oi = data.indexOf(d)
-            return <text key={oi} x={x(oi)} y={cH + 16} textAnchor="middle" fontSize={9} fill="#9A9490">{d.date as string}</text>
+          {Array.from({ length: Math.min(6, n) }, (_, i) => {
+            const idx = n <= 1 ? 0 : Math.round(i * (n - 1) / (Math.min(6, n) - 1))
+            return <text key={idx} x={x(idx)} y={cH + 16} textAnchor="middle" fontSize={8.5} fill="#9A9490">{data[idx].date as string}</text>
           })}
           {roasTarget && (
             <>
