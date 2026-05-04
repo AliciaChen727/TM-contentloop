@@ -36,7 +36,7 @@ interface CombinedRow {
   views: number
 }
 
-type SortKey = keyof Omit<CombinedRow, 'date' | 'content' | 'permalink' | 'fbOnly' | 'igOnly'>
+type SortKey = 'date' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'views'
 
 function fmt(n: number) {
   return n.toLocaleString()
