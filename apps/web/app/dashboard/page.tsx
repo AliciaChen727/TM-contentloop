@@ -183,6 +183,9 @@ export default function DashboardPage() {
             <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
               📊 廣告儀表板
             </button>
+            <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
+              ✨ AI Sidekick
+            </button>
             <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-gray-600">登出</button>
           </div>
         </div>
