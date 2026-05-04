@@ -4,8 +4,10 @@ import { useState, useMemo } from 'react'
 import type { Post } from '../types'
 
 const fmt = (n: number | null) => n == null ? '—' : n.toLocaleString('zh-TW')
+const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}`
 
 type Platform = 'all' | 'fb' | 'ig'
+type View = 'raw' | 'ads'
 type SortKey = 'date' | 'reach' | 'likes' | 'comments' | 'saves' | 'shares' | 'plays'
 
 function PlatBadge({ p }: { p: string }) {
@@ -24,6 +26,7 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: { k: SortKey; label: str
 
 export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void; posts: Post[] | null }) {
   const [platform, setPlatform] = useState<Platform>('all')
+  const [view, setView] = useState<View>('raw')
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -41,6 +44,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
     if (platform === 'ig') arr = arr.filter(p => p.platform === 'IG' || p.platform === 'FB+IG')
     if (typeFilter === 'post') arr = arr.filter(p => p.type === 'post')
     if (typeFilter === 'reels') arr = arr.filter(p => p.type === 'reels')
+    if (typeFilter === 'ads') arr = arr.filter(p => p.hasAd)
     if (search) arr = arr.filter(p => p.title.toLowerCase().includes(search.toLowerCase()))
     arr.sort((a, b) => {
       const va = sortKey === 'date' ? a.date : (a[sortKey] as number | null) ?? -1
@@ -50,6 +54,9 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
     })
     return arr
   }, [posts, platform, sortKey, sortDir, typeFilter, search])
+
+  const adPosts = useMemo(() => filtered.filter(p => p.hasAd), [filtered])
+  const maxRoas = Math.max(0, ...adPosts.map(p => p.adRoas ?? 0))
 
   if (posts === null) {
     return (
@@ -70,14 +77,17 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
     ? reachPosts.reduce((s, p) => s + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length
     : 0
 
+  const roasColor = (r: number) => r >= 4.5 ? 'var(--ad-green)' : r >= 3.5 ? 'var(--ad-blue)' : r >= 2.5 ? 'var(--ad-orange)' : 'var(--ad-red)'
+
   return (
     <div>
       <div className="ads-posts-summary-strip">
         {[
           { label: '總貼文數', value: posts.length, sub: `${posts.filter(p => p.type === 'reels').length} Reels · ${posts.filter(p => p.type === 'post').length} 貼文` },
           { label: '總觸及', value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach, sub: '所有貼文合計' },
-          { label: '總按讚', value: totalLikes.toLocaleString('zh-TW'), sub: `留言 ${totalComments} · 分享 ${totalShares}` },
+          { label: '總按讚', value: totalLikes.toLocaleString(), sub: `留言 ${totalComments} · 分享 ${totalShares}` },
           { label: '平均互動率', value: `${avgEng.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
+          { label: '有投廣告', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最高 ROAS ${maxRoas.toFixed(1)}x` : '尚未串接廣告數據' },
         ].map(s => (
           <div key={s.label} className="ads-posts-sum-card">
             <div className="ads-posts-sum-label">{s.label}</div>
@@ -96,11 +106,15 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {([['all', '全部'], ['post', '貼文'], ['reels', 'Reels']] as [string, string][]).map(([v, l]) => (
+          {([['all', '全部'], ['post', '貼文'], ['reels', 'Reels'], ['ads', '有投廣告']] as [string, string][]).map(([v, l]) => (
             <button key={v} className={`ads-posts-type-chip ${typeFilter === v ? 'active' : ''}`} onClick={() => setTypeFilter(v)}>{l}</button>
           ))}
         </div>
         <input className="ads-posts-search" placeholder="搜尋貼文內容…" value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="ads-posts-view-toggle">
+          <button className={`ads-posts-view-btn ${view === 'raw' ? 'active' : ''}`} onClick={() => setView('raw')}>📋 原始數據</button>
+          <button className={`ads-posts-view-btn ${view === 'ads' ? 'active' : ''}`} onClick={() => setView('ads')}>📊 廣告指標</button>
+        </div>
         <button className="ads-diag-ask-btn" style={{ borderRadius: 7, flexShrink: 0 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析</button>
       </div>
 
@@ -109,11 +123,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
         每日凌晨 3 點自動更新 · 最後同步 2026-05-05 03:00
       </div>
 
-      {posts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ad-text3)', fontSize: 13 }}>
-          尚無貼文資料
-        </div>
-      ) : (
+      {view === 'raw' && (
         <div className="ads-card" style={{ overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table className="ads-posts-table">
@@ -127,7 +137,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                   <SortTh k="saves" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortTh k="plays" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th>互動率</th>
+                  <th>互動率</th><th>廣告</th>
                 </tr>
               </thead>
               <tbody>
@@ -161,6 +171,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                           </>
                         ) : <span style={{ color: 'var(--ad-text3)', fontSize: 12 }}>—</span>}
                       </td>
+                      <td>{p.hasAd ? <span className="ads-posts-ad-badge">🎯 投放中</span> : <span style={{ color: 'var(--ad-text3)', fontSize: 12 }}>—</span>}</td>
                     </tr>
                   )
                 })}
@@ -172,6 +183,44 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
             <span>點擊內容標題可前往原始貼文連結</span>
           </div>
         </div>
+      )}
+
+      {view === 'ads' && (
+        adPosts.length === 0
+          ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--ad-text3)' }}>
+              <div style={{ fontSize: 14, marginBottom: 8 }}>目前篩選條件下無廣告貼文</div>
+              <div style={{ fontSize: 12 }}>廣告數據將於串接 Meta Ads Manager 後顯示</div>
+            </div>
+          : (
+            <>
+              <div style={{ fontSize: 12.5, color: 'var(--ad-text2)', marginBottom: 12 }}>共 <strong>{adPosts.length}</strong> 篇貼文有投廣告：</div>
+              <div className="ads-posts-ad-grid">
+                {adPosts.map(p => {
+                  const rc = roasColor(p.adRoas ?? 0)
+                  return (
+                    <div key={p.id} className="ads-posts-ad-card">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10.5, fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)' }}>{p.date}</span>
+                        <PlatBadge p={p.platform} />
+                      </div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4, marginBottom: 10 }}>{p.title}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
+                        {[['ROAS', (p.adRoas ?? 0).toFixed(1) + 'x', rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CPA', '$' + (p.adCpa ?? 0), undefined], ['CTR', (p.adCtr ?? 0) + '%', undefined]].map(([label, value, color]) => (
+                          <div key={label as string}>
+                            <div className="ads-posts-ad-metric-label">{label}</div>
+                            <div className="ads-posts-ad-metric-value" style={{ color: color as string | undefined }}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="ads-posts-ad-roas-bar">
+                        <div className="ads-posts-ad-roas-fill" style={{ width: `${((p.adRoas ?? 0) / maxRoas) * 100}%`, background: rc }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )
       )}
     </div>
   )
