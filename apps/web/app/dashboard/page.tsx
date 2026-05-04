@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
@@ -10,6 +10,7 @@ import { IgPostsTable } from '@/components/dashboard/IgPostsTable'
 import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
 import { ContentChart } from '@/components/dashboard/ContentChart'
 import type { DailyPoint } from '@/components/dashboard/ContentChart'
+import { AiSidekick } from '@/components/ads/AiSidekick'
 
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
 
@@ -153,6 +154,13 @@ export default function DashboardPage() {
     return arr
   }, [igPosts, typeFilter, search])
 
+  const [skOpen, setSkOpen] = useState(false)
+  const [skInitPrompt, setSkInitPrompt] = useState('')
+  const openSidekick = useCallback((prompt = '') => {
+    setSkInitPrompt(prompt)
+    setSkOpen(true)
+  }, [])
+
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
 
   if (loading) {
@@ -263,6 +271,8 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+      <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
+      <AiSidekick open={skOpen} onClose={() => setSkOpen(false)} contextPage="posts" initialPrompt={skInitPrompt} />
     </main>
   )
 }
