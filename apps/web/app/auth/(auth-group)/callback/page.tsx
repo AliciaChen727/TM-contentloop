@@ -1,13 +1,11 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 
-export default function CallbackPage() {
+function CallbackHandler() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const called = useRef(false)
@@ -25,8 +23,6 @@ export default function CallbackPage() {
       return
     }
 
-    // Meta OAuth 是整頁跳轉，Firebase Auth 需要時間重新恢復 session
-    // 用 onAuthStateChanged 等待，而非直接讀 auth.currentUser（跳轉後會是 null）
     const unsub = onAuthStateChanged(auth, async (user) => {
       unsub()
 
@@ -62,9 +58,16 @@ export default function CallbackPage() {
     })
   }, [router, searchParams])
 
+  return null
+}
+
+export default function CallbackPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
       <p className="text-sm text-gray-500">正在連接 Facebook，請稍候⋯⋯</p>
+      <Suspense>
+        <CallbackHandler />
+      </Suspense>
     </main>
   )
 }
