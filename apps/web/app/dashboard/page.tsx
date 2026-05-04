@@ -146,7 +146,7 @@ export default function DashboardPage() {
             <div className="ads-posts-summary-strip" style={{ marginBottom: 20 }}>
               {[
                 { label: '總貼文數', value: stats.totalPosts, sub: `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文` },
-                { label: '總觸及 (IG)', value: fmtBig(stats.totalReach), sub: '來自 IG 貼文' },
+                { label: '總觸擊 (IG)', value: fmtBig(stats.totalReach), sub: '來自 IG 貼文' },
                 { label: '總按讚', value: fmtBig(stats.totalLikes), sub: `留言 ${stats.totalComments} · 分享 ${stats.totalShares}` },
                 { label: '平均互動率', value: `${stats.avgEngRate.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
               ].map(s => (

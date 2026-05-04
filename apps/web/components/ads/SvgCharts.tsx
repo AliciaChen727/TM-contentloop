@@ -9,11 +9,12 @@ function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b,
 
 function fmtK(n: number) { return n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}` }
 
-export function SvgChart({ data, lines, height = 160, roasTarget }: {
+export function SvgChart({ data, lines, height = 160, roasTarget, yFmt }: {
   data: DataPoint[]
   lines: LineConfig[]
   height?: number
   roasTarget?: number
+  yFmt?: (v: number) => string
 }) {
   const [tooltip, setTooltip] = useState<{ idx: number; d: DataPoint } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -54,7 +55,7 @@ export function SvgChart({ data, lines, height = 160, roasTarget }: {
               <g key={i}>
                 <line x1={0} y1={yy} x2={cW} y2={yy} stroke="#E2DED8" strokeDasharray="3 3" />
                 <text x={-5} y={yy + 4} textAnchor="end" fontSize={9} fill="#9A9490">
-                  {v >= 10000 ? `${Math.round(v / 1000)}K` : v.toFixed(1)}
+                  {yFmt ? yFmt(v) : v >= 10000 ? `${Math.round(v / 1000)}K` : v.toFixed(1)}
                 </text>
               </g>
             )
