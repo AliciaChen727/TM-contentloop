@@ -4,8 +4,9 @@ import { useState, useMemo } from 'react'
 import { SvgChart } from '@/components/ads/SvgCharts'
 
 export interface DailyPoint {
-  date: string      // MM/DD for chart labels
-  fullDate: string  // YYYY-MM-DD for filtering
+  [key: string]: number | string
+  date: string
+  fullDate: string
   reach: number
   likes: number
   comments: number
