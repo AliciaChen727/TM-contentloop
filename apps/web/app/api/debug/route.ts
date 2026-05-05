@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 
-const BASE = 'https://graph.facebook.com/v19.0'
+const BASE = 'https://graph.facebook.com/v21.0'
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -33,7 +33,17 @@ export async function GET(req: NextRequest) {
 
   const results: Record<string, unknown> = { pageId, igUserId, firstFbPostId, firstIgMediaId }
 
-  // 測試 FB Post Insights
+  // 測試 syncFbInsights 實際使用的 API call（/{pageId}/posts with reactions/comments/shares）
+  {
+    const url = new URL(`${BASE}/${pageId}/posts`)
+    url.searchParams.set('access_token', accessToken)
+    url.searchParams.set('fields', 'id,message,story,created_time,permalink_url,reactions.summary(total_count),comments.summary(total_count),shares')
+    url.searchParams.set('limit', '3')
+    const res = await fetch(url)
+    results.fbPagePostsRaw = await res.json()
+  }
+
+  // 測試 FB Post Insights（舊方式，供對照）
   if (firstFbPostId) {
     const url = new URL(`${BASE}/${firstFbPostId}/insights`)
     url.searchParams.set('access_token', accessToken)
