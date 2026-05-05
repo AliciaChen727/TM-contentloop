@@ -63,6 +63,7 @@ async function syncUserFbPosts(uid: string, pageId: string, pageToken: string) {
       createdTime: admin.firestore.Timestamp.fromDate(new Date(post.created_time)),
       permalink: post.permalink_url ?? '',
       snapshotAt: now,
+      engagementAvailable: post.engagementAvailable,
       insights: {
         reactions: post.reactions?.summary?.total_count ?? 0,
         comments: post.comments?.summary?.total_count ?? 0,

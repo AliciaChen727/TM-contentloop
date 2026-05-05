@@ -61,5 +61,13 @@ export async function GET(req: NextRequest) {
     results.igMediaRaw = await res.json()
   }
 
+  // Token scope 診斷
+  const appToken = `${process.env.NEXT_PUBLIC_META_APP_ID}|${process.env.META_APP_SECRET}`
+  const debugUrl = new URL('https://graph.facebook.com/debug_token')
+  debugUrl.searchParams.set('input_token', accessToken)
+  debugUrl.searchParams.set('access_token', appToken)
+  const debugRes = await fetch(debugUrl)
+  results.tokenDebug = await debugRes.json()
+
   return NextResponse.json(results, { status: 200 })
 }
