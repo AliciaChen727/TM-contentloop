@@ -298,87 +298,70 @@ function parsePostReach(md: string): PostReachRow[] {
 // --- BizSuite content table parser ---
 
 function parseBizDate(raw: string): string | null {
-  const m = raw.trim().match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/)
-  if (!m) return null
-  const year = new Date().getFullYear()
-  return `${year}-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}T${String(m[3]).padStart(2, '0')}:${m[4]}:00`
+  const clean = raw.trim()
+  // "5月6日 18:17"
+  const m1 = clean.match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/)
+  if (m1) {
+    const year = new Date().getFullYear()
+    return `${year}-${String(m1[1]).padStart(2, '0')}-${String(m1[2]).padStart(2, '0')}T${String(m1[3]).padStart(2, '0')}:${m1[4]}:00`
+  }
+  // "2025年12月31日"
+  const m2 = clean.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
+  if (m2) {
+    return `${m2[1]}-${String(m2[2]).padStart(2, '0')}-${String(m2[3]).padStart(2, '0')}T00:00:00`
+  }
+  // "5月6日" (no time)
+  const m3 = clean.match(/(\d{1,2})月(\d{1,2})日/)
+  if (m3) {
+    const year = new Date().getFullYear()
+    return `${year}-${String(m3[1]).padStart(2, '0')}-${String(m3[2]).padStart(2, '0')}T00:00:00`
+  }
+  return null
 }
 
-const BIZ_COL_KEYS = [
-  { key: 'publishDate', keywords: ['發佈日期', 'publish', 'date', '日期'] },
-  { key: 'reach', keywords: ['觸及人數', '觸及', 'reach'] },
-  { key: 'viewers', keywords: ['瀏覽者', 'viewer'] },
-  { key: 'interactions', keywords: ['互動次數', '互動', 'interaction'] },
-  { key: 'likes', keywords: ['按讚', 'like'] },
-  { key: 'comments', keywords: ['留言', 'comment'] },
-  { key: 'shares', keywords: ['分享', 'share'] },
-  { key: 'saves', keywords: ['儲存', 'save'] },
-  { key: 'linkClicks', keywords: ['連結點擊', 'link'] },
-  { key: 'videoViews3s', keywords: ['3 秒', '3秒', '3-second', '3s'] },
-  { key: 'videoViews1m', keywords: ['1 分鐘', '1分鐘', '1-minute', '1min'] },
-  { key: 'watchTime', keywords: ['觀看時間', 'watch time'] },
-] as const
 
 function isBizSuiteMd(md: string): boolean {
   return /發佈日期/.test(md) && /觸及人數|觸及/.test(md)
 }
 
 function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
+  // Headers are split one-per-line in the actual Markdown export.
+  // Detect data rows by date pattern in cols[1] and use fixed column positions:
+  // cols[1]=date, cols[2]=瀏覽次數, cols[3]=觸及人數(reach), cols[4]=瀏覽者,
+  // cols[5]=互動次數, cols[6]=按讚, cols[7]=留言, cols[8]=分享, cols[9]=儲存,
+  // cols[10]=連結點擊, cols[16]=觀看3秒, cols[17]=觀看1分鐘
   const rows: BizSuiteRow[] = []
-  const lines = md.split('\n')
+  const DATE_RE = /\d{1,2}月\d{1,2}日|\d{4}年\d{1,2}月/
 
-  let headerIdx = -1
-  const colMap: Record<string, number> = {}
+  for (const line of md.split('\n')) {
+    if (!line.startsWith('|')) continue
+    const cols = line.split('|').map(c => c.trim())
+    // cols[0] is '' (before first |), cols[1] is first cell
+    if (cols.length < 5) continue
+    const firstVal = cols[1] ?? ''
+    if (!DATE_RE.test(firstVal)) continue
+    if (/^-+$/.test(firstVal)) continue
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line.includes('|')) continue
-    const cols = line.split('|').map(c => c.trim()).filter(Boolean)
-    const hasDate = cols.some(c => /發佈日期|publish.*date/i.test(c))
-    const hasReach = cols.some(c => /觸及人數|觸及/i.test(c))
-    if (!hasDate || !hasReach) continue
-
-    headerIdx = i
-    cols.forEach((col, idx) => {
-      const lower = col.toLowerCase()
-      for (const { key, keywords } of BIZ_COL_KEYS) {
-        if (keywords.some(kw => lower.includes(kw.toLowerCase()))) {
-          if (!(key in colMap)) colMap[key] = idx
-        }
-      }
-    })
-    break
-  }
-
-  if (headerIdx === -1) return rows
-
-  for (let i = headerIdx + 2; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line.includes('|')) continue
-    const cols = line.split('|').map(c => c.trim()).filter(Boolean)
-    if (cols.length < 3) continue
-
-    const dateRaw = cols[colMap['publishDate'] ?? -1] ?? ''
-    if (!dateRaw || !/\d+月\d+日/.test(dateRaw)) continue
-
-    const n = (key: string) => cleanNumber(cols[colMap[key] ?? -1] ?? '0')
-
-    const watchRaw = cols[colMap['watchTime'] ?? -1] ?? '0'
+    const n = (idx: number): number => {
+      const raw = cols[idx] ?? ''
+      if (raw === '——' || raw === '--' || raw === '') return 0
+      return cleanNumber(raw)
+    }
 
     rows.push({
-      publishDateLabel: dateRaw,
-      publishDate: parseBizDate(dateRaw),
-      reach: n('reach'),
-      viewers: n('viewers'),
-      interactions: n('interactions'),
-      likes: n('likes'),
-      comments: n('comments'),
-      shares: n('shares'),
-      saves: n('saves'),
-      linkClicks: n('linkClicks'),
-      videoViews3s: n('videoViews3s'),
-      videoViews1m: n('videoViews1m'),
-      watchTimeMin: parseWatchTime(watchRaw),
+      publishDateLabel: firstVal,
+      publishDate: parseBizDate(firstVal),
+      reach: n(3),
+      viewers: n(4),
+      interactions: n(5),
+      likes: n(6),
+      comments: n(7),
+      shares: n(8),
+      saves: n(9),
+      linkClicks: n(10),
+      videoViews3s: n(16),
+      videoViews1m: n(17),
+      watchTimeMin: 0,
     })
   }
 
@@ -399,9 +382,9 @@ function isPostReachMd(md: string): boolean {
 
 export function parseFbInsightsMarkdown(md: string): ParseResult {
   const warnings: string[] = []
-  const hasPage = isPageInsightsMd(md)
-  const hasPost = isPostReachMd(md)
-  const hasBiz = !hasPost && isBizSuiteMd(md)
+  const hasBiz = isBizSuiteMd(md)
+  const hasPost = !hasBiz && isPostReachMd(md)
+  const hasPage = !hasBiz && isPageInsightsMd(md)
 
   let pageInsights: PageInsightsResult | null = null
   let postReachRows: PostReachRow[] = []
