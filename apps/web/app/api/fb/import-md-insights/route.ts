@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       const update: Record<string, unknown> = {
         bizImportedAt: now,
         'insights.reach': row.reach,
-        'insights.likes': row.likes,
+        'insights.reactions': row.likes,
         'insights.comments': row.comments,
         'insights.shares': row.shares,
         'insights.saves': row.saves,
