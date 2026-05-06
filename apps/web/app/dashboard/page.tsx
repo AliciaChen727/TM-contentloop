@@ -7,6 +7,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase/client'
 import { FbPostsTable } from '@/components/dashboard/FbPostsTable'
 import { FbCsvImport } from '@/components/dashboard/FbCsvImport'
+import { FbMdImport } from '@/components/dashboard/FbMdImport'
 import { IgPostsTable } from '@/components/dashboard/IgPostsTable'
 import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
 import { ContentChart } from '@/components/dashboard/ContentChart'
@@ -270,7 +271,14 @@ export default function DashboardPage() {
 
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               {activeTab === 'fb' && pageData && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 4px 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 4px 12px' }}>
+                  <FbMdImport pageId={pageData.pageId} onImported={async () => {
+                    const u = auth.currentUser
+                    if (!u) return
+                    const idToken = await u.getIdToken()
+                    const res = await fetch('/api/insights/fb', { headers: { Authorization: `Bearer ${idToken}` } })
+                    if (res.ok) { const d = await res.json(); setFbPosts(d.posts ?? []) }
+                  }} />
                   <FbCsvImport pageId={pageData.pageId} onImported={async () => {
                     const u = auth.currentUser
                     if (!u) return
