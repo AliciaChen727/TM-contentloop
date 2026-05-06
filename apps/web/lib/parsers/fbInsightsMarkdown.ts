@@ -297,24 +297,29 @@ function parsePostReach(md: string): PostReachRow[] {
 
 // --- BizSuite content table parser ---
 
+// BizSuite exports times in Taiwan local time (UTC+8).
+// Convert to UTC so it matches Firestore's createdTime (which is stored in UTC).
 function parseBizDate(raw: string): string | null {
   const clean = raw.trim()
   // "5月6日 18:17"
   const m1 = clean.match(/(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/)
   if (m1) {
     const year = new Date().getFullYear()
-    return `${year}-${String(m1[1]).padStart(2, '0')}-${String(m1[2]).padStart(2, '0')}T${String(m1[3]).padStart(2, '0')}:${m1[4]}:00`
+    const localIso = `${year}-${String(m1[1]).padStart(2, '0')}-${String(m1[2]).padStart(2, '0')}T${String(m1[3]).padStart(2, '0')}:${m1[4]}:00+08:00`
+    return new Date(localIso).toISOString().slice(0, 19)
   }
   // "2025年12月31日"
   const m2 = clean.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
   if (m2) {
-    return `${m2[1]}-${String(m2[2]).padStart(2, '0')}-${String(m2[3]).padStart(2, '0')}T00:00:00`
+    const localIso = `${m2[1]}-${String(m2[2]).padStart(2, '0')}-${String(m2[3]).padStart(2, '0')}T00:00:00+08:00`
+    return new Date(localIso).toISOString().slice(0, 19)
   }
   // "5月6日" (no time)
   const m3 = clean.match(/(\d{1,2})月(\d{1,2})日/)
   if (m3) {
     const year = new Date().getFullYear()
-    return `${year}-${String(m3[1]).padStart(2, '0')}-${String(m3[2]).padStart(2, '0')}T00:00:00`
+    const localIso = `${year}-${String(m3[1]).padStart(2, '0')}-${String(m3[2]).padStart(2, '0')}T00:00:00+08:00`
+    return new Date(localIso).toISOString().slice(0, 19)
   }
   return null
 }
