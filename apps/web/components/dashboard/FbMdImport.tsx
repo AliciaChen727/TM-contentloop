@@ -21,6 +21,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
     postReachUpdated: number
     postReachSkipped: number
     bizUpdated: number
+    bizCreated: number
     bizSkipped: number
     warnings: string[]
   } | null>(null)
@@ -173,10 +174,11 @@ export function FbMdImport({ pageId, onImported }: Props) {
                       {result.postReachSkipped > 0 && `，略過 ${result.postReachSkipped} 筆`}
                     </div>
                   )}
-                  {result.bizUpdated > 0 && (
+                  {(result.bizUpdated > 0 || result.bizCreated > 0) && (
                     <div>
                       Business Suite 貼文更新 <strong>{result.bizUpdated}</strong> 筆
-                      {result.bizSkipped > 0 && `，略過 ${result.bizSkipped} 筆（時間未對應）`}
+                      {result.bizCreated > 0 && `，新建 ${result.bizCreated} 筆`}
+                      {result.bizSkipped > 0 && `，略過 ${result.bizSkipped} 筆（無日期）`}
                     </div>
                   )}
                   {result.warnings.map((w, i) => (

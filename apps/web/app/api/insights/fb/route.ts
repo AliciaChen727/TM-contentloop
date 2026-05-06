@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     .doc(uid)
     .collection('fbPosts')
     .orderBy('createdTime', 'desc')
-    .limit(50)
+    .limit(200)
     .get()
 
   const posts = snap.docs.map((doc) => ({

@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
   let postReachUpdated = 0
   let postReachSkipped = 0
   let bizUpdated = 0
+  let bizCreated = 0
   let bizSkipped = 0
 
   // Save page-level insights snapshot
@@ -82,10 +83,7 @@ export async function POST(req: NextRequest) {
           if (timeMap.has(candidate)) { docId = timeMap.get(candidate); break }
         }
       }
-      if (!docId) { bizSkipped++; continue }
-
-      const postRef = userRef.collection('fbPosts').doc(docId)
-      const update: Record<string, unknown> = {
+      const insightsUpdate: Record<string, unknown> = {
         bizImportedAt: now,
         'insights.reach': row.reach,
         'insights.reactions': row.likes,
@@ -94,12 +92,39 @@ export async function POST(req: NextRequest) {
         'insights.saves': row.saves,
         'insights.linkClicks': row.linkClicks,
       }
-      if (row.videoViews3s > 0) update['insights.videoViews3s'] = row.videoViews3s
-      if (row.videoViews1m > 0) update['insights.videoViews1m'] = row.videoViews1m
-      if (row.watchTimeMin > 0) update['insights.watchTimeMin'] = row.watchTimeMin
+      if (row.videoViews3s > 0) insightsUpdate['insights.videoViews3s'] = row.videoViews3s
+      if (row.videoViews1m > 0) insightsUpdate['insights.videoViews1m'] = row.videoViews1m
+      if (row.watchTimeMin > 0) insightsUpdate['insights.watchTimeMin'] = row.watchTimeMin
 
-      batch.update(postRef, update)
-      bizUpdated++
+      if (docId) {
+        batch.update(userRef.collection('fbPosts').doc(docId), insightsUpdate)
+        bizUpdated++
+      } else {
+        // No matching fbPost found — create a stub document so metrics appear in the dashboard
+        const dateKey = row.publishDate.replace(/[-:T]/g, '').slice(0, 15)
+        const stubId = `biz_${pageId}_${dateKey}`
+        const postRef = userRef.collection('fbPosts').doc(stubId)
+        const stubInsights = {
+          reach: row.reach,
+          reactions: row.likes,
+          comments: row.comments,
+          shares: row.shares,
+          saves: row.saves,
+          linkClicks: row.linkClicks,
+          ...(row.videoViews3s > 0 ? { videoViews3s: row.videoViews3s } : {}),
+          ...(row.videoViews1m > 0 ? { videoViews1m: row.videoViews1m } : {}),
+          ...(row.watchTimeMin > 0 ? { watchTimeMin: row.watchTimeMin } : {}),
+        }
+        batch.set(postRef, {
+          createdTime: Timestamp.fromDate(new Date(row.publishDate)),
+          message: '',
+          permalink: '',
+          postType: 'bizStub',
+          bizImportedAt: now,
+          insights: stubInsights,
+        }, { merge: true })
+        bizCreated++
+      }
     }
     await batch.commit()
   }
@@ -110,6 +135,7 @@ export async function POST(req: NextRequest) {
     postReachUpdated,
     postReachSkipped,
     bizUpdated,
+    bizCreated,
     bizSkipped,
     warnings: parsed.warnings,
   })
