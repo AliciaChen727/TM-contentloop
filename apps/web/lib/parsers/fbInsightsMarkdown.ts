@@ -21,6 +21,7 @@ export interface PostReachRow {
 export interface BizSuiteRow {
   publishDateLabel: string  // original "5月6日 18:17"
   publishDate: string | null  // ISO "2026-05-06T18:17:00"
+  content?: string
   reach: number
   viewers: number
   interactions: number
@@ -338,14 +339,29 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
   const rows: BizSuiteRow[] = []
   const DATE_RE = /\d{1,2}月\d{1,2}日|\d{4}年\d{1,2}月/
 
+  // Collect non-table text lines between data rows as post content.
+  // Business Suite Markdown interleaves: image lines, post text, then |date|metrics| row.
+  const pendingTextLines: string[] = []
+
   for (const line of md.split('\n')) {
-    if (!line.startsWith('|')) continue
+    if (!line.startsWith('|')) {
+      // Skip blank lines and image/icon markdown (![...](...)  or  [...](...))
+      const trimmed = line.trim()
+      if (trimmed === '') continue
+      if (/^!?\[.*?\]\(.*?\)$/.test(trimmed)) continue
+      pendingTextLines.push(trimmed)
+      continue
+    }
+
     const cols = line.split('|').map(c => c.trim())
     // cols[0] is '' (before first |), cols[1] is first cell
     if (cols.length < 5) continue
     const firstVal = cols[1] ?? ''
     if (!DATE_RE.test(firstVal)) continue
     if (/^-+$/.test(firstVal)) continue
+
+    const content = pendingTextLines.join('\n').trim() || undefined
+    pendingTextLines.length = 0
 
     const n = (idx: number): number => {
       const raw = cols[idx] ?? ''
@@ -356,6 +372,7 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
     rows.push({
       publishDateLabel: firstVal,
       publishDate: parseBizDate(firstVal),
+      content,
       reach: n(3),
       viewers: n(4),
       interactions: n(5),

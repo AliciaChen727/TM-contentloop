@@ -308,6 +308,7 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
               <thead>
                 <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
                   <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>日期</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>內容</th>
                   <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>觸及</th>
                   <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>按讚</th>
                   <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>留言</th>
@@ -317,7 +318,8 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
               <tbody>
                 {bizSuiteRows.slice(0, 10).map((row, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '5px 10px', color: '#6b7280' }}>{row.publishDateLabel}</td>
+                    <td style={{ padding: '5px 10px', color: '#6b7280', whiteSpace: 'nowrap' }}>{row.publishDateLabel}</td>
+                    <td style={{ padding: '5px 10px', color: '#374151', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.content ?? '—'}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#111', fontWeight: 600 }}>{row.reach.toLocaleString()}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#6b7280' }}>{row.likes}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#6b7280' }}>{row.comments}</td>
@@ -325,7 +327,7 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
                   </tr>
                 ))}
                 {bizSuiteRows.length > 10 && (
-                  <tr><td colSpan={5} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>…還有 {bizSuiteRows.length - 10} 筆</td></tr>
+                  <tr><td colSpan={6} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>…還有 {bizSuiteRows.length - 10} 筆</td></tr>
                 )}
               </tbody>
             </table>

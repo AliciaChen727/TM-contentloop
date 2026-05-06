@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
       if (row.watchTimeMin > 0) insightsUpdate['insights.watchTimeMin'] = row.watchTimeMin
 
       if (docId) {
+        if (row.content) insightsUpdate['message'] = row.content
         batch.update(userRef.collection('fbPosts').doc(docId), insightsUpdate)
         bizUpdated++
       } else {
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
         }
         batch.set(postRef, {
           createdTime: Timestamp.fromDate(new Date(row.publishDate)),
-          message: '',
+          message: row.content ?? '',
           permalink: '',
           postType: 'bizStub',
           bizImportedAt: now,
