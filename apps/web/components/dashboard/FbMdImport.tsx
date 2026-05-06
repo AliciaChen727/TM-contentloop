@@ -28,7 +28,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
 
   function handleParse() {
     if (!markdown.trim()) return
-    const parsed = parseFbInsightsMarkdown(markdown, pageId)
+    const parsed = parseFbInsightsMarkdown(markdown)
     setPreview(parsed)
     setStatus('preview')
   }

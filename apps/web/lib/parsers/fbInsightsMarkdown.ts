@@ -226,19 +226,7 @@ function applyField(
 
 // --- Post reach parser ---
 
-function extractPostId(permalink: string, pageId: string): string | null {
-  if (!permalink) return null
-  const m1 = permalink.match(/facebook\.com\/(?:\d+|[^/?#]+)\/posts\/(\d+)/)
-  if (m1) return `${pageId}_${m1[1]}`
-  const fbid = permalink.match(/story_fbid=(\d+)/)
-  const pid = permalink.match(/[?&]id=(\d+)/)
-  if (fbid && pid) return `${pid[1]}_${fbid[1]}`
-  const photo = permalink.match(/fbid=(\d+)/)
-  if (photo) return `${pageId}_${photo[1]}`
-  return null
-}
-
-function parsePostReach(md: string, pageId: string): PostReachRow[] {
+function parsePostReach(md: string): PostReachRow[] {
   const rows: PostReachRow[] = []
   const lines = md.split('\n')
 
@@ -409,7 +397,7 @@ function isPostReachMd(md: string): boolean {
 
 // --- Public API ---
 
-export function parseFbInsightsMarkdown(md: string, pageId: string): ParseResult {
+export function parseFbInsightsMarkdown(md: string): ParseResult {
   const warnings: string[] = []
   const hasPage = isPageInsightsMd(md)
   const hasPost = isPostReachMd(md)
@@ -428,7 +416,7 @@ export function parseFbInsightsMarkdown(md: string, pageId: string): ParseResult
   }
 
   if (hasPost) {
-    postReachRows = parsePostReach(md, pageId)
+    postReachRows = parsePostReach(md)
     if (postReachRows.length === 0) {
       warnings.push('偵測到貼文觸及格式，但未能解析任何貼文 URL')
     }

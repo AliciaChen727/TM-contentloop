@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!markdown?.trim()) return NextResponse.json({ error: 'Missing markdown' }, { status: 400 })
   if (!pageId?.trim()) return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
 
-  const parsed = parseFbInsightsMarkdown(markdown, pageId)
+  const parsed = parseFbInsightsMarkdown(markdown)
 
   const userRef = adminDb.collection('users').doc(uid)
   const now = Timestamp.now()
