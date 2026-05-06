@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       }
       if (row.impressions > 0) update['insights.impressions'] = row.impressions
 
-      batch.set(postRef, update, { merge: true })
+      batch.update(postRef, update)
       postReachUpdated++
     }
     await batch.commit()
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       if (row.videoViews1m > 0) update['insights.videoViews1m'] = row.videoViews1m
       if (row.watchTimeMin > 0) update['insights.watchTimeMin'] = row.watchTimeMin
 
-      batch.set(postRef, update, { merge: true })
+      batch.update(postRef, update)
       bizUpdated++
     }
     await batch.commit()
