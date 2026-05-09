@@ -1,0 +1,24 @@
+name: Daily Dashboard Sync
+
+on:
+  schedule:
+    # 每天凌晨 3:00 台灣時間 (UTC+8) = 19:00 UTC
+    - cron: '0 19 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync ad insights
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST https://tm-contentloop.vercel.app/api/cron/sync \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          echo "Response status: $response"
+          if [ "$response" != "200" ]; then
+            echo "Sync failed with status $response"
+            exit 1
+          fi
+          echo "Sync completed successfully"
