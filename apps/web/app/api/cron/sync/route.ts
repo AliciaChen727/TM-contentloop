@@ -160,9 +160,20 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
   dailyUrl.searchParams.set('level', 'account')
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
-  const [summaryRes, dailyRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl)])
-  const [summaryData, dailyData] = await Promise.all([summaryRes.json(), dailyRes.json()])
+  const adsUrl = new URL(`${BASE}/${adAccountId}/ads`)
+  adsUrl.searchParams.set('fields', 'creative{object_story_id}')
+  adsUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
+  adsUrl.searchParams.set('limit', '100')
+  adsUrl.searchParams.set('access_token', userAccessToken)
+
+  const [summaryRes, dailyRes, adsRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl)])
+  const [summaryData, dailyData, adsData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json()])
   if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
+
+  const adPostIds: string[] = []
+  for (const ad of (adsData.data ?? []) as { creative?: { object_story_id?: string } }[]) {
+    if (ad.creative?.object_story_id) adPostIds.push(ad.creative.object_story_id)
+  }
 
   const s = summaryData.data?.[0] ?? {}
   const spend = parseFloat(s.spend ?? '0')
@@ -209,6 +220,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
     conversionType,
     summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
     daily,
+    adPostIds,
   })
 
   return { adAccountId, spend }

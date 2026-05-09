@@ -30,7 +30,7 @@ const NAV_LABELS: Record<NavId, string> = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapFbPost(p: any): Post {
+function mapFbPost(p: any, adPostIds: Set<string>): Post {
   return {
     id: p.id,
     date: p.createdTime?.slice(0, 10) ?? '',
@@ -44,7 +44,7 @@ function mapFbPost(p: any): Post {
     plays: null,
     type: 'post',
     url: p.permalink || '#',
-    hasAd: false,
+    hasAd: adPostIds.has(p.id),
   }
 }
 
@@ -115,15 +115,20 @@ export default function AdsPage() {
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [adPostIds, setAdPostIds] = useState<Set<string>>(new Set())
 
-  async function fetchAdData(idToken: string) {
+  async function fetchAdData(idToken: string): Promise<Set<string>> {
     const res = await fetch('/api/ads/data', { headers: { Authorization: `Bearer ${idToken}` } })
-    if (!res.ok) return
+    if (!res.ok) return new Set()
     const json = await res.json()
     if (json.data) {
       setAdData(buildAdData(json.data))
       setLastSync(json.data.syncedAt ?? null)
+      const ids = new Set<string>(json.data.adPostIds ?? [])
+      setAdPostIds(ids)
+      return ids
     }
+    return new Set()
   }
 
   useEffect(() => {
@@ -133,13 +138,22 @@ export default function AdsPage() {
 
       const idToken = await u.getIdToken()
       const headers = { Authorization: `Bearer ${idToken}` }
-      const [fbRes, igRes] = await Promise.all([
+      const [fbRes, igRes, adRes] = await Promise.all([
         fetch('/api/insights/fb', { headers }),
         fetch('/api/insights/ig', { headers }),
+        fetch('/api/ads/data', { headers }),
       ])
-      fetchAdData(idToken)
 
-      const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.map(mapFbPost) : []
+      const adJson = adRes.ok ? await adRes.json() : null
+      const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
+      if (adJson?.data) {
+        setAdData(buildAdData(adJson.data))
+        setLastSync(adJson.data.syncedAt ?? null)
+        setAdPostIds(initialAdPostIds)
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.map((p: any) => mapFbPost(p, initialAdPostIds)) : []
       const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.map(mapIgPost) : []
       const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
       setRealPosts(merged)
@@ -160,7 +174,8 @@ export default function AdsPage() {
       })
       const json = await res.json()
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
-      await fetchAdData(idToken)
+      const newIds = await fetchAdData(idToken)
+      setRealPosts(prev => prev ? prev.map(p => p.platform === 'FB' ? { ...p, hasAd: newIds.has(p.id) } : p) : prev)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步失敗')
     } finally {
