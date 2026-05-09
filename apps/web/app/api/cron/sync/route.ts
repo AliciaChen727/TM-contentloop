@@ -15,7 +15,7 @@ function parseActions(actions: MetaAction[], type: string): number {
 
 async function syncFbForUser(uid: string, accessToken: string, pageId: string): Promise<{ synced: number; error?: string }> {
   const postsUrl = new URL(`${BASE}/${pageId}/posts`)
-  postsUrl.searchParams.set('fields', 'id,message,created_time,permalink_url')
+  postsUrl.searchParams.set('fields', 'id,message,story,created_time,permalink_url')
   postsUrl.searchParams.set('limit', '50')
   postsUrl.searchParams.set('access_token', accessToken)
 
@@ -23,7 +23,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   const postsData = await postsRes.json()
   if (!postsRes.ok || postsData.error) return { synced: 0, error: postsData.error?.message ?? 'posts fetch failed' }
 
-  const posts: { id: string; message?: string; created_time: string; permalink_url?: string }[] = postsData.data ?? []
+  const posts: { id: string; message?: string; story?: string; created_time: string; permalink_url?: string }[] = postsData.data ?? []
 
   // Fetch insights per post in parallel
   const withInsights = await Promise.all(posts.map(async post => {
@@ -52,7 +52,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   for (const post of withInsights) {
     const postRef = userRef.collection('fbPosts').doc(post.id)
     batch.set(postRef, {
-      message: post.message ?? '',
+      message: post.message || post.story || '',
       createdTime: Timestamp.fromDate(new Date(post.created_time)),
       permalink: post.permalink_url ?? '',
       insights: post.insights,

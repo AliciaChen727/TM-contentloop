@@ -148,7 +148,11 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                       <td className="ads-posts-date">{p.date}</td>
                       <td><PlatBadge p={p.platform} /></td>
                       <td style={{ maxWidth: 260 }}>
-                        <a href={p.url} style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }} target="_blank" rel="noopener noreferrer">{p.title}</a>
+                        {p.url && p.url !== '#' ? (
+                          <a href={p.url} style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }} target="_blank" rel="noopener noreferrer">{p.title}</a>
+                        ) : (
+                          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
+                        )}
                         <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, marginTop: 3, background: p.type === 'reels' ? '#FFF3E0' : 'var(--ad-surface2)', color: p.type === 'reels' ? '#E65100' : 'var(--ad-text3)' }}>
                           {p.type === 'reels' ? '▶ Reels' : '📝 貼文'}
                         </span>
