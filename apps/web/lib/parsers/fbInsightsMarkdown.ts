@@ -377,8 +377,10 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
       // (BS export often concatenates multiple UI labels onto one line)
       if (BS_UI_NOISE.has(trimmed)) continue
       if (Array.from(BS_UI_NOISE).some(noise => trimmed.startsWith(noise + ' ') || trimmed.startsWith(noise + '\t'))) continue
-      // Skip very short strings (single-word labels, page handles like "legacytmc")
+      // Skip very short strings (single-word labels)
       if (trimmed.length < 5) continue
+      // Skip FB page handles (lowercase/digits/dots only, no spaces — e.g. "legacytmc")
+      if (/^[a-z0-9.]+$/.test(trimmed)) continue
       // Skip pure hashtag/mention clusters (e.g. "#tag1 #tag2 @handle")
       if (/^([#@]\S+\s*)+$/.test(trimmed)) continue
       // Skip repeating page-name / attribution lines detected by frequency

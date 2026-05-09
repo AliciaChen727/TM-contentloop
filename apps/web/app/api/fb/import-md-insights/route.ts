@@ -97,7 +97,8 @@ export async function POST(req: NextRequest) {
       if (row.watchTimeMin > 0) insightsUpdate['insights.watchTimeMin'] = row.watchTimeMin
 
       if (docId) {
-        if (row.content) insightsUpdate['message'] = row.content
+        // Always write message: use cleaned content if present, else '' to clear stale noise
+        insightsUpdate['message'] = row.content ?? ''
         batch.update(userRef.collection('fbPosts').doc(docId), insightsUpdate)
         bizUpdated++
       } else {
