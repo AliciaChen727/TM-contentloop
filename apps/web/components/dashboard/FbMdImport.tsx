@@ -313,21 +313,25 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
                   <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>按讚</th>
                   <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>留言</th>
                   <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>分享</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>觀看(3s)</th>
                 </tr>
               </thead>
               <tbody>
                 {bizSuiteRows.slice(0, 10).map((row, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
                     <td style={{ padding: '5px 10px', color: '#6b7280', whiteSpace: 'nowrap' }}>{row.publishDateLabel}</td>
-                    <td style={{ padding: '5px 10px', color: '#374151', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.content ?? '—'}</td>
+                    <td style={{ padding: '5px 10px', color: row.content ? '#374151' : '#9ca3af', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: row.content ? 'normal' : 'italic' }}>
+                      {row.content ?? '（無文字內容）'}
+                    </td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#111', fontWeight: 600 }}>{row.reach.toLocaleString()}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#6b7280' }}>{row.likes}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#6b7280' }}>{row.comments}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#6b7280' }}>{row.shares}</td>
+                    <td style={{ padding: '5px 10px', textAlign: 'right', color: row.videoViews3s > 0 ? '#111' : '#d1d5db' }}>{row.videoViews3s > 0 ? row.videoViews3s.toLocaleString() : '—'}</td>
                   </tr>
                 ))}
                 {bizSuiteRows.length > 10 && (
-                  <tr><td colSpan={6} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>…還有 {bizSuiteRows.length - 10} 筆</td></tr>
+                  <tr><td colSpan={7} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>…還有 {bizSuiteRows.length - 10} 筆</td></tr>
                 )}
               </tbody>
             </table>
