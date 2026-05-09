@@ -373,8 +373,10 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
       if (trimmed === '') continue
       // Skip image/icon markdown
       if (/^!?\[.*?\]\(.*?\)$/.test(trimmed)) continue
-      // Skip known Business Suite navigation UI strings
+      // Skip lines that are or start with known Business Suite navigation UI strings
+      // (BS export often concatenates multiple UI labels onto one line)
       if (BS_UI_NOISE.has(trimmed)) continue
+      if (Array.from(BS_UI_NOISE).some(noise => trimmed.startsWith(noise + ' ') || trimmed.startsWith(noise + '\t'))) continue
       // Skip very short strings (single-word labels, page handles like "legacytmc")
       if (trimmed.length < 5) continue
       // Skip pure hashtag/mention clusters (e.g. "#tag1 #tag2 @handle")
