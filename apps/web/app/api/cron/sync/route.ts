@@ -78,6 +78,18 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
     await cleanBatch.commit()
   }
 
+  // Clean up FB story promotion text docs stored by old cron (message || story)
+  const STORY_PREFIX = '這則貼文沒有文字' // 這則貼文沒有文字
+  const storySnap = await userRef.collection('fbPosts')
+    .where('message', '>=', STORY_PREFIX)
+    .where('message', '<=', STORY_PREFIX + '')
+    .limit(50).get()
+  if (storySnap.size > 0) {
+    const storyBatch = adminDb.batch()
+    storySnap.docs.forEach(d => storyBatch.delete(d.ref))
+    await storyBatch.commit()
+  }
+
   return { synced: posts.length }
 }
 
@@ -115,7 +127,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
         console.warn(`[cron/sync] IG insights error for ${post.id} (${post.media_type}):`, JSON.stringify(insData.error))
         return { ...post, _ins: {} as Record<string, number> }
       }
-const vals: Record<string, number> = {}
+      const vals: Record<string, number> = {}
       for (const m of (insData.data ?? []) as { name: string; values: { value: number }[] }[]) vals[m.name] = m.values?.[0]?.value ?? 0
       return { ...post, _ins: vals }
     } catch (e) {

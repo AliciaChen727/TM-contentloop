@@ -29,7 +29,11 @@ export async function GET(req: NextRequest) {
       createdTime: doc.data().createdTime?.toDate().toISOString() ?? null,
       snapshotAt: doc.data().snapshotAt?.toDate().toISOString() ?? null,
     }))
-    .filter((post) => typeof post.message === 'string' && post.message.trim().length > 0)
+    .filter((post) =>
+      typeof post.message === 'string' &&
+      post.message.trim().length > 0 &&
+      !post.message.startsWith('這則貼文沒有文字')
+    )
 
   return NextResponse.json({ posts })
 }
