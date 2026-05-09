@@ -22,12 +22,14 @@ export async function GET(req: NextRequest) {
     .limit(200)
     .get()
 
-  const posts = snap.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-    createdTime: doc.data().createdTime?.toDate().toISOString() ?? null,
-    snapshotAt: doc.data().snapshotAt?.toDate().toISOString() ?? null,
-  }))
+  const posts = snap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdTime: doc.data().createdTime?.toDate().toISOString() ?? null,
+      snapshotAt: doc.data().snapshotAt?.toDate().toISOString() ?? null,
+    }))
+    .filter((post) => typeof post.message === 'string' && post.message.trim().length > 0)
 
   return NextResponse.json({ posts })
 }

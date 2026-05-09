@@ -69,6 +69,15 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
     batch.delete(userRef.collection('fbPosts').doc(id))
   }
   await batch.commit()
+
+  // Clean up orphaned docs with empty message (outside the 200-post API window)
+  const emptySnap = await userRef.collection('fbPosts').where('message', '==', '').limit(50).get()
+  if (emptySnap.size > 0) {
+    const cleanBatch = adminDb.batch()
+    emptySnap.docs.forEach(d => cleanBatch.delete(d.ref))
+    await cleanBatch.commit()
+  }
+
   return { synced: posts.length }
 }
 

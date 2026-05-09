@@ -76,7 +76,7 @@ export default function DashboardPage() {
         fetch('/api/insights/fb', { headers }),
         fetch('/api/insights/ig', { headers }),
       ])
-      if (fbRes.ok) { const d = await fbRes.json(); setFbPosts(d.posts ?? []) }
+      if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())) }
       if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
       setLoading(false)
     })
