@@ -109,7 +109,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
       caption: post.caption ?? '',
       mediaType: post.media_type,
       permalink: post.permalink,
-      timestamp: post.timestamp,
+      timestamp: Timestamp.fromDate(new Date(post.timestamp)),
       insights: {
         likes: (post.like_count as number) ?? 0,
         comments: (post.comments_count as number) ?? 0,
