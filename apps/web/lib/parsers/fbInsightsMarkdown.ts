@@ -357,9 +357,9 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
     lineCounts.set(t, (lineCounts.get(t) ?? 0) + 1)
   }
   const dynamicNoise = new Set<string>()
-  for (const [line, count] of lineCounts) {
+  Array.from(lineCounts.entries()).forEach(([line, count]) => {
     if (count >= 5) dynamicNoise.add(line)
-  }
+  })
 
   // Collect non-table text lines between data rows as post content.
   // Business Suite Markdown interleaves: image lines, post text, then |date|metrics| row.
