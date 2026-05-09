@@ -11,6 +11,58 @@ function parseActions(actions: MetaAction[], type: string): number {
   return parseFloat(actions.find(a => a.action_type === type)?.value ?? '0')
 }
 
+// ── FB Posts Sync ─────────────────────────────────────────────────────────────
+
+async function syncFbForUser(uid: string, accessToken: string, pageId: string): Promise<{ synced: number; error?: string }> {
+  const postsUrl = new URL(`${BASE}/${pageId}/posts`)
+  postsUrl.searchParams.set('fields', 'id,message,created_time,permalink_url')
+  postsUrl.searchParams.set('limit', '50')
+  postsUrl.searchParams.set('access_token', accessToken)
+
+  const postsRes = await fetch(postsUrl)
+  const postsData = await postsRes.json()
+  if (!postsRes.ok || postsData.error) return { synced: 0, error: postsData.error?.message ?? 'posts fetch failed' }
+
+  const posts: { id: string; message?: string; created_time: string; permalink_url?: string }[] = postsData.data ?? []
+
+  // Fetch insights per post in parallel
+  const withInsights = await Promise.all(posts.map(async post => {
+    try {
+      const insUrl = new URL(`${BASE}/${post.id}/insights`)
+      insUrl.searchParams.set('metric', 'post_reactions_by_type_total,post_impressions_unique,post_activity_by_action_type')
+      insUrl.searchParams.set('period', 'lifetime')
+      insUrl.searchParams.set('access_token', accessToken)
+      const insRes = await fetch(insUrl)
+      const insData = await insRes.json()
+      const vals: Record<string, unknown> = {}
+      for (const item of (insData.data ?? []) as { name: string; values: { value: unknown }[] }[]) {
+        vals[item.name] = item.values?.[0]?.value ?? 0
+      }
+      const reactionsByType = vals.post_reactions_by_type_total as Record<string, number> ?? {}
+      const reactions = Object.values(reactionsByType).reduce((s, v) => s + v, 0)
+      const activity = vals.post_activity_by_action_type as Record<string, number> ?? {}
+      return { ...post, insights: { reactions, reach: (vals.post_impressions_unique as number) ?? 0, comments: activity.comment ?? 0, shares: activity.share ?? 0 } }
+    } catch {
+      return { ...post, insights: { reactions: 0, reach: 0, comments: 0, shares: 0 } }
+    }
+  }))
+
+  const userRef = adminDb.collection('users').doc(uid)
+  const batch = adminDb.batch()
+  for (const post of withInsights) {
+    const postRef = userRef.collection('fbPosts').doc(post.id)
+    batch.set(postRef, {
+      message: post.message ?? '',
+      createdTime: Timestamp.fromDate(new Date(post.created_time)),
+      permalink: post.permalink_url ?? '',
+      insights: post.insights,
+      syncedAt: Timestamp.now(),
+    }, { merge: true })
+  }
+  await batch.commit()
+  return { synced: posts.length }
+}
+
 // ── IG Posts Sync ─────────────────────────────────────────────────────────────
 
 async function syncIgForUser(uid: string, accessToken: string, igUserId: string): Promise<{ synced: number; error?: string }> {
@@ -170,19 +222,22 @@ export async function POST(req: NextRequest) {
     if (doc.id !== 'page') continue
     const uid = doc.ref.parent.parent?.id
     if (!uid) continue
-    const data = doc.data() as { userAccessToken?: string; accessToken?: string; igUserId?: string }
+    const tokenData = doc.data() as { userAccessToken?: string; accessToken?: string; igUserId?: string; pageId?: string }
 
-    const [adsResult, igResult] = await Promise.all([
-      data.userAccessToken
-        ? syncAdsForUser(uid, data.userAccessToken)
+    const [adsResult, igResult, fbResult] = await Promise.all([
+      tokenData.userAccessToken
+        ? syncAdsForUser(uid, tokenData.userAccessToken)
         : Promise.resolve({ error: 'no userAccessToken' }),
-      data.accessToken && data.igUserId
-        ? syncIgForUser(uid, data.accessToken, data.igUserId)
+      tokenData.accessToken && tokenData.igUserId
+        ? syncIgForUser(uid, tokenData.accessToken, tokenData.igUserId)
         : Promise.resolve({ synced: 0, error: 'no accessToken or igUserId' }),
+      tokenData.accessToken && tokenData.pageId
+        ? syncFbForUser(uid, tokenData.accessToken, tokenData.pageId)
+        : Promise.resolve({ synced: 0, error: 'no accessToken or pageId' }),
     ])
 
-    results.push({ uid, ads: adsResult, ig: igResult })
-    console.log(`[cron/sync] uid=${uid} ads=`, adsResult, 'ig=', igResult)
+    results.push({ uid, ads: adsResult, ig: igResult, fb: fbResult })
+    console.log(`[cron/sync] uid=${uid} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult)
   }
 
   return NextResponse.json({ synced: results.length, results })
