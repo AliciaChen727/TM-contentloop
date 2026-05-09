@@ -330,6 +330,15 @@ function isBizSuiteMd(md: string): boolean {
   return /發佈日期/.test(md) && /觸及人數|觸及/.test(md)
 }
 
+// Business Suite Markdown embeds page-level navigation UI between posts.
+// These strings are never actual post content.
+const BS_UI_NOISE = new Set([
+  '直欄', '你的限時動態', '限時動態', '這則貼文沒有文字',
+  '加強推廣', '開啟下拉式功能表', '已多文發佈', '查看更多',
+  '貼文', '相片', '影片', '直播', '精選', '活動',
+  '全部', '已發佈', '已排程', '草稿', '已過期',
+])
+
 function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
   // Headers are split one-per-line in the actual Markdown export.
   // Detect data rows by date pattern in cols[1] and use fixed column positions:
@@ -339,19 +348,44 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
   const rows: BizSuiteRow[] = []
   const DATE_RE = /\d{1,2}月\d{1,2}日|\d{4}年\d{1,2}月/
 
+  // Pre-scan: lines appearing ≥5 times are page-name/attribution noise, not post content
+  const lineCounts = new Map<string, number>()
+  for (const raw of md.split('\n')) {
+    const t = raw.trim()
+    if (!t || t.length < 5 || t.startsWith('|')) continue
+    if (/^!?\[.*?\]\(.*?\)$/.test(t)) continue
+    lineCounts.set(t, (lineCounts.get(t) ?? 0) + 1)
+  }
+  const dynamicNoise = new Set<string>()
+  for (const [line, count] of lineCounts) {
+    if (count >= 5) dynamicNoise.add(line)
+  }
+
   // Collect non-table text lines between data rows as post content.
   // Business Suite Markdown interleaves: image lines, post text, then |date|metrics| row.
   const pendingTextLines: string[] = []
+  let seenFirstTableRow = false  // discard preamble navigation text before any data row
 
   for (const line of md.split('\n')) {
     if (!line.startsWith('|')) {
-      // Skip blank lines and image/icon markdown (![...](...)  or  [...](...))
+      if (!seenFirstTableRow) continue  // skip document preamble entirely
       const trimmed = line.trim()
       if (trimmed === '') continue
+      // Skip image/icon markdown
       if (/^!?\[.*?\]\(.*?\)$/.test(trimmed)) continue
+      // Skip known Business Suite navigation UI strings
+      if (BS_UI_NOISE.has(trimmed)) continue
+      // Skip very short strings (single-word labels, page handles like "legacytmc")
+      if (trimmed.length < 5) continue
+      // Skip pure hashtag/mention clusters (e.g. "#tag1 #tag2 @handle")
+      if (/^([#@]\S+\s*)+$/.test(trimmed)) continue
+      // Skip repeating page-name / attribution lines detected by frequency
+      if (dynamicNoise.has(trimmed)) continue
       pendingTextLines.push(trimmed)
       continue
     }
+
+    seenFirstTableRow = true
 
     const cols = line.split('|').map(c => c.trim())
     // cols[0] is '' (before first |), cols[1] is first cell
@@ -360,7 +394,8 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
     if (!DATE_RE.test(firstVal)) continue
     if (/^-+$/.test(firstVal)) continue
 
-    const content = pendingTextLines.join('\n').trim() || undefined
+    // Join all accumulated non-noise lines as content; take first line as the display title
+    const content = pendingTextLines.length > 0 ? pendingTextLines[0] : undefined
     pendingTextLines.length = 0
 
     const n = (idx: number): number => {
