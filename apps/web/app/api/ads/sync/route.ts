@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 
-  // Fetch summary and daily in parallel
+  // Fetch summary, daily, and per-ad insights in parallel
   const summaryUrl = new URL(`${BASE}/${adAccountId}/insights`)
   summaryUrl.searchParams.set('fields', insightFields)
   summaryUrl.searchParams.set('date_preset', 'last_30d')
@@ -65,8 +65,15 @@ export async function POST(req: NextRequest) {
   dailyUrl.searchParams.set('level', 'account')
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
-  const [summaryRes, dailyRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl)])
-  const [summaryData, dailyData] = await Promise.all([summaryRes.json(), dailyRes.json()])
+  const adLevelUrl = new URL(`${BASE}/${adAccountId}/insights`)
+  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
+  adLevelUrl.searchParams.set('date_preset', 'last_30d')
+  adLevelUrl.searchParams.set('level', 'ad')
+  adLevelUrl.searchParams.set('limit', '100')
+  adLevelUrl.searchParams.set('access_token', userAccessToken)
+
+  const [summaryRes, dailyRes, adLevelRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl)])
+  const [summaryData, dailyData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json()])
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
@@ -117,6 +124,8 @@ export async function POST(req: NextRequest) {
   const dateFrom = daily[0]?.date ?? ''
   const dateTo = daily[daily.length - 1]?.date ?? ''
 
+  const adCreatives: Record<string, unknown>[] = adLevelData.data ?? []
+
   await userRef.collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
     dateRange: { from: dateFrom, to: dateTo },
@@ -124,6 +133,7 @@ export async function POST(req: NextRequest) {
     conversionType,
     summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
     daily,
+    adCreatives,
   })
 
   return NextResponse.json({ success: true, adAccountId, spend, conversions, conversionType })
