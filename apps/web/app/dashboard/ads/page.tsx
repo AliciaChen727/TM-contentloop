@@ -118,8 +118,8 @@ function buildAdData(raw: any): AdData {
   const s = raw.summary
   const from = raw.dateRange?.from ?? ''
   const to = raw.dateRange?.to ?? ''
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const creatives = Array.isArray(raw.adCreatives) && raw.adCreatives.length > 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? raw.adCreatives.map((c: any, i: number) => mapRawAdCreative(c, i))
     : MOCK_DATA.creatives
   return {
