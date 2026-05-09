@@ -43,6 +43,11 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
         </div>
       </div>
 
+      {sorted.length === 0 && (
+        <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
+          尚無廣告素材資料，請先同步廣告數據
+        </p>
+      )}
       <div className="ads-creative-grid">
         {sorted.map((c, i) => (
           <div key={c.id} className="ads-creative-card">

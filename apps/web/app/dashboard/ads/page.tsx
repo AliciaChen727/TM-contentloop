@@ -68,13 +68,63 @@ function mapIgPost(p: any): Post {
   }
 }
 
+function inferCreativeType(name: string): string {
+  if (/reels/i.test(name)) return 'Reels'
+  if (/stories|story/i.test(name)) return 'Stories'
+  if (/海報/.test(name)) return '海報'
+  return '貼文'
+}
+function inferThumb(type: string): 'reels' | 'post' | 'stories' | 'poster' {
+  if (type === 'Reels') return 'reels'
+  if (type === 'Stories') return 'stories'
+  if (type === '海報') return 'poster'
+  return 'post'
+}
+function inferStatus(roas: number): 'top' | 'good' | 'ok' | 'bad' {
+  if (roas >= 4) return 'top'
+  if (roas >= 3) return 'good'
+  if (roas >= 1.5) return 'ok'
+  return 'bad'
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRawAdCreative(c: any, idx: number) {
+  const spend = parseFloat(c.spend ?? '0')
+  const impressions = parseInt(c.impressions ?? '0')
+  const ctr = parseFloat(c.ctr ?? '0')
+  const actions: { action_type: string; value: string }[] = c.actions ?? []
+  const actionValues: { action_type: string; value: string }[] = c.action_values ?? []
+  const conversions = parseFloat(actions.find(a => a.action_type === 'purchase')?.value ?? '0')
+  const revenue = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value ?? '0')
+  const roas = spend > 0 && revenue > 0 ? revenue / spend : 0
+  const cpa = conversions > 0 ? spend / conversions : 0
+  const type = inferCreativeType(c.ad_name ?? '')
+  return {
+    id: c.ad_id ?? String(idx),
+    name: c.ad_name ?? `廣告 ${idx + 1}`,
+    type,
+    channel: 'Meta',
+    spend,
+    impressions,
+    ctr,
+    roas,
+    cpa,
+    thumb: inferThumb(type),
+    status: inferStatus(roas),
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildAdData(raw: any): AdData {
   const s = raw.summary
   const from = raw.dateRange?.from ?? ''
   const to = raw.dateRange?.to ?? ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const creatives = Array.isArray(raw.adCreatives) && raw.adCreatives.length > 0
+    ? raw.adCreatives.map((c: any, i: number) => mapRawAdCreative(c, i))
+    : MOCK_DATA.creatives
   return {
     ...MOCK_DATA,
+    creatives,
     overview: {
       ...MOCK_DATA.overview,
       dateRange: `${from} ~ ${to}`,

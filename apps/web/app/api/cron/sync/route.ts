@@ -196,8 +196,15 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
   adsUrl.searchParams.set('limit', '100')
   adsUrl.searchParams.set('access_token', userAccessToken)
 
-  const [summaryRes, dailyRes, adsRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl)])
-  const [summaryData, dailyData, adsData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json()])
+  const adLevelUrl = new URL(`${BASE}/${adAccountId}/insights`)
+  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
+  adLevelUrl.searchParams.set('date_preset', 'last_30d')
+  adLevelUrl.searchParams.set('level', 'ad')
+  adLevelUrl.searchParams.set('limit', '100')
+  adLevelUrl.searchParams.set('access_token', userAccessToken)
+
+  const [summaryRes, dailyRes, adsRes, adLevelRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl), fetch(adLevelUrl)])
+  const [summaryData, dailyData, adsData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json(), adLevelRes.json()])
   if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
 
   const adPostIds: string[] = []
@@ -242,6 +249,8 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
     }
   })
 
+  const adCreatives: Record<string, unknown>[] = (adLevelData.data ?? [])
+
   const userRef = adminDb.collection('users').doc(uid)
   await userRef.collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
@@ -251,6 +260,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
     summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
     daily,
     adPostIds,
+    adCreatives,
   })
 
   return { adAccountId, spend }
