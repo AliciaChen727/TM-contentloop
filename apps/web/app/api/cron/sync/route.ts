@@ -23,7 +23,9 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   const postsData = await postsRes.json()
   if (!postsRes.ok || postsData.error) return { synced: 0, error: postsData.error?.message ?? 'posts fetch failed' }
 
-  const posts: { id: string; message?: string; story?: string; created_time: string; permalink_url?: string }[] = postsData.data ?? []
+  // Only process posts with user-written text; skip story-only (auto-generated action descriptions)
+  const posts: { id: string; message?: string; story?: string; created_time: string; permalink_url?: string }[] =
+    (postsData.data ?? []).filter((p: { message?: string }) => p.message)
 
   // Fetch insights per post in parallel
   const withInsights = await Promise.all(posts.map(async post => {
@@ -52,7 +54,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   for (const post of withInsights) {
     const postRef = userRef.collection('fbPosts').doc(post.id)
     batch.set(postRef, {
-      message: post.message || post.story || '',
+      message: post.message ?? '',
       createdTime: Timestamp.fromDate(new Date(post.created_time)),
       permalink: post.permalink_url ?? '',
       insights: post.insights,
