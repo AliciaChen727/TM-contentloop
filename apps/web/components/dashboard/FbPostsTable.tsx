@@ -80,14 +80,20 @@ export function FbPostsTable({ posts }: { posts: FbPost[] }) {
             <tr key={post.id}>
               <td className="ads-posts-date">{fullDate(post.createdTime)}</td>
               <td style={{ maxWidth: 280 }}>
-                <a
-                  href={post.permalink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
-                >
-                  {post.message || '（無文字內容）'}
-                </a>
+                {post.permalink ? (
+                  <a
+                    href={post.permalink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+                  >
+                    {post.message || '（無文字內容）'}
+                  </a>
+                ) : (
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {post.message || '（無文字內容）'}
+                  </span>
+                )}
                 <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, marginTop: 3, background: 'var(--ad-surface2)', color: 'var(--ad-text3)' }}>
                   📝 貼文
                 </span>

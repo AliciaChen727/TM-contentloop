@@ -141,14 +141,20 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
                 <PlatBadge row={row} />
               </td>
               <td style={{ maxWidth: 260 }}>
-                <a
-                  href={row.permalink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
-                >
-                  {row.content}
-                </a>
+                {row.permalink ? (
+                  <a
+                    href={row.permalink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+                  >
+                    {row.content}
+                  </a>
+                ) : (
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.content}
+                  </span>
+                )}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: row.reach > 200 ? 'var(--ad-green)' : undefined }}>
                 {row.igOnly || !row.fbOnly ? fmt(row.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
