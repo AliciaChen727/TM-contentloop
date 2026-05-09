@@ -16,16 +16,19 @@ function parseActions(actions: MetaAction[], type: string): number {
 async function syncFbForUser(uid: string, accessToken: string, pageId: string): Promise<{ synced: number; error?: string }> {
   const postsUrl = new URL(`${BASE}/${pageId}/posts`)
   postsUrl.searchParams.set('fields', 'id,message,story,created_time,permalink_url')
-  postsUrl.searchParams.set('limit', '50')
+  postsUrl.searchParams.set('limit', '200')
   postsUrl.searchParams.set('access_token', accessToken)
 
   const postsRes = await fetch(postsUrl)
   const postsData = await postsRes.json()
   if (!postsRes.ok || postsData.error) return { synced: 0, error: postsData.error?.message ?? 'posts fetch failed' }
 
-  // Only process posts with user-written text; skip story-only (auto-generated action descriptions)
-  const posts: { id: string; message?: string; story?: string; created_time: string; permalink_url?: string }[] =
-    (postsData.data ?? []).filter((p: { message?: string }) => p.message)
+  type RawPost = { id: string; message?: string; story?: string; created_time: string; permalink_url?: string }
+  const allPosts: RawPost[] = postsData.data ?? []
+
+  // Posts with user-written text → save; story-only / empty → delete from Firestore
+  const posts = allPosts.filter(p => p.message)
+  const storyOnlyIds = allPosts.filter(p => !p.message).map(p => p.id)
 
   // Fetch insights per post in parallel
   const withInsights = await Promise.all(posts.map(async post => {
@@ -60,6 +63,10 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
       insights: post.insights,
       syncedAt: Timestamp.now(),
     }, { merge: true })
+  }
+  // Delete story-only / empty posts that were previously stored
+  for (const id of storyOnlyIds) {
+    batch.delete(userRef.collection('fbPosts').doc(id))
   }
   await batch.commit()
   return { synced: posts.length }
