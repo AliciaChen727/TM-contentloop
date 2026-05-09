@@ -67,7 +67,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
 
 async function syncIgForUser(uid: string, accessToken: string, igUserId: string): Promise<{ synced: number; error?: string }> {
   const mediaUrl = new URL(`${BASE}/${igUserId}/media`)
-  mediaUrl.searchParams.set('fields', 'id,timestamp,caption,media_type,permalink,like_count,comments_count')
+  mediaUrl.searchParams.set('fields', 'id,timestamp,caption,media_type,media_product_type,permalink,like_count,comments_count')
   mediaUrl.searchParams.set('limit', '50')
   mediaUrl.searchParams.set('access_token', accessToken)
 
@@ -77,12 +77,14 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
 
   const posts: Record<string, unknown>[] = mediaData.data ?? []
 
-  type IgPost = { id: string; timestamp: string; caption?: string; media_type: string; permalink: string; like_count: number; comments_count: number }
+  type IgPost = { id: string; timestamp: string; caption?: string; media_type: string; media_product_type?: string; permalink: string; like_count: number; comments_count: number }
 
   // Fetch insights per post in parallel (with individual error handling)
   const withInsights = await Promise.all((posts as IgPost[]).map(async post => {
-    const isVideo = post.media_type === 'VIDEO' || post.media_type === 'REELS'
-    const metrics = isVideo ? 'reach,saved,shares,video_views' : 'reach,saved,shares'
+    const isReel = post.media_product_type === 'REELS'
+    const isFeedVideo = (post.media_type === 'VIDEO') && !isReel
+    // Reels: plays and video_views deprecated in v22.0+; feed videos support video_views
+    const metrics = isFeedVideo ? 'reach,saved,shares,video_views' : 'reach,saved,shares'
     const insUrl = new URL(`${BASE}/${post.id}/insights`)
     insUrl.searchParams.set('metric', metrics)
     insUrl.searchParams.set('period', 'lifetime')
@@ -112,7 +114,7 @@ const vals: Record<string, number> = {}
     batch.set(postRef, {
       id: post.id,
       caption: post.caption ?? '',
-      mediaType: post.media_type,
+      mediaType: post.media_product_type === 'REELS' ? 'REELS' : post.media_type,
       permalink: post.permalink,
       timestamp: Timestamp.fromDate(new Date(post.timestamp)),
       insights: {
