@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
   const posts = snap.docs
     .map((doc) => ({
       id: doc.id,
-      ...(doc.data() as Record<string, unknown>),
+      ...(doc.data() as { message?: string; [key: string]: unknown }),
       createdTime: doc.data().createdTime?.toDate().toISOString() ?? null,
       snapshotAt: doc.data().snapshotAt?.toDate().toISOString() ?? null,
     }))
-    .filter((post) => typeof post.message === 'string' && (post.message as string).trim().length > 0)
+    .filter((post) => typeof post.message === 'string' && post.message.trim().length > 0)
 
   return NextResponse.json({ posts })
 }
