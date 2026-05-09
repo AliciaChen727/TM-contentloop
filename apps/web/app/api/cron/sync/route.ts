@@ -95,6 +95,9 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
         console.warn(`[cron/sync] IG insights error for ${post.id} (${post.media_type}):`, JSON.stringify(insData.error))
         return { ...post, _ins: {} as Record<string, number> }
       }
+      if (post.media_type === 'REELS') {
+        console.log(`[cron/sync] REELS raw insights ${post.id}:`, JSON.stringify(insData).slice(0, 500))
+      }
       const vals: Record<string, number> = {}
       for (const m of (insData.data ?? []) as { name: string; values: { value: number }[] }[]) vals[m.name] = m.values?.[0]?.value ?? 0
       return { ...post, _ins: vals }
