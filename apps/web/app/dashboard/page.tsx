@@ -19,7 +19,7 @@ interface PageTokenData { pageName: string; pageId: string; igUserId: string | n
 
 interface FbPost {
   id: string; message: string; createdTime: string; permalink: string
-  insights: { reactions: number; comments: number; shares: number }
+  insights: { reactions: number; comments: number; shares: number; reach: number }
 }
 interface IgPost {
   id: string; caption: string; mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'REELS'; permalink: string; timestamp: string
@@ -104,7 +104,7 @@ export default function DashboardPage() {
 
   // Summary stats from ranged posts
   const stats = useMemo(() => {
-    const totalReach = rangedIg.reduce((s, p) => s + (p.insights?.reach ?? 0), 0)
+    const totalReach = rangedFb.reduce((s, p) => s + (p.insights?.reach ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.reach ?? 0), 0)
     const totalLikes = rangedFb.reduce((s, p) => s + (p.insights?.reactions ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.likes ?? 0), 0)
     const totalComments = rangedFb.reduce((s, p) => s + (p.insights?.comments ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.comments ?? 0), 0)
     const totalShares = rangedFb.reduce((s, p) => s + (p.insights?.shares ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.shares ?? 0), 0)
@@ -229,7 +229,7 @@ export default function DashboardPage() {
             <div className="ads-posts-summary-strip" style={{ marginBottom: 20 }}>
               {[
                 { label: '總貼文數', value: stats.totalPosts, sub: `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文` },
-                { label: '總觸擊 (IG)', value: fmtBig(stats.totalReach), sub: '來自 IG 貼文' },
+                { label: '總觸擊', value: fmtBig(stats.totalReach), sub: 'FB + IG 貼文' },
                 { label: '總按讚', value: fmtBig(stats.totalLikes), sub: `留言 ${stats.totalComments} · 分享 ${stats.totalShares}` },
                 { label: '平均互動率', value: `${stats.avgEngRate.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
               ].map(s => (
