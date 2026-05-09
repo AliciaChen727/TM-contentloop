@@ -91,10 +91,15 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
     try {
       const insRes = await fetch(insUrl)
       const insData = await insRes.json()
+      if (insData.error) {
+        console.warn(`[cron/sync] IG insights error for ${post.id} (${post.media_type}):`, JSON.stringify(insData.error))
+        return { ...post, _ins: {} as Record<string, number> }
+      }
       const vals: Record<string, number> = {}
       for (const m of (insData.data ?? []) as { name: string; values: { value: number }[] }[]) vals[m.name] = m.values?.[0]?.value ?? 0
       return { ...post, _ins: vals }
-    } catch {
+    } catch (e) {
+      console.warn(`[cron/sync] IG insights fetch exception for ${post.id}:`, e)
       return { ...post, _ins: {} as Record<string, number> }
     }
   }))
