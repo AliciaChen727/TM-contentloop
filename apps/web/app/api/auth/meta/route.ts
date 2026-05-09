@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
       pageName: pageToken.pageName,
       accessToken: pageToken.accessToken,
       igUserId: pageToken.igUserId,
+      userAccessToken: longLived,
       // Long-lived token 有效期約 60 天
       tokenExpiry: FieldValue.serverTimestamp(),
       connectedAt: FieldValue.serverTimestamp(),

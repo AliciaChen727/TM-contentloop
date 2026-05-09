@@ -13,7 +13,7 @@ import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
-import type { NavId, Post } from '@/components/ads/types'
+import type { NavId, Post, AdData } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
@@ -68,6 +68,42 @@ function mapIgPost(p: any): Post {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildAdData(raw: any): AdData {
+  const s = raw.summary
+  const from = raw.dateRange?.from ?? ''
+  const to = raw.dateRange?.to ?? ''
+  return {
+    ...MOCK_DATA,
+    overview: {
+      ...MOCK_DATA.overview,
+      dateRange: `${from} ~ ${to}`,
+      summary: {
+        spend: s.spend,
+        budget: MOCK_DATA.overview.summary.budget,
+        roas: s.roas,
+        roasTarget: MOCK_DATA.overview.summary.roasTarget,
+        cpa: s.cpa,
+        cpaTarget: MOCK_DATA.overview.summary.cpaTarget,
+        ctr: s.ctr,
+        cpm: s.cpm,
+        reach: s.reach,
+        impressions: s.impressions,
+        frequency: s.frequency,
+        conversions: s.conversions,
+        revenue: s.revenue,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      dailySpend: raw.daily.map((d: any) => ({
+        date: d.date,
+        spend: d.spend,
+        revenue: d.revenue,
+        roas: d.roas,
+      })),
+    },
+  }
+}
+
 export default function AdsPage() {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
@@ -75,6 +111,20 @@ export default function AdsPage() {
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
   const [realPosts, setRealPosts] = useState<Post[] | null>(null)
+  const [adData, setAdData] = useState<AdData>(MOCK_DATA)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+
+  async function fetchAdData(idToken: string) {
+    const res = await fetch('/api/ads/data', { headers: { Authorization: `Bearer ${idToken}` } })
+    if (!res.ok) return
+    const json = await res.json()
+    if (json.data) {
+      setAdData(buildAdData(json.data))
+      setLastSync(json.data.syncedAt ?? null)
+    }
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async u => {
@@ -87,6 +137,7 @@ export default function AdsPage() {
         fetch('/api/insights/fb', { headers }),
         fetch('/api/insights/ig', { headers }),
       ])
+      fetchAdData(idToken)
 
       const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.map(mapFbPost) : []
       const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.map(mapIgPost) : []
@@ -95,6 +146,27 @@ export default function AdsPage() {
     })
     return unsub
   }, [router])
+
+  async function handleSync() {
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const u = auth.currentUser
+      if (!u) return
+      const idToken = await u.getIdToken()
+      const res = await fetch('/api/ads/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      const json = await res.json()
+      if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
+      await fetchAdData(idToken)
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : '同步失敗')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const openSidekick = useCallback((prompt = '') => {
     setSkInitPrompt(prompt)
@@ -150,7 +222,9 @@ export default function AdsPage() {
         </div>
         <div className="ads-nav-footer">
           <div>最後更新</div>
-          <div style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 11 }}>2026-05-05 03:00</div>
+          <div style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 11 }}>
+            {lastSync ? new Date(lastSync).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '— 尚未同步'}
+          </div>
         </div>
       </nav>
 
@@ -162,10 +236,13 @@ export default function AdsPage() {
             <Icon name="meta" size={13} color="var(--ad-blue)" />Meta Ads
           </div>
           <div className="ads-date-pill">
-            <Icon name="calendar" size={12} />2026-04-05 ~ 05-05
+            <Icon name="calendar" size={12} />{adData.overview.dateRange}
           </div>
           <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
             ✨ AI Sidekick
+          </button>
+          <button className="ads-btn" onClick={handleSync} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
+            {syncing ? '同步中⋯' : syncError ? `⚠ ${syncError}` : '↻ 同步廣告資料'}
           </button>
           <button className="ads-btn primary">
             <Icon name="download" size={13} color="white" />匯出報告
@@ -173,12 +250,12 @@ export default function AdsPage() {
         </header>
 
         <main className="ads-content">
-          {active === 'overview' && <OverviewSection data={MOCK_DATA} onAskAI={openSidekick} />}
-          {active === 'diagnosis' && <DiagnosisSection data={MOCK_DATA} onAskAI={openSidekick} />}
-          {active === 'creative' && <CreativeSection data={MOCK_DATA} onAskAI={openSidekick} />}
+          {active === 'overview' && <OverviewSection data={adData} onAskAI={openSidekick} />}
+          {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={openSidekick} />}
+          {active === 'creative' && <CreativeSection data={adData} onAskAI={openSidekick} />}
           {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts} />}
-          {active === 'time' && <BestTimeSection data={MOCK_DATA} />}
-          {active === 'budget' && <BudgetSection data={MOCK_DATA} />}
+          {active === 'time' && <BestTimeSection data={adData} />}
+          {active === 'budget' && <BudgetSection data={adData} />}
         </main>
       </div>
 

@@ -12,6 +12,7 @@ const SCOPES = [
   'read_insights',
   'instagram_basic',
   'instagram_manage_insights',
+  'ads_read',
 ].join(',')
 
 export default function ConnectPage() {
