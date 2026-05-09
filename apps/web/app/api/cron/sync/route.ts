@@ -191,7 +191,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
   const adsUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsUrl.searchParams.set('fields', 'creative{object_story_id}')
+  adsUrl.searchParams.set('fields', 'id,name,effective_status,creative{object_story_id}')
   adsUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
   adsUrl.searchParams.set('limit', '100')
   adsUrl.searchParams.set('access_token', userAccessToken)
@@ -208,7 +208,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
   if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
 
   const adPostIds: string[] = []
-  for (const ad of (adsData.data ?? []) as { creative?: { object_story_id?: string } }[]) {
+  for (const ad of (adsData.data ?? []) as { id?: string; name?: string; creative?: { object_story_id?: string } }[]) {
     if (ad.creative?.object_story_id) adPostIds.push(ad.creative.object_story_id)
   }
 
@@ -249,7 +249,15 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
     }
   })
 
-  const adCreatives: Record<string, unknown>[] = (adLevelData.data ?? [])
+  // Merge ads list with insights: show all ads even if spend=0
+  const insightsByAdId = new Map<string, Record<string, unknown>>()
+  for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
+    if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
+  }
+  const adsList: { id: string; name: string }[] = adsData.data ?? []
+  const adCreatives: Record<string, unknown>[] = adsList.length > 0
+    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    : (adLevelData.data ?? [])
 
   const userRef = adminDb.collection('users').doc(uid)
   await userRef.collection('adInsights').doc('latest').set({

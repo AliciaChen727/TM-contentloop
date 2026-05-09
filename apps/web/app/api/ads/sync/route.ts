@@ -72,8 +72,15 @@ export async function POST(req: NextRequest) {
   adLevelUrl.searchParams.set('limit', '100')
   adLevelUrl.searchParams.set('access_token', userAccessToken)
 
-  const [summaryRes, dailyRes, adLevelRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl)])
-  const [summaryData, dailyData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json()])
+  // Fetch all ads regardless of spend (for creative library)
+  const adsListUrl = new URL(`${BASE}/${adAccountId}/ads`)
+  adsListUrl.searchParams.set('fields', 'id,name,effective_status')
+  adsListUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
+  adsListUrl.searchParams.set('limit', '100')
+  adsListUrl.searchParams.set('access_token', userAccessToken)
+
+  const [summaryRes, dailyRes, adLevelRes, adsListRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl), fetch(adsListUrl)])
+  const [summaryData, dailyData, adLevelData, adsListData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json(), adsListRes.json()])
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
@@ -124,7 +131,15 @@ export async function POST(req: NextRequest) {
   const dateFrom = daily[0]?.date ?? ''
   const dateTo = daily[daily.length - 1]?.date ?? ''
 
-  const adCreatives: Record<string, unknown>[] = adLevelData.data ?? []
+  // Merge ads list with insights: show all ads even if spend=0
+  const insightsByAdId = new Map<string, Record<string, unknown>>()
+  for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
+    if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
+  }
+  const adsList: { id: string; name: string; effective_status: string }[] = adsListData.data ?? []
+  const adCreatives: Record<string, unknown>[] = adsList.length > 0
+    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    : (adLevelData.data ?? [])
 
   await userRef.collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
@@ -139,6 +154,5 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true, adAccountId, spend, conversions, conversionType,
     adCreativesCount: adCreatives.length,
-    adLevelError: adLevelData.error ?? null,
   })
 }
