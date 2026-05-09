@@ -115,8 +115,6 @@ export default function AdsPage() {
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [adPostIds, setAdPostIds] = useState<Set<string>>(new Set())
-
   async function fetchAdData(idToken: string): Promise<Set<string>> {
     const res = await fetch('/api/ads/data', { headers: { Authorization: `Bearer ${idToken}` } })
     if (!res.ok) return new Set()
@@ -124,9 +122,7 @@ export default function AdsPage() {
     if (json.data) {
       setAdData(buildAdData(json.data))
       setLastSync(json.data.syncedAt ?? null)
-      const ids = new Set<string>(json.data.adPostIds ?? [])
-      setAdPostIds(ids)
-      return ids
+      return new Set<string>(json.data.adPostIds ?? [])
     }
     return new Set()
   }
@@ -149,7 +145,6 @@ export default function AdsPage() {
       if (adJson?.data) {
         setAdData(buildAdData(adJson.data))
         setLastSync(adJson.data.syncedAt ?? null)
-        setAdPostIds(initialAdPostIds)
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
