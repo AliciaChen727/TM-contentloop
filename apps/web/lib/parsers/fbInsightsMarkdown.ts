@@ -358,7 +358,7 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
   }
   const dynamicNoise = new Set<string>()
   Array.from(lineCounts.entries()).forEach(([line, count]) => {
-    if (count >= 5) dynamicNoise.add(line)
+    if (count >= 3) dynamicNoise.add(line)
   })
 
   // Collect non-table text lines between data rows as post content.
@@ -385,6 +385,10 @@ function parseBizSuiteContentTable(md: string): BizSuiteRow[] {
       if (/^([#@]\S+\s*)+$/.test(trimmed)) continue
       // Skip repeating page-name / attribution lines detected by frequency
       if (dynamicNoise.has(trimmed)) continue
+      // Skip page attribution lines: "PageName、handle" (BS cross-post attribution)
+      if (/[一-鿿、].+、[a-z0-9]+$/.test(trimmed)) continue
+      // Skip English page name lines ending with a 、handle suffix
+      if (/^[A-Z][A-Za-z\s]+、[a-z0-9]+$/.test(trimmed)) continue
       pendingTextLines.push(trimmed)
       continue
     }
