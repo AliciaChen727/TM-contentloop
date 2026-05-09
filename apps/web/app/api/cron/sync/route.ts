@@ -82,7 +82,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
   // Fetch insights per post in parallel (with individual error handling)
   const withInsights = await Promise.all((posts as IgPost[]).map(async post => {
     const isVideo = post.media_type === 'VIDEO' || post.media_type === 'REELS'
-    const metrics = isVideo ? 'reach,saved,shares,plays' : 'reach,saved,shares'
+    const metrics = isVideo ? 'reach,saved,shares,video_views' : 'reach,saved,shares'
     const insUrl = new URL(`${BASE}/${post.id}/insights`)
     insUrl.searchParams.set('metric', metrics)
     insUrl.searchParams.set('period', 'lifetime')
@@ -95,10 +95,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
         console.warn(`[cron/sync] IG insights error for ${post.id} (${post.media_type}):`, JSON.stringify(insData.error))
         return { ...post, _ins: {} as Record<string, number> }
       }
-      if (post.media_type === 'REELS') {
-        console.log(`[cron/sync] REELS raw insights ${post.id}:`, JSON.stringify(insData).slice(0, 500))
-      }
-      const vals: Record<string, number> = {}
+const vals: Record<string, number> = {}
       for (const m of (insData.data ?? []) as { name: string; values: { value: number }[] }[]) vals[m.name] = m.values?.[0]?.value ?? 0
       return { ...post, _ins: vals }
     } catch (e) {
@@ -124,7 +121,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
         reach: ins.reach ?? 0,
         saved: ins.saved ?? 0,
         shares: ins.shares ?? 0,
-        views: ins.plays ?? ins.video_views ?? 0,
+        views: ins.video_views ?? ins.plays ?? 0,
       },
       syncedAt: Timestamp.now(),
     }, { merge: true })
