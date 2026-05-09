@@ -149,7 +149,8 @@ export default function AdsPage() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.filter((p: any) => p.message).map((p: any) => mapFbPost(p, initialAdPostIds)) : []
-      const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.map(mapIgPost) : []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.filter((p: any) => p.caption).map(mapIgPost) : []
       const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
       setRealPosts(merged)
     })
