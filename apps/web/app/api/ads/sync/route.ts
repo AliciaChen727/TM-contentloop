@@ -136,5 +136,9 @@ export async function POST(req: NextRequest) {
     adCreatives,
   })
 
-  return NextResponse.json({ success: true, adAccountId, spend, conversions, conversionType })
+  return NextResponse.json({
+    success: true, adAccountId, spend, conversions, conversionType,
+    adCreativesCount: adCreatives.length,
+    adLevelError: adLevelData.error ?? null,
+  })
 }
