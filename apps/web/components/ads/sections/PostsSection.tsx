@@ -218,7 +218,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4, marginBottom: 10 }}>{p.title}</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-                        {[['ROAS', (p.adRoas ?? 0).toFixed(1) + 'x', rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CPA', '$' + (p.adCpa ?? 0), undefined], ['CTR', (p.adCtr ?? 0) + '%', undefined]].map(([label, value, color]) => (
+                        {[['ROAS', (p.adRoas ?? 0).toFixed(1) + 'x', rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CPA', '$' + (p.adCpa ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
                           <div key={label as string}>
                             <div className="ads-posts-ad-metric-label">{label}</div>
                             <div className="ads-posts-ad-metric-value" style={{ color: color as string | undefined }}>{value}</div>
