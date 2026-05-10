@@ -97,14 +97,14 @@ function mapRawAdCreative(c: any, idx: number) {
   const actionValues: { action_type: string; value: string }[] = c.action_values ?? []
   const purchases = parseFloat(actions.find(a => a.action_type === 'purchase')?.value ?? '0')
   const linkClicks = parseFloat(actions.find(a => a.action_type === 'link_click')?.value ?? '0')
+  const videoViews = parseFloat(actions.find(a => a.action_type === 'video_view')?.value ?? '0')
   const revenue = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value ?? '0')
   const hasPurchase = purchases > 0
-  const roas = spend > 0
-    ? (hasPurchase && revenue > 0 ? revenue / spend : (linkClicks > 0 ? parseFloat((linkClicks / spend * 100).toFixed(2)) : 0))
+  const primaryMetric = hasPurchase ? revenue : linkClicks > 0 ? linkClicks : videoViews
+  const roas = spend > 0 && primaryMetric > 0
+    ? (hasPurchase ? parseFloat((primaryMetric / spend).toFixed(2)) : parseFloat((primaryMetric / spend * 100).toFixed(2)))
     : 0
-  const cpa = hasPurchase
-    ? (purchases > 0 ? parseFloat((spend / purchases).toFixed(2)) : 0)
-    : (linkClicks > 0 ? parseFloat((spend / linkClicks).toFixed(2)) : 0)
+  const cpa = primaryMetric > 0 ? parseFloat((spend / primaryMetric).toFixed(2)) : 0
   const type = inferCreativeType(c.ad_name ?? '')
   return {
     id: c.ad_id ?? String(idx),

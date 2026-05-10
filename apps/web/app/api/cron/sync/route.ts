@@ -166,7 +166,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string,
 
 // ── Ads Sync ──────────────────────────────────────────────────────────────────
 
-async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string): Promise<{ adAccountId?: string; spend?: number; error?: string }> {
+async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string): Promise<{ adAccountId?: string; spend?: number; reach?: number; conversionType?: string; linkClicks?: number; videoViews?: number; error?: string }> {
   const accountsUrl = new URL(`${BASE}/me/adaccounts`)
   accountsUrl.searchParams.set('fields', 'id,name')
   accountsUrl.searchParams.set('access_token', userAccessToken)
@@ -215,6 +215,8 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   const [summaryRes, dailyRes, adsRes, adLevelRes, hourlyRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl), fetch(adLevelUrl), fetch(hourlyUrl)])
   const [summaryData, dailyData, adsData, adLevelData, hourlyData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json(), adLevelRes.json(), hourlyRes.json()])
   if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
+  // Fix: also validate ad-level insights — silent failure here causes all creatives to show $0
+  if (!adLevelRes.ok || adLevelData.error) return { error: adLevelData.error?.message ?? 'ad-level insights failed' }
 
   // Filter ads to only those belonging to this pageId (object_story_id format: {pageId}_{postId})
   const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string } }[] = adsData.data ?? []
@@ -232,13 +234,21 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   const sActions: MetaAction[] = s.actions ?? []
   const sActionValues: MetaAction[] = s.action_values ?? []
   const hasPurchase = sActions.some(a => a.action_type === 'purchase')
-  const conversionType = hasPurchase ? 'purchase' : 'link_click'
   const linkClicks = parseActions(sActions, 'link_click')
-  const conversions = hasPurchase ? parseActions(sActions, 'purchase') : linkClicks
-  const revenue = hasPurchase ? parseActions(sActionValues, 'purchase') : linkClicks
-  // For non-purchase: roas = clicks per NT$100 (higher is better, comparable scale to purchase ROAS)
-  const roas = spend > 0 && revenue > 0
-    ? (hasPurchase ? revenue / spend : parseFloat((linkClicks / spend * 100).toFixed(2)))
+  const videoViews = parseActions(sActions, 'video_view')
+  // Detect campaign type: purchase > link_click > video_view > fallback
+  const conversionType = hasPurchase ? 'purchase'
+    : linkClicks > 0 ? 'link_click'
+    : videoViews > 0 ? 'video_view'
+    : 'link_click'
+  const primaryMetric = hasPurchase ? parseActions(sActionValues, 'purchase')
+    : linkClicks > 0 ? linkClicks
+    : videoViews
+  const conversions = primaryMetric
+  const revenue = primaryMetric
+  // ROAS = interactions per NT$100 (works for purchase, link_click, video_view)
+  const roas = spend > 0 && primaryMetric > 0
+    ? (hasPurchase ? parseFloat((revenue / spend).toFixed(2)) : parseFloat((primaryMetric / spend * 100).toFixed(2)))
     : 0
   const cpa = conversions > 0 ? parseFloat((spend / conversions).toFixed(2)) : 0
 
@@ -248,8 +258,10 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     const dayActions: MetaAction[] = (d.actions as MetaAction[]) ?? []
     const dayActionValues: MetaAction[] = (d.action_values as MetaAction[]) ?? []
     const dayLinkClicks = parseActions(dayActions, 'link_click')
-    const dayConversions = hasPurchase ? parseActions(dayActions, 'purchase') : dayLinkClicks
-    const dayRevenue = hasPurchase ? parseActions(dayActionValues, 'purchase') : dayLinkClicks
+    const dayVideoViews = parseActions(dayActions, 'video_view')
+    const dayPrimary = hasPurchase ? parseActions(dayActionValues, 'purchase')
+      : linkClicks > 0 ? dayLinkClicks
+      : dayVideoViews
     return {
       date: d.date_start as string,
       spend: daySpend,
@@ -257,11 +269,11 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
       impressions: parseInt((d.impressions as string) ?? '0'),
       clicks: parseInt((d.clicks as string) ?? '0'),
       ctr: parseFloat((d.ctr as string) ?? '0'),
-      roas: daySpend > 0 && dayRevenue > 0
-        ? (hasPurchase ? dayRevenue / daySpend : parseFloat((dayLinkClicks / daySpend * 100).toFixed(2)))
+      roas: daySpend > 0 && dayPrimary > 0
+        ? (hasPurchase ? parseFloat((dayPrimary / daySpend).toFixed(2)) : parseFloat((dayPrimary / daySpend * 100).toFixed(2)))
         : 0,
-      conversions: dayConversions,
-      revenue: dayRevenue,
+      conversions: dayPrimary,
+      revenue: dayPrimary,
     }
   })
 
@@ -271,13 +283,16 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     const hourActions: MetaAction[] = (h.actions as MetaAction[]) ?? []
     const hourActionValues: MetaAction[] = (h.action_values as MetaAction[]) ?? []
     const hourLinkClicks = parseActions(hourActions, 'link_click')
-    const hourRevenue = hasPurchase ? parseActions(hourActionValues, 'purchase') : hourLinkClicks
+    const hourVideoViews = parseActions(hourActions, 'video_view')
+    const hourPrimary = hasPurchase ? parseActions(hourActionValues, 'purchase')
+      : linkClicks > 0 ? hourLinkClicks
+      : hourVideoViews
     const hourLabel = (h.hourly_stats_aggregated_by_advertiser_time_zone as string) ?? '0:00 - 1:00'
     return {
       hour: parseInt(hourLabel.split(':')[0]),
       spend: hourSpend,
-      roas: hourSpend > 0 && hourRevenue > 0
-        ? (hasPurchase ? hourRevenue / hourSpend : parseFloat((hourLinkClicks / hourSpend * 100).toFixed(2)))
+      roas: hourSpend > 0 && hourPrimary > 0
+        ? (hasPurchase ? parseFloat((hourPrimary / hourSpend).toFixed(2)) : parseFloat((hourPrimary / hourSpend * 100).toFixed(2)))
         : 0,
     }
   }).sort((a, b) => a.hour - b.hour)
@@ -293,7 +308,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
 
   const userRef = adminDb.collection('users').doc(uid)
   const dateRange = { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' }
-  const summaryDoc = { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa, conversionType, linkClicks }
+  const summaryDoc = { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa, conversionType, linkClicks, videoViews }
 
   // Existing UID-scoped write (backward compat + fallback)
   await userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
@@ -321,7 +336,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     adCreatives,
   })
 
-  return { adAccountId, spend }
+  return { adAccountId, spend, reach, conversionType, linkClicks, videoViews }
 }
 
 // ── Cross-admin Merge ─────────────────────────────────────────────────────────
