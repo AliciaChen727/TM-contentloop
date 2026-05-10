@@ -107,8 +107,12 @@ export default function DashboardPage() {
       }
 
       const firstPageId = pageList[0]?.pageId ?? ''
+      const firstPageName = pageList[0]?.pageName ?? ''
       setSelectedPageId(firstPageId)
-      if (firstPageId) localStorage.setItem('selectedPageId', firstPageId)
+      if (firstPageId) {
+        localStorage.setItem('selectedPageId', firstPageId)
+        localStorage.setItem('selectedPageName', firstPageName)
+      }
       await fetchPosts(idToken, firstPageId)
       setLoading(false)
     })
@@ -200,6 +204,7 @@ export default function DashboardPage() {
     setSelectedPageId(newPageId)
     localStorage.setItem('selectedPageId', newPageId)
     const found = pages.find(p => p.pageId === newPageId)
+    if (found) localStorage.setItem('selectedPageName', found.pageName)
     if (found) setPageData({ pageId: found.pageId, pageName: found.pageName, igUserId: found.igUserId })
     setFbPosts([])
     setIgPosts([])

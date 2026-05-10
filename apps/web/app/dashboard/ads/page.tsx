@@ -166,6 +166,7 @@ export default function AdsPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [selectedPageId, setSelectedPageId] = useState('')
+  const [selectedPageName, setSelectedPageName] = useState('')
 
   async function fetchAdData(idToken: string, pageId?: string): Promise<Set<string>> {
     const pid = pageId ?? selectedPageId
@@ -189,7 +190,9 @@ export default function AdsPage() {
       const idToken = await u.getIdToken()
       const headers = { Authorization: `Bearer ${idToken}` }
       const pageId = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : '') ?? ''
+      const pageName = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageName') : '') ?? ''
       setSelectedPageId(pageId)
+      setSelectedPageName(pageName)
       const qs = pageId ? `?pageId=${pageId}` : ''
       const [fbRes, igRes, adRes] = await Promise.all([
         fetch(`/api/insights/fb${qs}`, { headers }),
@@ -256,7 +259,7 @@ export default function AdsPage() {
       {/* Left Nav */}
       <nav className="ads-nav">
         <div className="ads-nav-logo">
-          <div className="brand" style={{ fontSize: 13 }}>Legacy <span>Toastmasters</span></div>
+          <div className="brand" style={{ fontSize: 13 }}>{selectedPageName || 'ContentLoop'}</div>
           <div className="sub">廣告儀表板</div>
         </div>
         <div style={{ flex: 1, overflow: 'auto', paddingTop: 8 }}>
