@@ -216,10 +216,10 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   const [summaryData, dailyData, adsData, adLevelData, hourlyData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json(), adLevelRes.json(), hourlyRes.json()])
   if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
 
-  const adPostIds: string[] = []
-  for (const ad of (adsData.data ?? []) as { id?: string; name?: string; creative?: { object_story_id?: string } }[]) {
-    if (ad.creative?.object_story_id) adPostIds.push(ad.creative.object_story_id)
-  }
+  // Filter ads to only those belonging to this pageId (object_story_id format: {pageId}_{postId})
+  const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string } }[] = adsData.data ?? []
+  const pageAdsList = rawAdsList.filter(ad => ad.creative?.object_story_id?.startsWith(pageId + '_'))
+  const adPostIds: string[] = pageAdsList.map(ad => ad.creative!.object_story_id!).filter(Boolean)
 
   const s = summaryData.data?.[0] ?? {}
   const spend = parseFloat(s.spend ?? '0')
@@ -287,10 +287,9 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
     if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
   }
-  const adsList: { id: string; name: string }[] = adsData.data ?? []
-  const adCreatives: Record<string, unknown>[] = adsList.length > 0
-    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
-    : (adLevelData.data ?? [])
+  const adCreatives: Record<string, unknown>[] = pageAdsList.length > 0
+    ? pageAdsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    : []
 
   const userRef = adminDb.collection('users').doc(uid)
   const dateRange = { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' }
@@ -351,6 +350,25 @@ function mergeSummaries(snapshots: { summary?: Record<string, number> }[]): Reco
   }
 }
 
+type HourRow = { hour: number; spend: number; roas: number }
+
+function mergeHourlyArrays(snapshots: { hourly?: HourRow[] }[]): HourRow[] {
+  const byHour = new Map<number, { spend: number; revenue: number }>()
+  for (const s of snapshots) {
+    for (const h of s.hourly ?? []) {
+      const e = byHour.get(h.hour) ?? { spend: 0, revenue: 0 }
+      byHour.set(h.hour, { spend: e.spend + h.spend, revenue: e.revenue + h.roas * h.spend })
+    }
+  }
+  return Array.from(byHour.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([hour, { spend, revenue }]) => ({
+      hour,
+      spend,
+      roas: spend > 0 ? parseFloat((revenue / spend).toFixed(2)) : 0,
+    }))
+}
+
 function mergeDailyArrays(snapshots: { daily?: DayRow[] }[]): DayRow[] {
   const byDate = new Map<string, SummaryFields>()
   for (const s of snapshots) {
@@ -401,13 +419,19 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     }
   }
 
+  const mergedPostIds = Array.from(
+    new Set(deduped.flatMap(s => (s.adPostIds as string[] | undefined) ?? []))
+  )
+
   await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
     dateRange: { from: mergedDaily[0]?.date ?? '', to: mergedDaily[mergedDaily.length - 1]?.date ?? '' },
-    conversionType: deduped[0]?.conversionType ?? 'video_view',
+    conversionType: deduped[0]?.conversionType ?? 'link_click',
     contributorAccounts: deduped.map(s => ({ adAccountId: s.adAccountId, contributorUid: s.contributorUid, spend: s.summary?.spend ?? 0 })),
     summary: mergedSummary,
     daily: mergedDaily,
+    hourly: mergeHourlyArrays(deduped as { hourly?: HourRow[] }[]),
+    adPostIds: mergedPostIds,
     adCreatives: Array.from(creativesById.values()),
   })
 }
