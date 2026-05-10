@@ -48,6 +48,24 @@ export async function getAllManagedPages(userToken: string): Promise<PageToken[]
   }))
 }
 
+export async function getPageTokenById(longLivedUserToken: string, pageIdentifier: string): Promise<PageToken> {
+  const url = new URL(`${BASE}/${pageIdentifier}`)
+  url.searchParams.set('access_token', longLivedUserToken)
+  url.searchParams.set('fields', 'id,name,access_token,instagram_business_account')
+
+  const res = await fetch(url)
+  const data = await res.json()
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? 'get page token failed')
+  if (!data.access_token) throw new Error('Page access_token not returned. Check page admin role and permissions.')
+
+  return {
+    pageId: data.id,
+    pageName: data.name,
+    accessToken: data.access_token,
+    igUserId: data.instagram_business_account?.id ?? null,
+  }
+}
+
 export async function getPageToken(longLivedUserToken: string): Promise<PageToken> {
   const pageIdentifier = process.env.META_PAGE_IDENTIFIER
   if (!pageIdentifier) throw new Error('META_PAGE_IDENTIFIER not set in environment')

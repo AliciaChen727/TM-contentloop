@@ -67,6 +67,9 @@ export default function DashboardPage() {
   const [dateMode, setDateMode] = useState<'preset' | 'custom'>('preset')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [addingPage, setAddingPage] = useState(false)
+  const [addPageInput, setAddPageInput] = useState('')
+  const [addPageError, setAddPageError] = useState('')
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
@@ -206,6 +209,26 @@ export default function DashboardPage() {
     await fetchPosts(idToken, newPageId)
   }
 
+  async function handleAddPage() {
+    if (!addPageInput.trim()) return
+    setAddPageError('')
+    const u = auth.currentUser
+    if (!u) return
+    const idToken = await u.getIdToken()
+    const res = await fetch('/api/pages/add', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageIdentifier: addPageInput.trim() }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setAddPageError(data.error ?? '新增失敗'); return }
+    // Refresh pages list
+    const pagesRes = await fetch('/api/pages', { headers: { Authorization: `Bearer ${idToken}` } })
+    if (pagesRes.ok) { const d = await pagesRes.json(); setPages(d.pages ?? []) }
+    setAddingPage(false)
+    setAddPageInput('')
+  }
+
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
 
   if (loading) {
@@ -222,17 +245,36 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">ContentLoop</h1>
-            {pages.length > 1 ? (
-              <select
-                value={selectedPageId}
-                onChange={e => handlePageChange(e.target.value)}
-                className="mt-0.5 text-xs text-gray-400 border-0 bg-transparent cursor-pointer outline-none"
-              >
-                {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
-              </select>
-            ) : (
-              pageData && <p className="text-xs text-gray-400">{pageData.pageName}</p>
-            )}
+            <div className="flex items-center gap-2 mt-0.5">
+              {pages.length > 1 ? (
+                <select
+                  value={selectedPageId}
+                  onChange={e => handlePageChange(e.target.value)}
+                  className="text-xs text-gray-400 border-0 bg-transparent cursor-pointer outline-none"
+                >
+                  {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+                </select>
+              ) : (
+                pageData && <p className="text-xs text-gray-400">{pageData.pageName}</p>
+              )}
+              {addingPage ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    value={addPageInput}
+                    onChange={e => setAddPageInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddPage(); if (e.key === 'Escape') { setAddingPage(false); setAddPageError('') } }}
+                    placeholder="粉絲頁 ID 或 username"
+                    className="text-xs border border-gray-200 rounded px-2 py-0.5 outline-none w-40"
+                  />
+                  <button onClick={handleAddPage} className="text-xs text-blue-500 hover:text-blue-700">新增</button>
+                  <button onClick={() => { setAddingPage(false); setAddPageError('') }} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
+                  {addPageError && <span className="text-xs text-red-500">{addPageError}</span>}
+                </div>
+              ) : (
+                <button onClick={() => setAddingPage(true)} className="text-xs text-gray-300 hover:text-blue-500" title="新增粉絲頁">＋</button>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
