@@ -34,7 +34,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   const withInsights = await Promise.all(posts.map(async post => {
     try {
       const insUrl = new URL(`${BASE}/${post.id}/insights`)
-      insUrl.searchParams.set('metric', 'post_reactions_by_type_total,post_impressions_unique,post_activity_by_action_type')
+      insUrl.searchParams.set('metric', 'post_reactions_by_type_total,post_impressions_unique,post_activity_by_action_type,post_impressions_paid_unique,post_impressions_organic_unique')
       insUrl.searchParams.set('period', 'lifetime')
       insUrl.searchParams.set('access_token', accessToken)
       const insRes = await fetch(insUrl)
@@ -46,9 +46,9 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
       const reactionsByType = vals.post_reactions_by_type_total as Record<string, number> ?? {}
       const reactions = Object.values(reactionsByType).reduce((s, v) => s + v, 0)
       const activity = vals.post_activity_by_action_type as Record<string, number> ?? {}
-      return { ...post, insights: { reactions, reach: (vals.post_impressions_unique as number) ?? 0, comments: activity.comment ?? 0, shares: activity.share ?? 0 } }
+      return { ...post, insights: { reactions, reach: (vals.post_impressions_unique as number) ?? 0, comments: activity.comment ?? 0, shares: activity.share ?? 0, paidReach: (vals.post_impressions_paid_unique as number) ?? 0, organicReach: (vals.post_impressions_organic_unique as number) ?? 0 } }
     } catch {
-      return { ...post, insights: { reactions: 0, reach: 0, comments: 0, shares: 0 } }
+      return { ...post, insights: { reactions: 0, reach: 0, comments: 0, shares: 0, paidReach: 0, organicReach: 0 } }
     }
   }))
 

@@ -36,7 +36,7 @@ function mapFbPost(p: any, adPostIds: Set<string>): Post {
     date: p.createdTime?.slice(0, 10) ?? '',
     platform: 'FB',
     title: p.message || '（無文字內容）',
-    reach: null,
+    reach: p.insights?.reach ?? null,
     likes: p.insights?.reactions ?? 0,
     comments: p.insights?.comments ?? 0,
     saves: null,
@@ -44,7 +44,9 @@ function mapFbPost(p: any, adPostIds: Set<string>): Post {
     plays: null,
     type: 'post',
     url: p.permalink || '#',
-    hasAd: adPostIds.has(p.id),
+    hasAd: adPostIds.has(p.id) || (p.insights?.paidReach ?? 0) > 0,
+    paidReach: p.insights?.paidReach ?? 0,
+    organicReach: p.insights?.organicReach ?? 0,
   }
 }
 

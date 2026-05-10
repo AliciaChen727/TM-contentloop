@@ -12,6 +12,8 @@ export interface Post {
   type: 'post' | 'reels'
   url: string
   hasAd: boolean
+  paidReach?: number
+  organicReach?: number
   adRoas?: number
   adSpend?: number
   adCpa?: number
