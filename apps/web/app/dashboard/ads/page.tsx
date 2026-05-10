@@ -13,11 +13,11 @@ import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
-import type { NavId, Post, AdData } from '@/components/ads/types'
+import type { NavId, Post, AdData, DiagItem } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
-  { id: 'diagnosis', label: '診斷建議', icon: 'alert', badge: '2' },
+  { id: 'diagnosis', label: '診斷建議', icon: 'alert' },
   { id: 'creative', label: '素材庫', icon: 'creative' },
   { id: 'posts', label: '內容表現', icon: 'calendar' },
   { id: 'time', label: '最佳時段', icon: 'clock' },
@@ -116,6 +116,58 @@ function mapRawAdCreative(c: any, idx: number) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof mapRawAdCreative>[], budget: number): DiagItem[] {
+  const roasTarget = MOCK_DATA.overview.summary.roasTarget
+  const items: DiagItem[] = []
+
+  if ((s.frequency ?? 0) > 3.5) {
+    items.push({ id: 'd1', severity: 'critical', type: 'audience_fatigue', title: '受眾疲乏警告',
+      desc: `整體帳戶頻率已達 ${(s.frequency).toFixed(2)}，建議暫停或更換素材。`,
+      adset: '整體帳戶', metric: `Frequency ${(s.frequency).toFixed(2)}`, threshold: '> 3.5', action: '更換素材 / 擴大受眾' })
+  }
+
+  if ((s.roas ?? 0) < roasTarget && (s.spend ?? 0) > 0) {
+    items.push({ id: 'd2', severity: 'critical', type: 'low_roas', title: 'ROAS 低於門檻',
+      desc: `整體 ROAS 僅 ${(s.roas).toFixed(2)}x，低於目標 ${roasTarget}x，持續虧損。`,
+      adset: '整體帳戶', metric: `ROAS ${(s.roas).toFixed(2)}`, threshold: `< ${roasTarget}`, action: '調低預算 / 檢視受眾重疊' })
+  }
+
+  const budgetPct = budget > 0 ? (s.spend / budget) * 100 : 0
+  if (budgetPct > 80) {
+    items.push({ id: 'd3', severity: budgetPct > 95 ? 'critical' : 'warning', type: 'budget', title: '預算超支風險',
+      desc: `目前花費進度 ${budgetPct.toFixed(1)}%，需注意月底前燒速。`,
+      adset: '整體帳戶', metric: `已花 $${Math.round(s.spend).toLocaleString('zh-TW')}`,
+      threshold: `預算 $${Math.round(budget).toLocaleString('zh-TW')}`, action: budgetPct > 95 ? '立即暫停低效組合' : '維持現況，每日監控' })
+  }
+
+  const lowCtr = creatives.find(c => c.ctr > 0 && c.ctr < 1.5 && c.spend > 0)
+  if (lowCtr) {
+    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低素材',
+      desc: `素材「${lowCtr.name.slice(0, 25)}」CTR 僅 ${lowCtr.ctr.toFixed(2)}%，低於建議值 1.5%。`,
+      adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材' })
+  } else if ((s.ctr ?? 0) > 0 && (s.ctr) < 1.5) {
+    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低',
+      desc: `整體 CTR 僅 ${(s.ctr).toFixed(2)}%，低於建議值 1.5%。`,
+      adset: '整體帳戶', metric: `CTR ${(s.ctr).toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材' })
+  }
+
+  const top = [...creatives].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas)[0]
+  if (top && top.roas >= roasTarget) {
+    items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: '最佳表現素材',
+      desc: `素材「${top.name.slice(0, 25)}」ROAS 達 ${top.roas.toFixed(1)}x，建議增加預算。`,
+      adset: top.name.slice(0, 30), metric: `ROAS ${top.roas.toFixed(1)}`, threshold: `目標 ${roasTarget}`, action: `增加預算 20-30%` })
+  }
+
+  if (items.length === 0) {
+    items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '帳戶表現良好',
+      desc: `ROAS ${(s.roas ?? 0).toFixed(2)}x，高於目標 ${roasTarget}x，各項指標正常。`,
+      adset: '整體帳戶', metric: `ROAS ${(s.roas ?? 0).toFixed(2)}`, threshold: `目標 ${roasTarget}`, action: '持續監控，維持現況' })
+  }
+
+  return items
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildAdData(raw: any): AdData {
   const s = raw.summary ?? {}
   const from = raw.dateRange?.from ?? ''
@@ -124,9 +176,13 @@ function buildAdData(raw: any): AdData {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? raw.adCreatives.map((c: any, i: number) => mapRawAdCreative(c, i))
     : MOCK_DATA.creatives
+  const budget = MOCK_DATA.overview.summary.budget
+  const diagnosis = buildDiagnosis(s as Record<string, number>, creatives === MOCK_DATA.creatives ? [] : creatives, budget)
+
   return {
     ...MOCK_DATA,
     creatives,
+    diagnosis,
     overview: {
       ...MOCK_DATA.overview,
       dateRange: `${from} ~ ${to}`,
