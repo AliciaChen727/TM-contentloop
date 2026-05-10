@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const pageId = req.nextUrl.searchParams.get('pageId')
   const userRef = adminDb.collection('users').doc(uid)
 
-  let snap = pageId
+  const snap = pageId
     ? await userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
     : await userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
 
