@@ -16,7 +16,7 @@ function parseActions(actions: MetaAction[], type: string): number {
 async function syncFbForUser(uid: string, accessToken: string, pageId: string): Promise<{ synced: number; error?: string }> {
   const postsUrl = new URL(`${BASE}/${pageId}/posts`)
   postsUrl.searchParams.set('fields', 'id,message,story,created_time,permalink_url')
-  postsUrl.searchParams.set('limit', '200')
+  postsUrl.searchParams.set('limit', '100')
   postsUrl.searchParams.set('access_token', accessToken)
 
   const postsRes = await fetch(postsUrl)
