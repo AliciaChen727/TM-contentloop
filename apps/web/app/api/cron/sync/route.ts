@@ -423,7 +423,7 @@ export async function POST(req: NextRequest) {
     const ads = r.ads as { adAccountId?: string; error?: string }
     if (r.pageId && ads.adAccountId) pageIdsToMerge.add(r.pageId as string)
   }
-  await Promise.all([...pageIdsToMerge].map(pid => mergePageAdInsights(pid)))
+  await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
 
-  return NextResponse.json({ synced: results.length, results, mergedPages: [...pageIdsToMerge] })
+  return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge) })
 }
