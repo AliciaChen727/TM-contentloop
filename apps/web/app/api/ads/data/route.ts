@@ -14,7 +14,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const snap = await adminDb.collection('users').doc(uid).collection('adInsights').doc('latest').get()
+  const pageId = req.nextUrl.searchParams.get('pageId')
+  const userRef = adminDb.collection('users').doc(uid)
+
+  // Try new per-page path first, fallback to legacy path
+  let snap = pageId
+    ? await userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
+    : null
+  if (!snap?.exists) {
+    snap = await userRef.collection('adInsights').doc('latest').get()
+  }
   if (!snap.exists) return NextResponse.json({ data: null })
 
   const raw = snap.data()!

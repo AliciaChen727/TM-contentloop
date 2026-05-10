@@ -53,9 +53,10 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   }))
 
   const userRef = adminDb.collection('users').doc(uid)
+  const fbPostsCol = userRef.collection('pages').doc(pageId).collection('fbPosts')
   const batch = adminDb.batch()
   for (const post of withInsights) {
-    const postRef = userRef.collection('fbPosts').doc(post.id)
+    const postRef = fbPostsCol.doc(post.id)
     batch.set(postRef, {
       message: post.message ?? '',
       createdTime: Timestamp.fromDate(new Date(post.created_time)),
@@ -66,12 +67,12 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   }
   // Delete story-only / empty posts that were previously stored
   for (const id of storyOnlyIds) {
-    batch.delete(userRef.collection('fbPosts').doc(id))
+    batch.delete(fbPostsCol.doc(id))
   }
   await batch.commit()
 
   // Clean up orphaned docs with empty message (outside the 200-post API window)
-  const emptySnap = await userRef.collection('fbPosts').where('message', '==', '').limit(50).get()
+  const emptySnap = await fbPostsCol.where('message', '==', '').limit(50).get()
   if (emptySnap.size > 0) {
     const cleanBatch = adminDb.batch()
     emptySnap.docs.forEach(d => cleanBatch.delete(d.ref))
@@ -80,7 +81,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
 
   // Clean up FB story promotion text docs stored by old cron (message || story)
   const STORY_PREFIX = '這則貼文沒有文字' // 這則貼文沒有文字
-  const storySnap = await userRef.collection('fbPosts')
+  const storySnap = await fbPostsCol
     .where('message', '>=', STORY_PREFIX)
     .where('message', '<=', STORY_PREFIX + '')
     .limit(50).get()
@@ -95,7 +96,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
 
 // ── IG Posts Sync ─────────────────────────────────────────────────────────────
 
-async function syncIgForUser(uid: string, accessToken: string, igUserId: string): Promise<{ synced: number; error?: string }> {
+async function syncIgForUser(uid: string, accessToken: string, igUserId: string, pageId: string): Promise<{ synced: number; error?: string }> {
   const mediaUrl = new URL(`${BASE}/${igUserId}/media`)
   mediaUrl.searchParams.set('fields', 'id,timestamp,caption,media_type,media_product_type,permalink,like_count,comments_count')
   mediaUrl.searchParams.set('limit', '50')
@@ -137,10 +138,11 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
   }))
 
   const userRef = adminDb.collection('users').doc(uid)
+  const igPostsCol = userRef.collection('pages').doc(pageId).collection('igPosts')
   const batch = adminDb.batch()
   for (const post of withInsights) {
     const ins = post._ins
-    const postRef = userRef.collection('igPosts').doc(post.id)
+    const postRef = igPostsCol.doc(post.id)
     batch.set(postRef, {
       id: post.id,
       caption: post.caption ?? '',
@@ -164,7 +166,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string)
 
 // ── Ads Sync ──────────────────────────────────────────────────────────────────
 
-async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ adAccountId?: string; spend?: number; error?: string }> {
+async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string): Promise<{ adAccountId?: string; spend?: number; error?: string }> {
   const accountsUrl = new URL(`${BASE}/me/adaccounts`)
   accountsUrl.searchParams.set('fields', 'id,name')
   accountsUrl.searchParams.set('access_token', userAccessToken)
@@ -260,7 +262,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string): Promise<{ a
     : (adLevelData.data ?? [])
 
   const userRef = adminDb.collection('users').doc(uid)
-  await userRef.collection('adInsights').doc('latest').set({
+  await userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
     dateRange: { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' },
     adAccountId,
@@ -286,20 +288,25 @@ export async function POST(req: NextRequest) {
   const results: Record<string, unknown>[] = []
 
   for (const doc of tokenSnaps.docs) {
-    if (doc.id !== 'page') continue
+    // Skip user-level token and legacy 'page' doc (now handled by per-page docs)
+    if (doc.id === 'userToken') continue
     const uid = doc.ref.parent.parent?.id
     if (!uid) continue
     const tokenData = doc.data() as { userAccessToken?: string; accessToken?: string; igUserId?: string; pageId?: string }
 
+    // For new-style docs: doc.id is the pageId
+    // For legacy 'page' doc: use tokenData.pageId
+    const pageId = doc.id === 'page' ? (tokenData.pageId ?? '') : doc.id
+
     const [adsResult, igResult, fbResult] = await Promise.all([
-      tokenData.userAccessToken
-        ? syncAdsForUser(uid, tokenData.userAccessToken)
+      tokenData.userAccessToken && pageId
+        ? syncAdsForUser(uid, tokenData.userAccessToken, pageId)
         : Promise.resolve({ error: 'no userAccessToken' }),
-      tokenData.accessToken && tokenData.igUserId
-        ? syncIgForUser(uid, tokenData.accessToken, tokenData.igUserId)
+      tokenData.accessToken && tokenData.igUserId && pageId
+        ? syncIgForUser(uid, tokenData.accessToken, tokenData.igUserId, pageId)
         : Promise.resolve({ synced: 0, error: 'no accessToken or igUserId' }),
-      tokenData.accessToken && tokenData.pageId
-        ? syncFbForUser(uid, tokenData.accessToken, tokenData.pageId)
+      tokenData.accessToken && pageId
+        ? syncFbForUser(uid, tokenData.accessToken, pageId)
         : Promise.resolve({ synced: 0, error: 'no accessToken or pageId' }),
     ])
 

@@ -33,6 +33,21 @@ export async function exchangeForLongLived(shortLivedToken: string): Promise<str
   return data.access_token as string
 }
 
+export async function getAllManagedPages(userToken: string): Promise<PageToken[]> {
+  const url = new URL(`${BASE}/me/accounts`)
+  url.searchParams.set('fields', 'id,name,access_token,instagram_business_account')
+  url.searchParams.set('access_token', userToken)
+  const res = await fetch(url)
+  const data = await res.json()
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? '/me/accounts failed')
+  return (data.data ?? []).map((p: Record<string, unknown>) => ({
+    pageId: p.id as string,
+    pageName: p.name as string,
+    accessToken: p.access_token as string,
+    igUserId: (p.instagram_business_account as { id?: string } | undefined)?.id ?? null,
+  }))
+}
+
 export async function getPageToken(longLivedUserToken: string): Promise<PageToken> {
   const pageIdentifier = process.env.META_PAGE_IDENTIFIER
   if (!pageIdentifier) throw new Error('META_PAGE_IDENTIFIER not set in environment')

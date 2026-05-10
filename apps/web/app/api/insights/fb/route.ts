@@ -14,13 +14,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const snap = await adminDb
-    .collection('users')
-    .doc(uid)
-    .collection('fbPosts')
-    .orderBy('createdTime', 'desc')
-    .limit(200)
-    .get()
+  const pageId = req.nextUrl.searchParams.get('pageId')
+  const userRef = adminDb.collection('users').doc(uid)
+
+  // Try new per-page path first, fallback to legacy path
+  let snap = pageId
+    ? await userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
+    : null
+  if (!snap || snap.empty) {
+    snap = await userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
+  }
 
   const posts = snap.docs
     .map((doc) => ({

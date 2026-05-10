@@ -165,8 +165,12 @@ export default function AdsPage() {
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  async function fetchAdData(idToken: string): Promise<Set<string>> {
-    const res = await fetch('/api/ads/data', { headers: { Authorization: `Bearer ${idToken}` } })
+  const [selectedPageId, setSelectedPageId] = useState('')
+
+  async function fetchAdData(idToken: string, pageId?: string): Promise<Set<string>> {
+    const pid = pageId ?? selectedPageId
+    const qs = pid ? `?pageId=${pid}` : ''
+    const res = await fetch(`/api/ads/data${qs}`, { headers: { Authorization: `Bearer ${idToken}` } })
     if (!res.ok) return new Set()
     const json = await res.json()
     if (json.data) {
@@ -184,10 +188,13 @@ export default function AdsPage() {
 
       const idToken = await u.getIdToken()
       const headers = { Authorization: `Bearer ${idToken}` }
+      const pageId = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : '') ?? ''
+      setSelectedPageId(pageId)
+      const qs = pageId ? `?pageId=${pageId}` : ''
       const [fbRes, igRes, adRes] = await Promise.all([
-        fetch('/api/insights/fb', { headers }),
-        fetch('/api/insights/ig', { headers }),
-        fetch('/api/ads/data', { headers }),
+        fetch(`/api/insights/fb${qs}`, { headers }),
+        fetch(`/api/insights/ig${qs}`, { headers }),
+        fetch(`/api/ads/data${qs}`, { headers }),
       ])
 
       const adJson = adRes.ok ? await adRes.json() : null
@@ -216,11 +223,12 @@ export default function AdsPage() {
       const idToken = await u.getIdToken()
       const res = await fetch('/api/ads/sync', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: selectedPageId }),
       })
       const json = await res.json()
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
-      const newIds = await fetchAdData(idToken)
+      const newIds = await fetchAdData(idToken, selectedPageId)
       setRealPosts(prev => prev ? prev.map(p => p.platform === 'FB' ? { ...p, hasAd: newIds.has(p.id) } : p) : prev)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步失敗')

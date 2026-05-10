@@ -23,8 +23,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
+  const body = await req.json().catch(() => ({}))
+  const pageId: string | undefined = body.pageId
+
   const userRef = adminDb.collection('users').doc(uid)
-  const tokenDoc = await userRef.collection('metaTokens').doc('page').get()
+  // Try new per-page token doc, fallback to legacy 'page' doc
+  const tokenDocRef = pageId
+    ? userRef.collection('metaTokens').doc(pageId)
+    : userRef.collection('metaTokens').doc('page')
+  const tokenDoc = await tokenDocRef.get()
   if (!tokenDoc.exists) {
     return NextResponse.json({ error: 'No Meta token. Please reconnect.' }, { status: 400 })
   }
@@ -141,7 +148,11 @@ export async function POST(req: NextRequest) {
     ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
     : (adLevelData.data ?? [])
 
-  await userRef.collection('adInsights').doc('latest').set({
+  const insightsRef = pageId
+    ? userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest')
+    : userRef.collection('adInsights').doc('latest')
+
+  await insightsRef.set({
     syncedAt: Timestamp.now(),
     dateRange: { from: dateFrom, to: dateTo },
     adAccountId,

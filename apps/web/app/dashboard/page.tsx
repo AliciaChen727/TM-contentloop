@@ -15,6 +15,7 @@ import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
 
+interface PageInfo { pageId: string; pageName: string; igUserId: string | null }
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
 
 interface FbPost {
@@ -53,6 +54,8 @@ const dateInputStyle: React.CSSProperties = {
 export default function DashboardPage() {
   const router = useRouter()
   const [pageData, setPageData] = useState<PageTokenData | null>(null)
+  const [pages, setPages] = useState<PageInfo[]>([])
+  const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [fbPosts, setFbPosts] = useState<FbPost[]>([])
   const [igPosts, setIgPosts] = useState<IgPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,23 +68,49 @@ export default function DashboardPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
+  const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
+    const headers = { Authorization: `Bearer ${idToken}` }
+    const qs = pageId ? `?pageId=${pageId}` : ''
+    const [fbRes, igRes] = await Promise.all([
+      fetch(`/api/insights/fb${qs}`, { headers }),
+      fetch(`/api/insights/ig${qs}`, { headers }),
+    ])
+    if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())) }
+    if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
+  }, [])
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.replace('/auth/login'); return }
-      const tokenSnap = await getDoc(doc(db, 'users', u.uid, 'metaTokens', 'page'))
-      if (tokenSnap.exists()) setPageData(tokenSnap.data() as PageTokenData)
       const idToken = await u.getIdToken()
       const headers = { Authorization: `Bearer ${idToken}` }
-      const [fbRes, igRes] = await Promise.all([
-        fetch('/api/insights/fb', { headers }),
-        fetch('/api/insights/ig', { headers }),
-      ])
-      if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())) }
-      if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
+
+      // Fetch pages list from API
+      const pagesRes = await fetch('/api/pages', { headers })
+      let pageList: PageInfo[] = []
+      if (pagesRes.ok) {
+        const d = await pagesRes.json()
+        pageList = d.pages ?? []
+        setPages(pageList)
+      }
+
+      // Fallback: try legacy metaTokens/page doc for display name
+      if (pageList.length === 0) {
+        const tokenSnap = await getDoc(doc(db, 'users', u.uid, 'metaTokens', 'page'))
+        if (tokenSnap.exists()) setPageData(tokenSnap.data() as PageTokenData)
+      } else {
+        const first = pageList[0]
+        setPageData({ pageId: first.pageId, pageName: first.pageName, igUserId: first.igUserId })
+      }
+
+      const firstPageId = pageList[0]?.pageId ?? ''
+      setSelectedPageId(firstPageId)
+      if (firstPageId) localStorage.setItem('selectedPageId', firstPageId)
+      await fetchPosts(idToken, firstPageId)
       setLoading(false)
     })
     return unsub
-  }, [router])
+  }, [router, fetchPosts])
 
   // Resolved date bounds
   const dateBounds = useMemo(() => {
@@ -164,6 +193,19 @@ export default function DashboardPage() {
     setSkOpen(true)
   }, [])
 
+  async function handlePageChange(newPageId: string) {
+    setSelectedPageId(newPageId)
+    localStorage.setItem('selectedPageId', newPageId)
+    const found = pages.find(p => p.pageId === newPageId)
+    if (found) setPageData({ pageId: found.pageId, pageName: found.pageName, igUserId: found.igUserId })
+    setFbPosts([])
+    setIgPosts([])
+    const u = auth.currentUser
+    if (!u) return
+    const idToken = await u.getIdToken()
+    await fetchPosts(idToken, newPageId)
+  }
+
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
 
   if (loading) {
@@ -180,7 +222,17 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">ContentLoop</h1>
-            {pageData && <p className="text-xs text-gray-400">{pageData.pageName}</p>}
+            {pages.length > 1 ? (
+              <select
+                value={selectedPageId}
+                onChange={e => handlePageChange(e.target.value)}
+                className="mt-0.5 text-xs text-gray-400 border-0 bg-transparent cursor-pointer outline-none"
+              >
+                {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+              </select>
+            ) : (
+              pageData && <p className="text-xs text-gray-400">{pageData.pageName}</p>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">

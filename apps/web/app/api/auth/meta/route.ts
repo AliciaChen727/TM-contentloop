@@ -4,7 +4,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import {
   exchangeCodeForShortLived,
   exchangeForLongLived,
-  getPageToken,
+  getAllManagedPages,
 } from '@/lib/meta/tokenExchange'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -27,30 +27,36 @@ export async function POST(req: NextRequest) {
   if (!code) return NextResponse.json({ error: 'Missing code' }, { status: 400 })
 
   try {
-    // 3. code → short-lived → long-lived → page token
+    // 3. code → short-lived → long-lived → all managed pages
     const shortLived = await exchangeCodeForShortLived(code)
     const longLived = await exchangeForLongLived(shortLived)
-    const pageToken = await getPageToken(longLived)
+    const pages = await getAllManagedPages(longLived)
+    if (!pages.length) throw new Error('No managed pages found. Make sure you are a page admin.')
 
-    // 4. 存入 Firestore
-    const tokenRef = adminDb
-      .collection('users')
-      .doc(uid)
-      .collection('metaTokens')
-      .doc('page')
+    const userRef = adminDb.collection('users').doc(uid)
 
-    await tokenRef.set({
-      pageId: pageToken.pageId,
-      pageName: pageToken.pageName,
-      accessToken: pageToken.accessToken,
-      igUserId: pageToken.igUserId,
+    // 4. 存 user-level token
+    await userRef.collection('metaTokens').doc('userToken').set({
       userAccessToken: longLived,
-      // Long-lived token 有效期約 60 天
-      tokenExpiry: FieldValue.serverTimestamp(),
       connectedAt: FieldValue.serverTimestamp(),
     })
 
-    return NextResponse.json({ success: true, pageName: pageToken.pageName })
+    // 5. 存每個 page token
+    const batch = adminDb.batch()
+    for (const page of pages) {
+      const pageRef = userRef.collection('metaTokens').doc(page.pageId)
+      batch.set(pageRef, {
+        pageId: page.pageId,
+        pageName: page.pageName,
+        accessToken: page.accessToken,
+        igUserId: page.igUserId,
+        userAccessToken: longLived,
+        connectedAt: FieldValue.serverTimestamp(),
+      })
+    }
+    await batch.commit()
+
+    return NextResponse.json({ success: true, pages: pages.map(p => ({ pageId: p.pageId, pageName: p.pageName })) })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('[meta/route] token exchange error:', message)
