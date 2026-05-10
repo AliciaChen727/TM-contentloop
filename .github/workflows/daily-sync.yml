@@ -10,15 +10,18 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Sync ad insights
+      - name: Sync all pages (FB posts, IG posts, Ads)
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" \
+          body=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
             -X POST https://tm-contentloop.vercel.app/api/cron/sync \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json")
-          echo "Response status: $response"
-          if [ "$response" != "200" ]; then
-            echo "Sync failed with status $response"
+          status=$(echo "$body" | grep "HTTP_STATUS:" | cut -d: -f2)
+          response=$(echo "$body" | grep -v "HTTP_STATUS:")
+          echo "Response status: $status"
+          echo "Response body: $response"
+          if [ "$status" != "200" ]; then
+            echo "Sync failed with status $status"
             exit 1
           fi
           echo "Sync completed successfully"
