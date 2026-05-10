@@ -19,10 +19,14 @@ interface MetricsContext {
   topPosts?: { title: string; reach: number; likes: number; engRate: number; platform: string }[]
 }
 
-function buildSystemPrompt(contextPage: string, metrics?: MetricsContext): string {
+function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string): string {
   const role = contextPage === 'posts' || contextPage === 'combined'
     ? '你是一位專業的社群媒體內容顧問，專長是 Facebook 和 Instagram 貼文的成效分析與優化建議。'
     : '你是一位專業的 Meta 廣告投手助手，專長是廣告帳戶分析與優化建議。'
+
+  const memoryBlock = memory
+    ? `\n## 過去分析記憶（請優先建立在這些結論上）\n${memory}\n`
+    : ''
 
   let metricsBlock = ''
   if (metrics && Object.keys(metrics).length > 0) {
@@ -40,7 +44,7 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
   }
 
   return `${role}
-
+${memoryBlock}
 你的回應格式必須是繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止輸出任何說明文字，只輸出 JSON 本身：
 {
   "type": "analysis" | "recommendation" | "warning" | "actions" | "general",
@@ -80,7 +84,24 @@ export async function POST(req: NextRequest) {
 
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
 
-  const systemPrompt = buildSystemPrompt(contextPage, metricsContext)
+  const pastSnap = await adminDb
+    .collection('users').doc(uid)
+    .collection('aiInsights')
+    .where('contextPage', '==', contextPage)
+    .orderBy('createdAt', 'desc')
+    .limit(5)
+    .get()
+
+  const memory = pastSnap.docs
+    .map(d => {
+      const r = (d.data().response ?? {}) as { summary?: string; actions?: string[] }
+      const actions = (r.actions ?? []).slice(0, 2).join('、')
+      return `• ${r.summary ?? ''}${actions ? `（建議：${actions}）` : ''}`
+    })
+    .filter(Boolean)
+    .join('\n')
+
+  const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined)
 
   const claudeRes = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
