@@ -158,14 +158,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                         </span>
                       </td>
                       <td className="ads-posts-num" style={{ textAlign: 'right' }}>
-                        {p.reach != null ? (
-                          <div>
-                            <span style={{ color: p.reach > 200 ? 'var(--ad-green)' : undefined, fontWeight: p.reach > 200 ? 600 : undefined }}>{fmt(p.reach)}</span>
-                            {(p.paidReach ?? 0) > 0 && (
-                              <div style={{ fontSize: 10, color: 'var(--ad-blue)', marginTop: 1 }}>付費 {fmt(p.paidReach ?? 0)}</div>
-                            )}
-                          </div>
-                        ) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+                        {p.reach != null ? <span style={{ color: p.reach > 200 ? 'var(--ad-green)' : undefined, fontWeight: p.reach > 200 ? 600 : undefined }}>{fmt(p.reach)}</span> : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
                       </td>
                       <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(p.likes)}</td>
                       <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(p.comments)}</td>

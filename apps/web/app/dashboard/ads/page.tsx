@@ -36,7 +36,7 @@ function mapFbPost(p: any, adPostIds: Set<string>): Post {
     date: p.createdTime?.slice(0, 10) ?? '',
     platform: 'FB',
     title: p.message || '（無文字內容）',
-    reach: p.insights?.reach ?? null,
+    reach: null,
     likes: p.insights?.reactions ?? 0,
     comments: p.insights?.comments ?? 0,
     saves: null,
