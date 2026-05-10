@@ -22,6 +22,15 @@ export function SvgChart({ data, lines, height = 160, roasTarget, yFmt }: {
   const W = 460, H = height
   const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b
   const n = data.length
+
+  if (n === 0) {
+    return (
+      <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9A9490', fontSize: 12 }}>
+        暫無資料
+      </div>
+    )
+  }
+
   const allVals = lines.flatMap(l => data.map(d => d[l.key] as number))
   const minV = Math.min(...allVals) * 0.9, maxV = Math.max(...allVals) * 1.08
   const x = (i: number) => (i / (n - 1)) * cW

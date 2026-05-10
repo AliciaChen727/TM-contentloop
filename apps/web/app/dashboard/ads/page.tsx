@@ -117,7 +117,7 @@ function mapRawAdCreative(c: any, idx: number) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildAdData(raw: any): AdData {
-  const s = raw.summary
+  const s = raw.summary ?? {}
   const from = raw.dateRange?.from ?? ''
   const to = raw.dateRange?.to ?? ''
   const creatives = Array.isArray(raw.adCreatives) && raw.adCreatives.length > 0
@@ -146,7 +146,7 @@ function buildAdData(raw: any): AdData {
         revenue: s.revenue,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      dailySpend: raw.daily.map((d: any) => ({
+      dailySpend: (raw.daily ?? []).map((d: any) => ({
         date: d.date,
         spend: d.spend,
         revenue: d.revenue,
@@ -189,32 +189,41 @@ export default function AdsPage() {
       if (!u) { router.replace('/auth/login'); return }
       setAuthed(true)
 
-      const idToken = await u.getIdToken()
-      const headers = { Authorization: `Bearer ${idToken}` }
-      const pageId = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : '') ?? ''
-      const pageName = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageName') : '') ?? ''
-      setSelectedPageId(pageId)
-      setSelectedPageName(pageName)
-      const qs = pageId ? `?pageId=${pageId}` : ''
-      const [fbRes, igRes, adRes] = await Promise.all([
-        fetch(`/api/insights/fb${qs}`, { headers }),
-        fetch(`/api/insights/ig${qs}`, { headers }),
-        fetch(`/api/ads/data${qs}`, { headers }),
-      ])
+      try {
+        const idToken = await u.getIdToken()
+        const headers = { Authorization: `Bearer ${idToken}` }
+        const pageId = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : '') ?? ''
+        const pageName = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageName') : '') ?? ''
+        setSelectedPageId(pageId)
+        setSelectedPageName(pageName)
+        const qs = pageId ? `?pageId=${pageId}` : ''
+        const [fbRes, igRes, adRes] = await Promise.all([
+          fetch(`/api/insights/fb${qs}`, { headers }),
+          fetch(`/api/insights/ig${qs}`, { headers }),
+          fetch(`/api/ads/data${qs}`, { headers }),
+        ])
 
-      const adJson = adRes.ok ? await adRes.json() : null
-      const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
-      if (adJson?.data) {
-        setAdData(buildAdData(adJson.data))
-        setLastSync(adJson.data.syncedAt ?? null)
+        const adJson = adRes.ok ? await adRes.json() : null
+        const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
+        if (adJson?.data) {
+          setAdData(buildAdData(adJson.data))
+          setLastSync(adJson.data.syncedAt ?? null)
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fbJson = fbRes.ok ? await fbRes.json() : null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fbPosts: Post[] = (fbJson?.posts ?? []).filter((p: any) => p.message).map((p: any) => mapFbPost(p, initialAdPostIds))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const igJson = igRes.ok ? await igRes.json() : null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map(mapIgPost)
+        const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
+        setRealPosts(merged)
+      } catch (err) {
+        console.error('ads page load error', err)
+        setRealPosts([])
       }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fbPosts: Post[] = fbRes.ok ? (await fbRes.json()).posts.filter((p: any) => p.message).map((p: any) => mapFbPost(p, initialAdPostIds)) : []
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const igPosts: Post[] = igRes.ok ? (await igRes.json()).posts.filter((p: any) => p.caption).map(mapIgPost) : []
-      const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
-      setRealPosts(merged)
     })
     return unsub
   }, [router])
