@@ -18,7 +18,19 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI: (q:
   const criticalCount = data.diagnosis.filter(d => d.severity === 'critical').length
   const warningCount = data.diagnosis.filter(d => d.severity === 'warning').length
 
-  const aiSummary = '根據目前帳戶狀況：建議立即將「再行銷-瀏覽未購買」組合預算降低 50%，把節省的 $21,300 重分配至「類似受眾-購買名單 2%」（ROAS 5.2）。同時，「女性25-34 興趣電商」頻率已破 4.8，應優先更換素材或擴大受眾，預計可降低 CPM 15–20%。最佳投放時段 19:00–21:00，可啟動分時加價策略。'
+  const aiSummary = (() => {
+    const criticals = data.diagnosis.filter(d => d.severity === 'critical')
+    const warnings = data.diagnosis.filter(d => d.severity === 'warning')
+    const goods = data.diagnosis.filter(d => d.severity === 'good')
+    const parts: string[] = [
+      ...criticals.map(d => `${d.desc}建議：${d.action}。`),
+      ...warnings.map(d => `${d.desc}建議：${d.action}。`),
+      ...goods.map(d => d.desc),
+    ]
+    return parts.length > 0
+      ? `根據目前帳戶狀況：${parts.join('同時，')}`
+      : '帳戶整體運作正常，暫無需緊急處理的問題，請持續監控每日成效。'
+  })()
 
   return (
     <div>
