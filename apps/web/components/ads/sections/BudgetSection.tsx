@@ -12,6 +12,8 @@ type AdsetRow = Adset & { newBudget: number }
 
 export function BudgetSection({ data }: { data: AdData }) {
   const [adsets, setAdsets] = useState<AdsetRow[]>(data.budget.adsets.map(a => ({ ...a, newBudget: a.budget })))
+  const sliderMax = Math.max(...data.budget.adsets.map(a => a.budget)) * 3 || 200000
+  const sliderStep = sliderMax > 50000 ? 5000 : 100
 
   const totalNew = adsets.reduce((s, a) => s + a.newBudget, 0)
   const totalOrig = adsets.reduce((s, a) => s + a.budget, 0)
@@ -21,10 +23,9 @@ export function BudgetSection({ data }: { data: AdData }) {
 
   const applyAI = () => setAdsets(p => p.map(a => ({
     ...a,
-    newBudget: a.name.includes('類似受眾') ? Math.round(a.budget * 1.3)
-      : a.name.includes('再行銷') ? Math.round(a.budget * 0.5)
-        : a.name.includes('35+') ? Math.round(a.budget * 0.8)
-          : a.budget,
+    newBudget: a.roas >= 4 ? Math.round(a.budget * 1.3)
+      : a.roas < 2 ? Math.round(a.budget * 0.5)
+        : a.budget,
   })))
 
   const reset = () => setAdsets(data.budget.adsets.map(a => ({ ...a, newBudget: a.budget })))
@@ -74,7 +75,7 @@ export function BudgetSection({ data }: { data: AdData }) {
                   <td><span style={{ fontFamily: 'var(--font-dm-mono)' }}>${a.cpa}</span></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input type="range" min={0} max={200000} step={5000} value={a.newBudget}
+                      <input type="range" min={0} max={sliderMax} step={sliderStep} value={a.newBudget}
                         onChange={e => update(i, Number(e.target.value))}
                         style={{ width: 88, accentColor: 'var(--ad-blue)' }} />
                       <span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, fontWeight: 600, minWidth: 50, color: a.newBudget > a.budget ? 'var(--ad-green)' : a.newBudget < a.budget ? 'var(--ad-red)' : 'var(--ad-text)' }}>

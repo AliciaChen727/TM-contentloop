@@ -177,12 +177,44 @@ function buildAdData(raw: any): AdData {
     ? raw.adCreatives.map((c: any, i: number) => mapRawAdCreative(c, i))
     : MOCK_DATA.creatives
   const budget = MOCK_DATA.overview.summary.budget
-  const diagnosis = buildDiagnosis(s as Record<string, number>, creatives === MOCK_DATA.creatives ? [] : creatives, budget)
+  const realCreatives = creatives !== MOCK_DATA.creatives && creatives.length > 0
+  const diagnosis = buildDiagnosis(s as Record<string, number>, realCreatives ? creatives : [], budget)
+
+  // Real adsets from per-creative data
+  const realAdsets = realCreatives
+    ? creatives.map((c: ReturnType<typeof mapRawAdCreative>) => ({
+        name: c.name,
+        budget: c.spend > 0 ? Math.round(c.spend / 0.8) : 1000,
+        spent: Math.round(c.spend),
+        roas: c.roas,
+        cpa: Math.round(c.cpa),
+      }))
+    : MOCK_DATA.budget.adsets
+
+  // Real weekly ROAS from daily data
+  const DAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dayMap: Record<number, { sum: number; count: number }> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (raw.daily ?? []).forEach((d: any) => {
+    const dow = new Date(d.date).getDay()
+    if (!dayMap[dow]) dayMap[dow] = { sum: 0, count: 0 }
+    dayMap[dow].sum += d.roas ?? 0
+    dayMap[dow].count++
+  })
+  const weeklyRoas = [1, 2, 3, 4, 5, 6, 0].map(dow => ({
+    day: DAY_NAMES[dow],
+    roas: dayMap[dow] ? parseFloat((dayMap[dow].sum / dayMap[dow].count).toFixed(2)) : 0,
+    spend: 0,
+  }))
+  const realWeekly = weeklyRoas.some(w => w.roas > 0) ? weeklyRoas : MOCK_DATA.bestTime.weekly
 
   return {
     ...MOCK_DATA,
     creatives,
     diagnosis,
+    budget: { ...MOCK_DATA.budget, adsets: realAdsets },
+    bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly },
     overview: {
       ...MOCK_DATA.overview,
       dateRange: `${from} ~ ${to}`,

@@ -11,6 +11,13 @@ export function BestTimeSection({ data }: { data: AdData }) {
     return t > 0.8 ? '#3B6FD4' : t > 0.6 ? '#6B9AE8' : t > 0.4 ? '#A3BEF0' : t > 0.2 ? '#C2D4F5' : '#E8EFF9'
   }
 
+  const sorted = [...data.bestTime.weekly].sort((a, b) => b.roas - a.roas)
+  const bestDay = sorted[0]
+  const worstDay = sorted[sorted.length - 1]
+  const weeklyHint = bestDay && bestDay.roas > 0
+    ? `💡 ${bestDay.day} ROAS ${bestDay.roas.toFixed(2)}x 最佳${worstDay && worstDay.roas < bestDay.roas ? `，${worstDay.day} 表現偏低，建議調降預算` : ''}`
+    : '💡 持續監控每日成效以找出最佳投放日'
+
   return (
     <div>
       <div className="ads-section-header">
@@ -57,7 +64,7 @@ export function BestTimeSection({ data }: { data: AdData }) {
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>週間 ROAS 表現</div>
           <SvgBarChart data={data.bestTime.weekly} dataKey="roas" labelKey="day" height={150} refLine={3.5} />
           <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--ad-green-light)', borderRadius: 7, fontSize: 12, color: 'var(--ad-green)' }}>
-            💡 <strong>週四–週五</strong> ROAS 4.2–4.5 最佳，週日建議降預算 15%
+            {weeklyHint}
           </div>
         </div>
       </div>
