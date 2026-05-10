@@ -262,18 +262,121 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     : (adLevelData.data ?? [])
 
   const userRef = adminDb.collection('users').doc(uid)
+  const dateRange = { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' }
+  const summaryDoc = { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa }
+
+  // Existing UID-scoped write (backward compat + fallback)
   await userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
-    dateRange: { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' },
+    dateRange,
     adAccountId,
     conversionType,
-    summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
+    summary: summaryDoc,
     daily,
     adPostIds,
     adCreatives,
   })
 
+  // NEW: shared page-level snapshot (enables cross-admin merged view)
+  await adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').doc(adAccountId).set({
+    adAccountId,
+    contributorUid: uid,
+    syncedAt: Timestamp.now(),
+    dateRange,
+    conversionType,
+    summary: summaryDoc,
+    daily,
+    adCreatives,
+  })
+
   return { adAccountId, spend }
+}
+
+// ── Cross-admin Merge ─────────────────────────────────────────────────────────
+
+type SummaryFields = { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }
+type DayRow = { date: string; spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }
+
+function mergeSummaries(snapshots: { summary?: Record<string, number> }[]): Record<string, number> {
+  let spend = 0, reach = 0, impressions = 0, clicks = 0, conversions = 0, revenue = 0
+  for (const s of snapshots) {
+    const m = s.summary ?? {}
+    spend       += m.spend       ?? 0
+    reach       += m.reach       ?? 0
+    impressions += m.impressions ?? 0
+    clicks      += m.clicks      ?? 0
+    conversions += m.conversions ?? 0
+    revenue     += m.revenue     ?? 0
+  }
+  return {
+    spend, reach, impressions, clicks, conversions, revenue,
+    ctr:       impressions > 0 ? clicks / impressions : 0,
+    cpm:       impressions > 0 ? (spend / impressions) * 1000 : 0,
+    cpa:       conversions > 0 ? spend / conversions : 0,
+    roas:      spend > 0 && revenue > 0 ? revenue / spend : 0,
+    frequency: reach > 0 ? impressions / reach : 0,
+  }
+}
+
+function mergeDailyArrays(snapshots: { daily?: DayRow[] }[]): DayRow[] {
+  const byDate = new Map<string, SummaryFields>()
+  for (const s of snapshots) {
+    for (const d of s.daily ?? []) {
+      const e = byDate.get(d.date) ?? { spend: 0, reach: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 }
+      e.spend       += d.spend       ?? 0
+      e.reach       += d.reach       ?? 0
+      e.impressions += d.impressions ?? 0
+      e.clicks      += d.clicks      ?? 0
+      e.conversions += d.conversions ?? 0
+      e.revenue     += d.revenue     ?? 0
+      byDate.set(d.date, e)
+    }
+  }
+  return Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, e]) => ({
+      date,
+      spend: e.spend, reach: e.reach, impressions: e.impressions, clicks: e.clicks,
+      conversions: e.conversions, revenue: e.revenue,
+      ctr:  e.impressions > 0 ? e.clicks / e.impressions : 0,
+      roas: e.spend > 0 && e.revenue > 0 ? e.revenue / e.spend : 0,
+    }))
+}
+
+async function mergePageAdInsights(pageId: string): Promise<void> {
+  const snapsSnap = await adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').get()
+  if (snapsSnap.empty) return
+
+  // Dedup by adAccountId: latest syncedAt wins
+  const byAccount = new Map<string, FirebaseFirestore.DocumentData>()
+  for (const doc of snapsSnap.docs) {
+    const data = doc.data()
+    const existing = byAccount.get(data.adAccountId)
+    if (!existing || data.syncedAt > existing.syncedAt) byAccount.set(data.adAccountId, data)
+  }
+  const deduped = Array.from(byAccount.values())
+
+  const mergedSummary = mergeSummaries(deduped)
+  const mergedDaily = mergeDailyArrays(deduped as { daily?: DayRow[] }[])
+
+  // Merge creatives, dedup by ad_id
+  const creativesById = new Map<string, unknown>()
+  for (const s of deduped) {
+    for (const c of (s.adCreatives ?? []) as Record<string, unknown>[]) {
+      const id = c.ad_id as string
+      if (id) creativesById.set(id, c)
+    }
+  }
+
+  await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
+    syncedAt: Timestamp.now(),
+    dateRange: { from: mergedDaily[0]?.date ?? '', to: mergedDaily[mergedDaily.length - 1]?.date ?? '' },
+    conversionType: deduped[0]?.conversionType ?? 'video_view',
+    contributorAccounts: deduped.map(s => ({ adAccountId: s.adAccountId, contributorUid: s.contributorUid, spend: s.summary?.spend ?? 0 })),
+    summary: mergedSummary,
+    daily: mergedDaily,
+    adCreatives: Array.from(creativesById.values()),
+  })
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -310,9 +413,17 @@ export async function POST(req: NextRequest) {
         : Promise.resolve({ synced: 0, error: 'no accessToken or pageId' }),
     ])
 
-    results.push({ uid, ads: adsResult, ig: igResult, fb: fbResult })
-    console.log(`[cron/sync] uid=${uid} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult)
+    results.push({ uid, pageId, ads: adsResult, ig: igResult, fb: fbResult })
+    console.log(`[cron/sync] uid=${uid} pageId=${pageId} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult)
   }
 
-  return NextResponse.json({ synced: results.length, results })
+  // After all per-user syncs, merge ad insights for each page that had a successful ad sync
+  const pageIdsToMerge = new Set<string>()
+  for (const r of results) {
+    const ads = r.ads as { adAccountId?: string; error?: string }
+    if (r.pageId && ads.adAccountId) pageIdsToMerge.add(r.pageId as string)
+  }
+  await Promise.all([...pageIdsToMerge].map(pid => mergePageAdInsights(pid)))
+
+  return NextResponse.json({ synced: results.length, results, mergedPages: [...pageIdsToMerge] })
 }

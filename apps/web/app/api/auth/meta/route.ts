@@ -74,6 +74,14 @@ export async function POST(req: NextRequest) {
     })
     await batch.commit()
 
+    // Register this uid as a verified admin for each page (enables cross-admin data sharing)
+    const memberBatch = adminDb.batch()
+    for (const page of pages) {
+      const adminRef = adminDb.collection('pages').doc(page.pageId).collection('admins').doc(uid)
+      memberBatch.set(adminRef, { uid, addedAt: FieldValue.serverTimestamp(), verifiedViaOAuth: true }, { merge: true })
+    }
+    await memberBatch.commit()
+
     return NextResponse.json({ success: true, pages: pages.map(p => ({ pageId: p.pageId, pageName: p.pageName })) })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
