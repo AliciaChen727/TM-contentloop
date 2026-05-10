@@ -5,6 +5,7 @@ import {
   exchangeCodeForShortLived,
   exchangeForLongLived,
   getAllManagedPages,
+  getPageToken,
 } from '@/lib/meta/tokenExchange'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -30,8 +31,15 @@ export async function POST(req: NextRequest) {
     // 3. code → short-lived → long-lived → all managed pages
     const shortLived = await exchangeCodeForShortLived(code)
     const longLived = await exchangeForLongLived(shortLived)
-    const pages = await getAllManagedPages(longLived)
-    if (!pages.length) throw new Error('No managed pages found. Make sure you are a page admin.')
+
+    // Try /me/accounts first; fallback to env-var single-page approach
+    let pages = await getAllManagedPages(longLived).catch(() => [])
+    if (pages.length === 0 && process.env.META_PAGE_IDENTIFIER) {
+      console.log('[meta/route] /me/accounts returned no pages, falling back to META_PAGE_IDENTIFIER')
+      const single = await getPageToken(longLived)
+      pages = [single]
+    }
+    if (pages.length === 0) throw new Error('No managed pages found. Check /me/accounts permission or META_PAGE_IDENTIFIER env var.')
 
     const userRef = adminDb.collection('users').doc(uid)
 
@@ -41,7 +49,7 @@ export async function POST(req: NextRequest) {
       connectedAt: FieldValue.serverTimestamp(),
     })
 
-    // 5. 存每個 page token
+    // 5. 存每個 page token（同時保留舊版 'page' doc 供 cron 兼容）
     const batch = adminDb.batch()
     for (const page of pages) {
       const pageRef = userRef.collection('metaTokens').doc(page.pageId)
@@ -54,6 +62,16 @@ export async function POST(req: NextRequest) {
         connectedAt: FieldValue.serverTimestamp(),
       })
     }
+    // Keep legacy 'page' doc so existing cron still works before next cron run
+    const first = pages[0]
+    batch.set(userRef.collection('metaTokens').doc('page'), {
+      pageId: first.pageId,
+      pageName: first.pageName,
+      accessToken: first.accessToken,
+      igUserId: first.igUserId,
+      userAccessToken: longLived,
+      connectedAt: FieldValue.serverTimestamp(),
+    })
     await batch.commit()
 
     return NextResponse.json({ success: true, pages: pages.map(p => ({ pageId: p.pageId, pageName: p.pageName })) })
