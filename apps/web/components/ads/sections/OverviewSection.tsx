@@ -3,12 +3,12 @@
 import { SvgChart } from '../SvgCharts'
 import { Icon } from '../Icon'
 import { POSTS_DATA } from '../mockData'
-import type { AdData } from '../types'
+import type { AdData, Post } from '../types'
 
 const fmt = (n: number, d = 0) => n == null ? '–' : Number(n).toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtK = (n: number) => n >= 10000 ? `$${fmt(Math.round(n / 1000))}K` : `$${fmt(n)}`
 
-export function OverviewSection({ data, onAskAI }: { data: AdData; onAskAI: (q: string) => void }) {
+export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskAI: (q: string) => void; posts?: Post[] | null }) {
   const s = data.overview.summary
   const budgetPct = (s.spend / data.budget.total) * 100
   const kpis = [
@@ -22,9 +22,12 @@ export function OverviewSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
     { label: '頻率', value: s.frequency.toFixed(2), meta: '建議 < 3.5', color: s.frequency > 3.5 ? 'red' : 'green', delta: s.frequency > 3.5 ? '⚠ 偏高' : '正常', dir: s.frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
   ]
 
-  const adPosts = POSTS_DATA.filter(p => p.hasAd)
-  const reachPosts = POSTS_DATA.filter(p => (p.reach ?? 0) > 0)
-  const avgReach = Math.round(reachPosts.reduce((s, p) => s + (p.reach ?? 0), 0) / reachPosts.length)
+  const postsSource = posts ?? POSTS_DATA
+  const adPosts = postsSource.filter(p => p.hasAd)
+  const reachPosts = postsSource.filter(p => (p.reach ?? 0) > 0)
+  const avgReach = reachPosts.length > 0 ? Math.round(reachPosts.reduce((s, p) => s + (p.reach ?? 0), 0) / reachPosts.length) : 0
+  const topReach = reachPosts.length > 0 ? Math.max(...reachPosts.map(p => p.reach ?? 0)) : 0
+  const top3 = [...reachPosts].sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0)).slice(0, 3)
 
   return (
     <div>
@@ -79,14 +82,14 @@ export function OverviewSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <Icon name="calendar" size={15} color="var(--ad-blue)" />
           <span style={{ fontSize: 14, fontWeight: 700 }}>內容表現摘要</span>
-          <span style={{ fontSize: 11.5, color: 'var(--ad-text3)' }}>過去 30 天 · {POSTS_DATA.length} 篇貼文</span>
+          <span style={{ fontSize: 11.5, color: 'var(--ad-text3)' }}>過去 30 天 · {postsSource.length} 篇貼文</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 12 }}>
           {[
-            { label: '最高觸及', value: '499', sub: '2026/02/04 貼文', color: 'var(--ad-blue)' },
+            { label: '最高觸及', value: String(topReach), sub: top3[0] ? `${top3[0].date} ${top3[0].type}` : '—', color: 'var(--ad-blue)' },
             { label: '平均觸及', value: String(avgReach), sub: '自然觸及', color: 'var(--ad-blue)' },
-            { label: '平均互動率', value: '2.14%', sub: '(讚+留言+分享)/觸及', color: 'var(--ad-green)' },
-            { label: '有廣告加持', value: `${adPosts.length} 篇`, sub: `最高 ROAS ${Math.max(...adPosts.map(p => p.adRoas ?? 0)).toFixed(1)}x`, color: 'var(--ad-orange)' },
+            { label: '平均互動率', value: reachPosts.length > 0 ? `${(reachPosts.reduce((acc, p) => acc + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length).toFixed(2)}%` : '—', sub: '(讚+留言+分享)/觸及', color: 'var(--ad-green)' },
+            { label: '有廣告加持', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最高 ROAS ${Math.max(...adPosts.map(p => p.adRoas ?? 0)).toFixed(1)}x` : '尚無廣告數據', color: 'var(--ad-orange)' },
           ].map(s => (
             <div key={s.label} className="ads-card ads-card-pad" style={{ borderTop: `3px solid ${s.color}` }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ad-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
@@ -97,8 +100,10 @@ export function OverviewSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
         </div>
         <div className="ads-card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)', fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>🏆 觸及率 Top 3 貼文</div>
-          {POSTS_DATA.filter(p => (p.reach ?? 0) > 0).sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0)).slice(0, 3).map((p, i) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < 2 ? '1px solid var(--ad-border)' : 'none' }}>
+          {top3.length === 0 ? (
+            <div style={{ padding: '20px 16px', color: 'var(--ad-text3)', fontSize: 12.5 }}>暫無觸及資料</div>
+          ) : top3.map((p, i) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < top3.length - 1 ? '1px solid var(--ad-border)' : 'none' }}>
               <div style={{ width: 22, height: 22, borderRadius: 6, background: i === 0 ? 'var(--ad-green)' : i === 1 ? 'var(--ad-blue)' : 'var(--ad-surface2)', color: i < 2 ? 'white' : 'var(--ad-text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <div style={{ fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</div>

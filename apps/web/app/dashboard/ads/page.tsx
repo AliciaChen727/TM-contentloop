@@ -333,7 +333,7 @@ export default function AdsPage() {
         </header>
 
         <main className="ads-content">
-          {active === 'overview' && <OverviewSection data={adData} onAskAI={openSidekick} />}
+          {active === 'overview' && <OverviewSection data={adData} onAskAI={openSidekick} posts={realPosts} />}
           {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={openSidekick} />}
           {active === 'creative' && <CreativeSection data={adData} onAskAI={openSidekick} />}
           {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts} />}
