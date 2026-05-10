@@ -205,8 +205,15 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   adLevelUrl.searchParams.set('limit', '100')
   adLevelUrl.searchParams.set('access_token', userAccessToken)
 
-  const [summaryRes, dailyRes, adsRes, adLevelRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl), fetch(adLevelUrl)])
-  const [summaryData, dailyData, adsData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json(), adLevelRes.json()])
+  const hourlyUrl = new URL(`${BASE}/${adAccountId}/insights`)
+  hourlyUrl.searchParams.set('fields', 'spend,actions,action_values')
+  hourlyUrl.searchParams.set('date_preset', 'last_30d')
+  hourlyUrl.searchParams.set('level', 'account')
+  hourlyUrl.searchParams.set('breakdowns', 'hourly_stats_aggregated_by_advertiser_time_zone')
+  hourlyUrl.searchParams.set('access_token', userAccessToken)
+
+  const [summaryRes, dailyRes, adsRes, adLevelRes, hourlyRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl), fetch(adLevelUrl), fetch(hourlyUrl)])
+  const [summaryData, dailyData, adsData, adLevelData, hourlyData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json(), adLevelRes.json(), hourlyRes.json()])
   if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
 
   const adPostIds: string[] = []
@@ -251,6 +258,19 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     }
   })
 
+  const rawHourly: Record<string, unknown>[] = hourlyData.data ?? []
+  const hourly = rawHourly.map(h => {
+    const hourSpend = parseFloat((h.spend as string) ?? '0')
+    const hourActionValues: MetaAction[] = (h.action_values as MetaAction[]) ?? []
+    const hourRevenue = parseActions(hourActionValues, 'purchase')
+    const hourLabel = (h.hourly_stats_aggregated_by_advertiser_time_zone as string) ?? '0:00 - 1:00'
+    return {
+      hour: parseInt(hourLabel.split(':')[0]),
+      spend: hourSpend,
+      roas: hourSpend > 0 && hourRevenue > 0 ? hourRevenue / hourSpend : 0,
+    }
+  }).sort((a, b) => a.hour - b.hour)
+
   // Merge ads list with insights: show all ads even if spend=0
   const insightsByAdId = new Map<string, Record<string, unknown>>()
   for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
@@ -273,6 +293,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     conversionType,
     summary: summaryDoc,
     daily,
+    hourly,
     adPostIds,
     adCreatives,
   })
@@ -286,6 +307,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     conversionType,
     summary: summaryDoc,
     daily,
+    hourly,
     adCreatives,
   })
 

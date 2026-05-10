@@ -5,6 +5,7 @@ import { SvgBarChart } from '../SvgCharts'
 import type { AdData } from '../types'
 
 export function BestTimeSection({ data }: { data: AdData }) {
+  const hasRealHourly = data.bestTime.hourly.some(h => h.roas > 0)
   const maxRoas = Math.max(...data.bestTime.hourly.map(h => h.roas))
   const getColor = (r: number) => {
     const t = (r - 1) / (maxRoas - 1)
@@ -56,7 +57,12 @@ export function BestTimeSection({ data }: { data: AdData }) {
             <span>高 ROAS</span>
           </div>
           <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--ad-blue-light)', borderRadius: 7, fontSize: 12, color: 'var(--ad-blue)' }}>
-            💡 <strong>黃金時段</strong>：19:00–21:00 ROAS 4.8–5.0，建議提升出價 20%
+            {hasRealHourly ? (() => {
+              const topHours = [...data.bestTime.hourly].filter(h => h.roas > 0).sort((a, b) => b.roas - a.roas).slice(0, 3)
+              if (!topHours.length) return '💡 暫無小時維度數據'
+              const hrs = topHours.map(h => `${h.hour}:00`).join('、')
+              return `💡 黃金時段：${hrs}，ROAS 最高 ${topHours[0].roas.toFixed(2)}x，建議提升出價`
+            })() : '💡 黃金時段：19:00–21:00 ROAS 4.8–5.0，建議提升出價 20%'}
           </div>
         </div>
 

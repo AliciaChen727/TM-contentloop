@@ -209,12 +209,22 @@ function buildAdData(raw: any): AdData {
   }))
   const realWeekly = weeklyRoas.some(w => w.roas > 0) ? weeklyRoas : MOCK_DATA.bestTime.weekly
 
+  // Real hourly ROAS from breakdown data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawHourly: { hour: number; spend: number; roas: number }[] = raw.hourly ?? []
+  const realHourly = rawHourly.length > 0
+    ? Array.from({ length: 24 }, (_, hour) => {
+        const h = rawHourly.find(r => r.hour === hour)
+        return { hour, roas: h?.roas ?? 0, spend: h?.spend ?? 0 }
+      })
+    : MOCK_DATA.bestTime.hourly
+
   return {
     ...MOCK_DATA,
     creatives,
     diagnosis,
     budget: { ...MOCK_DATA.budget, adsets: realAdsets },
-    bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly },
+    bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly, hourly: realHourly },
     overview: {
       ...MOCK_DATA.overview,
       dateRange: `${from} ~ ${to}`,
