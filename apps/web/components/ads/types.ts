@@ -63,6 +63,7 @@ export interface Adset {
 }
 
 export interface AdData {
+  conversionType?: string
   overview: {
     dateRange: string
     summary: {

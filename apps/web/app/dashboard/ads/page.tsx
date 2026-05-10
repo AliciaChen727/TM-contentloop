@@ -95,10 +95,16 @@ function mapRawAdCreative(c: any, idx: number) {
   const ctr = parseFloat(c.ctr ?? '0')
   const actions: { action_type: string; value: string }[] = c.actions ?? []
   const actionValues: { action_type: string; value: string }[] = c.action_values ?? []
-  const conversions = parseFloat(actions.find(a => a.action_type === 'purchase')?.value ?? '0')
+  const purchases = parseFloat(actions.find(a => a.action_type === 'purchase')?.value ?? '0')
+  const linkClicks = parseFloat(actions.find(a => a.action_type === 'link_click')?.value ?? '0')
   const revenue = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value ?? '0')
-  const roas = spend > 0 && revenue > 0 ? revenue / spend : 0
-  const cpa = conversions > 0 ? spend / conversions : 0
+  const hasPurchase = purchases > 0
+  const roas = spend > 0
+    ? (hasPurchase && revenue > 0 ? revenue / spend : (linkClicks > 0 ? parseFloat((linkClicks / spend * 100).toFixed(2)) : 0))
+    : 0
+  const cpa = hasPurchase
+    ? (purchases > 0 ? parseFloat((spend / purchases).toFixed(2)) : 0)
+    : (linkClicks > 0 ? parseFloat((spend / linkClicks).toFixed(2)) : 0)
   const type = inferCreativeType(c.ad_name ?? '')
   return {
     id: c.ad_id ?? String(idx),
@@ -168,6 +174,7 @@ function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildAdData(raw: any): AdData {
   const s = raw.summary ?? {}
   const from = raw.dateRange?.from ?? ''
@@ -219,10 +226,13 @@ function buildAdData(raw: any): AdData {
       })
     : MOCK_DATA.bestTime.hourly
 
+  const conversionType: string = s.conversionType ?? raw.conversionType ?? 'purchase'
+
   return {
     ...MOCK_DATA,
     creatives,
     diagnosis,
+    conversionType,
     budget: { ...MOCK_DATA.budget, adsets: realAdsets },
     bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly, hourly: realHourly },
     overview: {

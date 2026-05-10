@@ -10,15 +10,17 @@ const fmtK = (n: number) => n >= 10000 ? `$${fmt(Math.round(n / 1000))}K` : `$${
 
 export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskAI: (q: string) => void; posts?: Post[] | null }) {
   const s = data.overview.summary
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isClickBased = (data as any).conversionType === 'link_click'
   const budgetPct = (s.spend / data.budget.total) * 100
   const kpis = [
-    { label: 'ROAS', value: s.roas.toFixed(2) + 'x', meta: `目標 ${s.roasTarget}x`, color: s.roas >= s.roasTarget ? 'green' : 'orange', delta: `${s.roas >= s.roasTarget ? '+' : ''}${((s.roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%`, dir: s.roas >= s.roasTarget ? 'up' : 'down', q: '這週 ROAS 為什麼下降？' },
+    { label: isClickBased ? '效益指數' : 'ROAS', value: s.roas.toFixed(2) + (isClickBased ? '次/百元' : 'x'), meta: `目標 ${s.roasTarget}${isClickBased ? '次/百元' : 'x'}`, color: s.roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${s.roas >= s.roasTarget ? '+' : ''}${((s.roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: s.roas >= s.roasTarget ? 'up' : 'down', q: isClickBased ? '廣告點擊效益如何提升？' : '這週 ROAS 為什麼下降？' },
     { label: '總花費', value: fmtK(s.spend), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
-    { label: 'CPA', value: `$${fmt(s.cpa)}`, meta: `目標 $${fmt(s.cpaTarget)}`, color: s.cpa <= s.cpaTarget ? 'green' : 'orange', delta: s.cpa <= s.cpaTarget ? `-${((s.cpaTarget - s.cpa) / s.cpaTarget * 100).toFixed(0)}%` : `+${((s.cpa - s.cpaTarget) / s.cpaTarget * 100).toFixed(0)}%`, dir: s.cpa <= s.cpaTarget ? 'up' : 'down', q: 'CPA 如何進一步降低？' },
+    { label: isClickBased ? 'CPC' : 'CPA', value: `$${fmt(s.cpa)}`, meta: `目標 $${fmt(s.cpaTarget)}`, color: s.cpa > 0 && s.cpa <= s.cpaTarget ? 'green' : 'orange', delta: s.cpa > 0 && s.cpaTarget > 0 ? (s.cpa <= s.cpaTarget ? `-${((s.cpaTarget - s.cpa) / s.cpaTarget * 100).toFixed(0)}%` : `+${((s.cpa - s.cpaTarget) / s.cpaTarget * 100).toFixed(0)}%`) : '', dir: s.cpa <= s.cpaTarget ? 'up' : 'down', q: isClickBased ? 'CPC 如何進一步降低？' : 'CPA 如何進一步降低？' },
     { label: 'CTR', value: `${fmt(s.ctr, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
     { label: 'CPM', value: `$${fmt(s.cpm, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
     { label: '總觸及', value: `${(s.reach / 10000).toFixed(0)}萬`, meta: `曝光 ${(s.impressions / 10000).toFixed(0)}萬次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
-    { label: '轉換數', value: fmt(s.conversions), meta: `營收 ${fmtK(s.revenue)}`, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
+    { label: isClickBased ? '點擊數' : '轉換數', value: fmt(s.conversions), meta: isClickBased ? '連結點擊次數' : `營收 ${fmtK(s.revenue)}`, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
     { label: '頻率', value: s.frequency.toFixed(2), meta: '建議 < 3.5', color: s.frequency > 3.5 ? 'red' : 'green', delta: s.frequency > 3.5 ? '⚠ 偏高' : '正常', dir: s.frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
   ]
 
@@ -73,7 +75,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
           <SvgChart data={data.overview.dailySpend} height={170} lines={[{ key: 'revenue', label: '營收', color: '#3B6FD4', isCurr: true }, { key: 'spend', label: '花費', color: '#2E8B57', isCurr: true }]} />
         </div>
         <div className="ads-card ads-card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>每日 ROAS 趨勢</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isClickBased ? '每日效益指數趨勢' : '每日 ROAS 趨勢'}</div>
           <SvgChart data={data.overview.dailySpend} height={170} lines={[{ key: 'roas', label: 'ROAS', color: '#3B6FD4' }]} roasTarget={s.roasTarget} />
         </div>
       </div>
@@ -113,7 +115,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ad-blue)', fontFamily: 'var(--font-dm-mono)' }}>{fmt(p.reach ?? 0)}</div>
                 <div style={{ fontSize: 10.5, color: 'var(--ad-text3)' }}>觸及</div>
               </div>
-              {p.hasAd && <span className="ads-posts-ad-badge">🎯 ROAS {p.adRoas}x</span>}
+              {p.hasAd && p.adRoas != null && p.adRoas > 0 && <span className="ads-posts-ad-badge">🎯 ROAS {p.adRoas}x</span>}
             </div>
           ))}
         </div>

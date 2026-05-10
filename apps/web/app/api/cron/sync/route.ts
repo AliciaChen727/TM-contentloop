@@ -232,19 +232,24 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   const sActions: MetaAction[] = s.actions ?? []
   const sActionValues: MetaAction[] = s.action_values ?? []
   const hasPurchase = sActions.some(a => a.action_type === 'purchase')
-  const conversionType = hasPurchase ? 'purchase' : 'video_view'
-  const conversions = parseActions(sActions, conversionType)
-  const revenue = parseActions(sActionValues, 'purchase')
-  const roas = spend > 0 && revenue > 0 ? revenue / spend : 0
-  const cpa = conversions > 0 ? spend / conversions : 0
+  const conversionType = hasPurchase ? 'purchase' : 'link_click'
+  const linkClicks = parseActions(sActions, 'link_click')
+  const conversions = hasPurchase ? parseActions(sActions, 'purchase') : linkClicks
+  const revenue = hasPurchase ? parseActions(sActionValues, 'purchase') : linkClicks
+  // For non-purchase: roas = clicks per NT$100 (higher is better, comparable scale to purchase ROAS)
+  const roas = spend > 0 && revenue > 0
+    ? (hasPurchase ? revenue / spend : parseFloat((linkClicks / spend * 100).toFixed(2)))
+    : 0
+  const cpa = conversions > 0 ? parseFloat((spend / conversions).toFixed(2)) : 0
 
   const rawDaily: Record<string, unknown>[] = dailyData.data ?? []
   const daily = rawDaily.map(d => {
     const daySpend = parseFloat((d.spend as string) ?? '0')
     const dayActions: MetaAction[] = (d.actions as MetaAction[]) ?? []
     const dayActionValues: MetaAction[] = (d.action_values as MetaAction[]) ?? []
-    const dayConversions = parseActions(dayActions, conversionType)
-    const dayRevenue = parseActions(dayActionValues, 'purchase')
+    const dayLinkClicks = parseActions(dayActions, 'link_click')
+    const dayConversions = hasPurchase ? parseActions(dayActions, 'purchase') : dayLinkClicks
+    const dayRevenue = hasPurchase ? parseActions(dayActionValues, 'purchase') : dayLinkClicks
     return {
       date: d.date_start as string,
       spend: daySpend,
@@ -252,7 +257,9 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
       impressions: parseInt((d.impressions as string) ?? '0'),
       clicks: parseInt((d.clicks as string) ?? '0'),
       ctr: parseFloat((d.ctr as string) ?? '0'),
-      roas: daySpend > 0 && dayRevenue > 0 ? dayRevenue / daySpend : 0,
+      roas: daySpend > 0 && dayRevenue > 0
+        ? (hasPurchase ? dayRevenue / daySpend : parseFloat((dayLinkClicks / daySpend * 100).toFixed(2)))
+        : 0,
       conversions: dayConversions,
       revenue: dayRevenue,
     }
@@ -261,13 +268,17 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   const rawHourly: Record<string, unknown>[] = hourlyData.data ?? []
   const hourly = rawHourly.map(h => {
     const hourSpend = parseFloat((h.spend as string) ?? '0')
+    const hourActions: MetaAction[] = (h.actions as MetaAction[]) ?? []
     const hourActionValues: MetaAction[] = (h.action_values as MetaAction[]) ?? []
-    const hourRevenue = parseActions(hourActionValues, 'purchase')
+    const hourLinkClicks = parseActions(hourActions, 'link_click')
+    const hourRevenue = hasPurchase ? parseActions(hourActionValues, 'purchase') : hourLinkClicks
     const hourLabel = (h.hourly_stats_aggregated_by_advertiser_time_zone as string) ?? '0:00 - 1:00'
     return {
       hour: parseInt(hourLabel.split(':')[0]),
       spend: hourSpend,
-      roas: hourSpend > 0 && hourRevenue > 0 ? hourRevenue / hourSpend : 0,
+      roas: hourSpend > 0 && hourRevenue > 0
+        ? (hasPurchase ? hourRevenue / hourSpend : parseFloat((hourLinkClicks / hourSpend * 100).toFixed(2)))
+        : 0,
     }
   }).sort((a, b) => a.hour - b.hour)
 
@@ -283,7 +294,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
 
   const userRef = adminDb.collection('users').doc(uid)
   const dateRange = { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' }
-  const summaryDoc = { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa }
+  const summaryDoc = { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa, conversionType, linkClicks }
 
   // Existing UID-scoped write (backward compat + fallback)
   await userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({

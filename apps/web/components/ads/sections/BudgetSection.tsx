@@ -11,6 +11,8 @@ const roasColor = (r: number) => r >= 4 ? 'var(--ad-green)' : r >= 3.5 ? 'var(--
 type AdsetRow = Adset & { newBudget: number }
 
 export function BudgetSection({ data }: { data: AdData }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isClickBased = (data as any).conversionType === 'link_click'
   const [adsets, setAdsets] = useState<AdsetRow[]>(data.budget.adsets.map(a => ({ ...a, newBudget: a.budget })))
   const sliderMax = Math.max(...data.budget.adsets.map(a => a.budget)) * 3 || 200000
   const sliderStep = sliderMax > 50000 ? 5000 : 100
@@ -46,7 +48,7 @@ export function BudgetSection({ data }: { data: AdData }) {
             </span>
           </div>
           <div style={{ fontWeight: 600, fontSize: 13 }}>
-            模擬 ROAS：<span style={{ fontFamily: 'var(--font-dm-mono)', color: roasColor(projRoas), fontSize: 15 }}>{projRoas.toFixed(2)}x</span>
+            {isClickBased ? '模擬效益：' : '模擬 ROAS：'}<span style={{ fontFamily: 'var(--font-dm-mono)', color: roasColor(projRoas), fontSize: 15 }}>{projRoas.toFixed(2)}{isClickBased ? '次/百元' : 'x'}</span>
           </div>
           <button className="ads-btn" style={{ marginLeft: 'auto' }} onClick={applyAI}>✨ AI 自動最佳化</button>
           <button className="ads-btn" onClick={reset}>重置</button>
@@ -55,7 +57,7 @@ export function BudgetSection({ data }: { data: AdData }) {
         <table className="ads-budget-table">
           <thead>
             <tr>
-              <th>廣告組合</th><th>原始預算</th><th>花費進度</th><th>ROAS</th><th>CPA</th><th>模擬預算</th>
+              <th>廣告組合</th><th>原始預算</th><th>花費進度</th><th>{isClickBased ? '效益指數' : 'ROAS'}</th><th>{isClickBased ? 'CPC' : 'CPA'}</th><th>模擬預算</th>
             </tr>
           </thead>
           <tbody>
@@ -71,7 +73,7 @@ export function BudgetSection({ data }: { data: AdData }) {
                       <div className="ads-prog-fill" style={{ width: `${Math.min(pct, 100)}%`, background: pct > 90 ? 'var(--ad-orange)' : 'var(--ad-blue)' }} />
                     </div>
                   </td>
-                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: roasColor(a.roas) }}>{a.roas.toFixed(1)}x</span></td>
+                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: roasColor(a.roas) }}>{a.roas.toFixed(1)}{isClickBased ? '' : 'x'}</span></td>
                   <td><span style={{ fontFamily: 'var(--font-dm-mono)' }}>${a.cpa}</span></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
