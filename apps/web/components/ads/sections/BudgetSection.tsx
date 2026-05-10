@@ -22,6 +22,7 @@ export function BudgetSection({ data }: { data: AdData }) {
   const totalNew = adsets.reduce((s, a) => s + a.newBudget, 0)
   const totalOrig = adsets.reduce((s, a) => s + a.budget, 0)
   const projRoas = adsets.reduce((s, a) => s + a.roas * a.newBudget, 0) / totalNew
+  const hasRoasData = adsets.some(a => a.roas > 0)
 
   const update = (i: number, v: number) => setAdsets(p => p.map((a, j) => j === i ? { ...a, newBudget: Math.max(0, v) } : a))
 
@@ -50,7 +51,11 @@ export function BudgetSection({ data }: { data: AdData }) {
             </span>
           </div>
           <div style={{ fontWeight: 600, fontSize: 13 }}>
-            {isVideoBased ? '模擬觀看效益：' : isClickBased ? '模擬效益：' : '模擬 ROAS：'}<span style={{ fontFamily: 'var(--font-dm-mono)', color: roasColor(projRoas), fontSize: 15 }}>{projRoas.toFixed(2)}{isVideoBased || isClickBased ? '次/百元' : 'x'}</span>
+            {isVideoBased ? '模擬觀看效益：' : isClickBased ? '模擬效益：' : '模擬 ROAS：'}
+            {hasRoasData
+              ? <span style={{ fontFamily: 'var(--font-dm-mono)', color: roasColor(projRoas), fontSize: 15 }}>{projRoas.toFixed(2)}{isVideoBased || isClickBased ? '次/百元' : 'x'}</span>
+              : <span style={{ fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)', fontSize: 13 }}>無花費數據（過去 30 天尚無記錄）</span>
+            }
           </div>
           <button className="ads-btn" style={{ marginLeft: 'auto' }} onClick={applyAI}>✨ AI 自動最佳化</button>
           <button className="ads-btn" onClick={reset}>重置</button>
@@ -75,8 +80,8 @@ export function BudgetSection({ data }: { data: AdData }) {
                       <div className="ads-prog-fill" style={{ width: `${Math.min(pct, 100)}%`, background: pct > 90 ? 'var(--ad-orange)' : 'var(--ad-blue)' }} />
                     </div>
                   </td>
-                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: roasColor(a.roas) }}>{a.roas.toFixed(1)}{isVideoBased || isClickBased ? '' : 'x'}</span></td>
-                  <td><span style={{ fontFamily: 'var(--font-dm-mono)' }}>${a.cpa}</span></td>
+                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: a.roas > 0 ? roasColor(a.roas) : 'var(--ad-text3)' }}>{a.roas > 0 ? `${a.roas.toFixed(1)}${isVideoBased || isClickBased ? '' : 'x'}` : '–'}</span></td>
+                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', color: a.cpa > 0 ? 'var(--ad-text)' : 'var(--ad-text3)' }}>{a.cpa > 0 ? `$${a.cpa}` : '–'}</span></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <input type="range" min={0} max={sliderMax} step={sliderStep} value={a.newBudget}

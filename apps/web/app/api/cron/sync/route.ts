@@ -219,8 +219,10 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   if (!adLevelRes.ok || adLevelData.error) return { error: adLevelData.error?.message ?? 'ad-level insights failed' }
 
   // Filter ads to only those belonging to this pageId (object_story_id format: {pageId}_{postId})
+  // Fall back to all account ads if none are linked to this page (e.g. non-post-linked ad types)
   const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string } }[] = adsData.data ?? []
   const pageAdsList = rawAdsList.filter(ad => ad.creative?.object_story_id?.startsWith(pageId + '_'))
+  const effectiveAdsList = pageAdsList.length > 0 ? pageAdsList : rawAdsList
   const adPostIds: string[] = pageAdsList.map(ad => ad.creative!.object_story_id!).filter(Boolean)
 
   const s = summaryData.data?.[0] ?? {}
@@ -302,9 +304,9 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
     if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
   }
-  const adCreatives: Record<string, unknown>[] = pageAdsList.length > 0
-    ? pageAdsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
-    : []
+  const adCreatives: Record<string, unknown>[] = effectiveAdsList.map(ad =>
+    insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
+  )
 
   const userRef = adminDb.collection('users').doc(uid)
   const dateRange = { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' }
