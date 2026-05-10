@@ -59,7 +59,7 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
             <div className="ads-creative-info">
               <div className="ads-creative-name">{c.name}</div>
               <div className="ads-creative-meta">
-                {[['ROAS', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', c.ctr + '%'], ['CPA', '$' + c.cpa]].map(([k, v]) => (
+                {[['ROAS', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPA', '$' + c.cpa]].map(([k, v]) => (
                   <div key={k} className="ads-creative-kv">
                     <span style={{ color: 'var(--ad-text3)' }}>{k}</span>
                     <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{v}</span>
