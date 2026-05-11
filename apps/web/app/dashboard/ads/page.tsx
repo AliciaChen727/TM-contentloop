@@ -291,6 +291,8 @@ export default function AdsPage() {
   const [syncError, setSyncError] = useState<string | null>(null)
   const [selectedPageId, setSelectedPageId] = useState('')
   const [selectedPageName, setSelectedPageName] = useState('')
+  const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
+  const [showPageMenu, setShowPageMenu] = useState(false)
 
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> }> {
     const pid = pageId ?? selectedPageId
@@ -321,6 +323,14 @@ export default function AdsPage() {
         const pageName = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageName') : '') ?? ''
         setSelectedPageId(pageId)
         setSelectedPageName(pageName)
+
+        // Load all managed pages for the page switcher
+        const pagesRes = await fetch('/api/pages', { headers })
+        if (pagesRes.ok) {
+          const pagesJson = await pagesRes.json()
+          setPages(pagesJson.pages ?? [])
+        }
+
         const qs = pageId ? `?pageId=${pageId}` : ''
         const [fbRes, igRes, adRes] = await Promise.all([
           fetch(`/api/insights/fb${qs}`, { headers }),
@@ -398,6 +408,43 @@ export default function AdsPage() {
     } finally {
       setSyncing(false)
     }
+  }
+
+  async function handlePageSwitch(pid: string, pname: string) {
+    setShowPageMenu(false)
+    if (pid === selectedPageId) return
+    setSelectedPageId(pid)
+    setSelectedPageName(pname)
+    localStorage.setItem('selectedPageId', pid)
+    localStorage.setItem('selectedPageName', pname)
+    setAdData(MOCK_DATA)
+    setRealPosts(null)
+    const u = auth.currentUser
+    if (!u) return
+    const idToken = await u.getIdToken()
+    const headers = { Authorization: `Bearer ${idToken}` }
+    const qs = pid ? `?pageId=${pid}` : ''
+    const [fbRes, igRes, adRes] = await Promise.all([
+      fetch(`/api/insights/fb${qs}`, { headers }),
+      fetch(`/api/insights/ig${qs}`, { headers }),
+      fetch(`/api/ads/data${qs}`, { headers }),
+    ])
+    const adJson = adRes.ok ? await adRes.json() : null
+    const adPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
+    const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.adPostMetrics ?? {}
+    if (adJson?.data) {
+      setAdData(buildAdData(adJson.data))
+      setLastSync(adJson.data.syncedAt ?? null)
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fbJson = fbRes.ok ? await fbRes.json() : null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fbPosts: Post[] = (fbJson?.posts ?? []).filter((p: any) => p.message).map((p: any) => mapFbPost(p, adPostIds, adPostMetrics))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const igJson = igRes.ok ? await igRes.json() : null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map(mapIgPost)
+    setRealPosts([...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date)))
   }
 
   const openSidekick = useCallback((prompt = '') => {
@@ -481,9 +528,42 @@ export default function AdsPage() {
 
       {/* Left Nav */}
       <nav className="ads-nav">
-        <div className="ads-nav-logo">
-          <div className="brand" style={{ fontSize: 13 }}>{selectedPageName || 'ContentLoop'}</div>
-          <div className="sub">廣告儀表板</div>
+        <div className="ads-nav-logo" style={{ position: 'relative' }}>
+          {pages.length > 1 ? (
+            <button
+              onClick={() => setShowPageMenu(p => !p)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', width: '100%' }}
+            >
+              <div className="brand" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+                {selectedPageName || 'ContentLoop'}
+                <span style={{ fontSize: 10, color: 'var(--ad-text3)' }}>▾</span>
+              </div>
+              <div className="sub">廣告儀表板</div>
+            </button>
+          ) : (
+            <>
+              <div className="brand" style={{ fontSize: 13 }}>{selectedPageName || 'ContentLoop'}</div>
+              <div className="sub">廣告儀表板</div>
+            </>
+          )}
+          {showPageMenu && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowPageMenu(false)} />
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'white', border: '1px solid var(--ad-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 180, overflow: 'hidden' }}>
+                {pages.map(p => (
+                  <div
+                    key={p.pageId}
+                    onClick={() => handlePageSwitch(p.pageId, p.pageName)}
+                    style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: p.pageId === selectedPageId ? 700 : 400, color: p.pageId === selectedPageId ? 'var(--ad-blue)' : 'var(--ad-text)', background: p.pageId === selectedPageId ? 'var(--ad-surface2)' : 'transparent' }}
+                    onMouseEnter={e => { if (p.pageId !== selectedPageId) (e.currentTarget as HTMLElement).style.background = 'var(--ad-surface)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = p.pageId === selectedPageId ? 'var(--ad-surface2)' : 'transparent' }}
+                  >
+                    {p.pageName || p.pageId}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div style={{ flex: 1, overflow: 'auto', paddingTop: 8 }}>
           <div className="ads-nav-section">主要功能</div>
