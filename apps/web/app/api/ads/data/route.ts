@@ -21,19 +21,18 @@ export async function GET(req: NextRequest) {
   const pageId = req.nextUrl.searchParams.get('pageId')
 
   if (pageId) {
-    // Check if this uid is a verified admin of the page (cross-admin shared data)
-    const memberSnap = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
+    // Prefer user-level data (synced by this user) — always up-to-date
+    const ownSnap = await adminDb.collection('users').doc(uid).collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
+    if (ownSnap.exists) return NextResponse.json({ data: serializeSnap(ownSnap.data()!) })
 
+    // Fallback: shared merged insights (populated by other admins or Cloud Functions)
+    const memberSnap = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
     if (memberSnap.exists) {
-      // Read shared merged insights (contains all admins' ad accounts)
       const sharedSnap = await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
       if (sharedSnap.exists) return NextResponse.json({ data: serializeSnap(sharedSnap.data()!) })
     }
 
-    // Fallback: not yet a member (hasn't re-OAuth'd) or shared doc not yet created → own UID-scoped data
-    const ownSnap = await adminDb.collection('users').doc(uid).collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
-    if (!ownSnap.exists) return NextResponse.json({ data: null })
-    return NextResponse.json({ data: serializeSnap(ownSnap.data()!) })
+    return NextResponse.json({ data: null })
   }
 
   // No pageId: legacy user-level path
