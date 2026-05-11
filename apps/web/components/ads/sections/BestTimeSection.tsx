@@ -5,15 +5,17 @@ import { SvgBarChart } from '../SvgCharts'
 import type { AdData } from '../types'
 
 export function BestTimeSection({ data }: { data: AdData }) {
-  const hasRealHourly = data.bestTime.hourly.some(h => h.roas > 0)
-  const maxRoas = Math.max(...data.bestTime.hourly.map(h => h.roas))
+  const hourly = hourly ?? []
+  const weekly = weekly ?? []
+  const hasRealHourly = hourly.some(h => h.roas > 0)
+  const maxRoas = Math.max(...hourly.map(h => h.roas), 0)
   const getColor = (r: number) => {
     const range = maxRoas > 1 ? maxRoas - 1 : 1
     const t = (r - 1) / range
     return t > 0.8 ? '#3B6FD4' : t > 0.6 ? '#6B9AE8' : t > 0.4 ? '#A3BEF0' : t > 0.2 ? '#C2D4F5' : '#E8EFF9'
   }
 
-  const sorted = [...data.bestTime.weekly].sort((a, b) => b.roas - a.roas)
+  const sorted = [...weekly].sort((a, b) => b.roas - a.roas)
   const bestDay = sorted[0]
   const worstDay = sorted[sorted.length - 1]
   const weeklyHint = bestDay && bestDay.roas > 0
@@ -32,7 +34,7 @@ export function BestTimeSection({ data }: { data: AdData }) {
         <div className="ads-card ads-card-pad">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>24 小時 ROAS 熱力圖</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {data.bestTime.hourly.map(h => (
+            {hourly.map(h => (
               <div
                 key={h.hour}
                 title={`${h.hour}:00 — ROAS ${h.roas}`}
@@ -59,7 +61,7 @@ export function BestTimeSection({ data }: { data: AdData }) {
           </div>
           <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--ad-blue-light)', borderRadius: 7, fontSize: 12, color: 'var(--ad-blue)' }}>
             {hasRealHourly ? (() => {
-              const topHours = [...data.bestTime.hourly].filter(h => h.roas > 0).sort((a, b) => b.roas - a.roas).slice(0, 3)
+              const topHours = [...hourly].filter(h => h.roas > 0).sort((a, b) => b.roas - a.roas).slice(0, 3)
               if (!topHours.length) return '💡 暫無小時維度數據'
               const hrs = topHours.map(h => `${h.hour}:00`).join('、')
               return `💡 黃金時段：${hrs}，ROAS 最高 ${topHours[0].roas.toFixed(2)}x，建議提升出價`
@@ -69,7 +71,7 @@ export function BestTimeSection({ data }: { data: AdData }) {
 
         <div className="ads-card ads-card-pad">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>週間 ROAS 表現</div>
-          <SvgBarChart data={data.bestTime.weekly} dataKey="roas" labelKey="day" height={150} refLine={3.5} />
+          <SvgBarChart data={weekly} dataKey="roas" labelKey="day" height={150} refLine={3.5} />
           <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--ad-green-light)', borderRadius: 7, fontSize: 12, color: 'var(--ad-green)' }}>
             {weeklyHint}
           </div>
