@@ -271,6 +271,13 @@ export default function AdsPage() {
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
+  })
+  const [dateTo, setDateTo] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10)
+  })
   const [realPosts, setRealPosts] = useState<Post[] | null>(null)
   const [adData, setAdData] = useState<AdData>(MOCK_DATA)
   const [lastSync, setLastSync] = useState<string | null>(null)
@@ -347,7 +354,7 @@ export default function AdsPage() {
       const res = await fetch('/api/ads/sync', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: selectedPageId }),
+        body: JSON.stringify({ pageId: selectedPageId, since: dateFrom, until: dateTo }),
       })
       const json = await res.json()
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
@@ -490,8 +497,37 @@ export default function AdsPage() {
           <div className="ads-channel-badge">
             <Icon name="meta" size={13} color="var(--ad-blue)" />Meta Ads
           </div>
-          <div className="ads-date-pill">
-            <Icon name="calendar" size={12} />{adData.overview.dateRange}
+          <div style={{ position: 'relative' }}>
+            <div className="ads-date-pill" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowDatePicker(p => !p)}>
+              <Icon name="calendar" size={12} />{adData.overview.dateRange} ▾
+            </div>
+            {showDatePicker && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowDatePicker(false)} />
+                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, background: 'white', border: '1px solid var(--ad-border)', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, padding: '14px 16px', minWidth: 260 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-text2)', marginBottom: 10 }}>自訂日期範圍</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                    <input type="date" value={dateFrom} max={dateTo} onChange={e => setDateFrom(e.target.value)}
+                      style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)', outline: 'none' }} />
+                    <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>至</span>
+                    <input type="date" value={dateTo} min={dateFrom} max={new Date().toISOString().slice(0, 10)} onChange={e => setDateTo(e.target.value)}
+                      style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)', outline: 'none' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                    {[['近 7 天', 7], ['近 14 天', 14], ['近 30 天', 30]].map(([label, days]) => (
+                      <button key={label} style={{ flex: 1, padding: '5px 0', fontSize: 11.5, border: '1px solid var(--ad-border)', borderRadius: 6, background: 'var(--ad-surface)', cursor: 'pointer', color: 'var(--ad-text2)' }}
+                        onClick={() => { const to = new Date(); to.setDate(to.getDate() - 1); const from = new Date(); from.setDate(from.getDate() - (days as number)); setDateFrom(from.toISOString().slice(0, 10)); setDateTo(to.toISOString().slice(0, 10)) }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="ads-btn primary" style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
+                    onClick={() => { setShowDatePicker(false); handleSync() }}>
+                    套用並同步資料
+                  </button>
+                </div>
+              </>
+            )}
           </div>
           <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
             ✨ AI Sidekick

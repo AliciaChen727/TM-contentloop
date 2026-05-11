@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const pageId: string | undefined = body.pageId
+  const since: string | undefined = body.since
+  const until: string | undefined = body.until
 
   const userRef = adminDb.collection('users').doc(uid)
   // Try new per-page token doc, fallback to legacy 'page' doc
@@ -59,22 +61,26 @@ export async function POST(req: NextRequest) {
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 
   // Fetch summary, daily, and per-ad insights in parallel
+  const dateRange = since && until
+    ? { time_range: JSON.stringify({ since, until }) }
+    : { date_preset: 'last_30d' }
+
   const summaryUrl = new URL(`${BASE}/${adAccountId}/insights`)
   summaryUrl.searchParams.set('fields', insightFields)
-  summaryUrl.searchParams.set('date_preset', 'last_30d')
+  Object.entries(dateRange).forEach(([k, v]) => summaryUrl.searchParams.set(k, v))
   summaryUrl.searchParams.set('level', 'account')
   summaryUrl.searchParams.set('access_token', userAccessToken)
 
   const dailyUrl = new URL(`${BASE}/${adAccountId}/insights`)
   dailyUrl.searchParams.set('fields', insightFields)
-  dailyUrl.searchParams.set('date_preset', 'last_30d')
+  Object.entries(dateRange).forEach(([k, v]) => dailyUrl.searchParams.set(k, v))
   dailyUrl.searchParams.set('time_increment', '1')
   dailyUrl.searchParams.set('level', 'account')
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
   const adLevelUrl = new URL(`${BASE}/${adAccountId}/insights`)
   adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
-  adLevelUrl.searchParams.set('date_preset', 'last_30d')
+  Object.entries(dateRange).forEach(([k, v]) => adLevelUrl.searchParams.set(k, v))
   adLevelUrl.searchParams.set('level', 'ad')
   adLevelUrl.searchParams.set('limit', '100')
   adLevelUrl.searchParams.set('access_token', userAccessToken)
