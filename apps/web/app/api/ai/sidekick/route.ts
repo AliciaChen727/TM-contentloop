@@ -47,11 +47,12 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 ${memoryBlock}
 你的回應格式必須是繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止輸出任何說明文字，只輸出 JSON 本身：
 {
-  "type": "analysis" | "recommendation" | "warning" | "actions" | "general",
+  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request",
   "summary": "一句話摘要",
   "bullets": ["重點1", "重點2", "重點3"],
   "stats": [{"label": "指標名", "value": "數值"}],
-  "actions": ["建議行動1", "建議行動2", "建議行動3"]
+  "actions": ["建議行動1", "建議行動2", "建議行動3"],
+  "imagePrompt": "（僅在 type 為 image_request 時填入）英文圖像生成提示詞"
 }
 
 規則：
@@ -60,6 +61,10 @@ ${memoryBlock}
 - actions 最多 4 條，具體可執行
 - 如果沒有相關數據，stats 可以為空陣列
 - 根據實際數據給建議，不要捏造數字
+- 當使用者詢問廣告素材、圖片、視覺設計，或說「生成」「做一張」「廣告圖」「素材」時：
+  - 回傳 type: "image_request"
+  - 填入 imagePrompt：英文圖像生成提示詞，格式範例：
+    "Professional Facebook/Instagram ad for [主題與情境], vibrant colors, clean modern design, high quality, social media advertisement style"
 ${metricsBlock}`
 }
 

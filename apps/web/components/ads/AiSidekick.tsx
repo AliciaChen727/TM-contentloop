@@ -10,6 +10,7 @@ interface AiResponse {
   bullets: string[]
   stats: { label: string; value: string }[]
   actions: string[]
+  imagePrompt?: string
 }
 
 export interface MetricsContext {
@@ -26,7 +27,8 @@ export interface MetricsContext {
 
 const SUGGESTIONS_BY_PAGE: Record<string, string[]> = {
   posts: ['這期間哪類貼文互動率最高？', '我的 Reels 和圖文貼文哪個表現更好？', '如何優化下一篇貼文的文案？', '分享數偏低的原因可能是什麼？'],
-  default: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '我的受眾是否疲乏了？', '建議我本週的操作清單'],
+  creative: ['幫我生成一張廣告素材', '根據表現最差的廣告建議新素材方向', '如何改善 CTR 偏低的廣告圖？', '哪種圖文風格最適合這個受眾？'],
+  default: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '我的受眾是否疲乏了？', '幫我生成一張廣告素材'],
 }
 
 interface Message {
@@ -35,6 +37,8 @@ interface Message {
   text: string
   time: string
   response?: AiResponse | null
+  imageUrl?: string
+  imageLoading?: boolean
 }
 
 function AiMessageBody({ r }: { r: AiResponse }) {
@@ -93,8 +97,28 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, metricsC
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
   const [showCtx, setShowCtx] = useState(true)
+  const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
+
+  const generateImage = useCallback(async (msgId: string, prompt: string) => {
+    const user = auth.currentUser
+    const idToken = user ? await user.getIdToken() : null
+    if (!idToken) return
+    try {
+      const res = await fetch('/api/ai/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ prompt }),
+      })
+      const data = await res.json()
+      setMessages(p => p.map(m => m.id === msgId
+        ? { ...m, imageLoading: false, imageUrl: data.imageData ? `data:${data.mimeType};base64,${data.imageData}` : undefined }
+        : m))
+    } catch {
+      setMessages(p => p.map(m => m.id === msgId ? { ...m, imageLoading: false } : m))
+    }
+  }, [])
 
   useEffect(() => {
     if (open && initialPrompt) { setInput(initialPrompt); setTimeout(() => textareaRef.current?.focus(), 400) }
@@ -120,13 +144,16 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, metricsC
       })
       const data = await res.json()
       const r: AiResponse = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
-      setMessages(p => [...p, { id: Date.now() + 'a', role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r }])
+      const aiMsgId = String(Date.now()) + 'a'
+      const aiTime = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+      setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: aiTime, response: r, imageLoading: r.type === 'image_request' }])
+      if (r.type === 'image_request' && r.imagePrompt) generateImage(aiMsgId, r.imagePrompt)
     } catch {
       setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '網路錯誤，請稍後再試。', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
     } finally {
       setTyping(false)
     }
-  }, [input, contextPage, metricsContext])
+  }, [input, contextPage, metricsContext, generateImage])
 
   const suggestions = SUGGESTIONS_BY_PAGE[contextPage] ?? SUGGESTIONS_BY_PAGE.default
   const ctxLabels: Record<string, string> = { overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', time: '最佳時段', budget: '預算模擬', posts: '內容表現' }
@@ -155,6 +182,25 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, metricsC
                   <div className="ads-sk-msg-text">
                     {msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
                     {msg.response && <AiMessageBody r={msg.response} />}
+                    {msg.imageLoading && (
+                      <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎨 生成圖片中⋯</div>
+                    )}
+                    {msg.imageUrl && (
+                      <div style={{ marginTop: 8 }}>
+                        <img src={msg.imageUrl} alt="生成的廣告素材" style={{ width: '100%', borderRadius: 8 }} />
+                        <textarea
+                          value={editedPrompts[msg.id] ?? (msg.response?.imagePrompt ?? '')}
+                          onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                          style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }}
+                        />
+                        <button className="ads-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => {
+                          const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
+                          if (!prompt) return
+                          setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageUrl: undefined, imageLoading: true } : m))
+                          generateImage(msg.id, prompt)
+                        }}>↻ 重新生成</button>
+                      </div>
+                    )}
                   </div>
                   <div className="ads-sk-msg-time">{msg.time}</div>
                 </div>
