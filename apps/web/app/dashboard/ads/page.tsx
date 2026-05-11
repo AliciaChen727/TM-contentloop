@@ -185,12 +185,12 @@ function buildAdData(raw: any): AdData {
   const s = raw.summary ?? {}
   const from = raw.dateRange?.from ?? ''
   const to = raw.dateRange?.to ?? ''
-  const creatives = Array.isArray(raw.adCreatives) && raw.adCreatives.length > 0
+  const creatives = Array.isArray(raw.adCreatives)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? raw.adCreatives.map((c: any, i: number) => mapRawAdCreative(c, i))
-    : MOCK_DATA.creatives
+    : []
   const budget = MOCK_DATA.overview.summary.budget
-  const realCreatives = creatives !== MOCK_DATA.creatives && creatives.length > 0
+  const realCreatives = creatives.length > 0
   const diagnosis = buildDiagnosis(s as Record<string, number>, realCreatives ? creatives : [], budget)
 
   // Real adsets from per-creative data
@@ -202,7 +202,7 @@ function buildAdData(raw: any): AdData {
         roas: c.roas,
         cpa: Math.round(c.cpa),
       }))
-    : MOCK_DATA.budget.adsets
+    : []
 
   // Real weekly ROAS from daily data
   const DAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
@@ -220,7 +220,7 @@ function buildAdData(raw: any): AdData {
     roas: dayMap[dow] ? parseFloat((dayMap[dow].sum / dayMap[dow].count).toFixed(2)) : 0,
     spend: 0,
   }))
-  const realWeekly = weeklyRoas.some(w => w.roas > 0) ? weeklyRoas : MOCK_DATA.bestTime.weekly
+  const realWeekly = weeklyRoas
 
   // Real hourly ROAS from breakdown data
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -230,7 +230,7 @@ function buildAdData(raw: any): AdData {
         const h = rawHourly.find(r => r.hour === hour)
         return { hour, roas: h?.roas ?? 0, spend: h?.spend ?? 0 }
       })
-    : MOCK_DATA.bestTime.hourly
+    : Array.from({ length: 24 }, (_, hour) => ({ hour, roas: 0, spend: 0 }))
 
   const conversionType: string = s.conversionType ?? raw.conversionType ?? 'purchase'
 
