@@ -126,7 +126,7 @@ export function SvgBarChart({ data, dataKey, labelKey, height = 140, refLine }: 
   const maxV = maxVRaw > 0 ? maxVRaw : 1
   const W = 400, H = height, pad = { t: 8, r: 8, b: 24, l: 32 }
   const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b
-  const bw = safeBarData.length > 0 ? cW / safeBarData.length : cW
+  const bw = safeBarData.length > 0 ? cW / safeBarData.length : cW, bGap = bw * 0.3
   const yS = (v: number) => cH - (v / (maxV * 1.12)) * cH
 
   return (
