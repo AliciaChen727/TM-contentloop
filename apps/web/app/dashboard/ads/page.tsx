@@ -344,7 +344,11 @@ export default function AdsPage() {
     return unsub
   }, [router])
 
-  async function handleSync() {
+  async function handleSync(since?: string, until?: string) {
+    const syncFrom = since ?? dateFrom
+    const syncTo = until ?? dateTo
+    if (since) setDateFrom(since)
+    if (until) setDateTo(until)
     setSyncing(true)
     setSyncError(null)
     try {
@@ -354,7 +358,7 @@ export default function AdsPage() {
       const res = await fetch('/api/ads/sync', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: selectedPageId, since: dateFrom, until: dateTo }),
+        body: JSON.stringify({ pageId: selectedPageId, since: syncFrom, until: syncTo }),
       })
       const json = await res.json()
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
@@ -514,15 +518,23 @@ export default function AdsPage() {
                       style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)', outline: 'none' }} />
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                    {[['近 7 天', 7], ['近 14 天', 14], ['近 30 天', 30]].map(([label, days]) => (
+                    {([['近 7 天', 7], ['近 14 天', 14], ['近 30 天', 30]] as [string, number][]).map(([label, days]) => (
                       <button key={label} style={{ flex: 1, padding: '5px 0', fontSize: 11.5, border: '1px solid var(--ad-border)', borderRadius: 6, background: 'var(--ad-surface)', cursor: 'pointer', color: 'var(--ad-text2)' }}
-                        onClick={() => { const to = new Date(); to.setDate(to.getDate() - 1); const from = new Date(); from.setDate(from.getDate() - (days as number)); setDateFrom(from.toISOString().slice(0, 10)); setDateTo(to.toISOString().slice(0, 10)) }}>
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const to = new Date()
+                          const from = new Date(); from.setDate(from.getDate() - days)
+                          const f = from.toISOString().slice(0, 10)
+                          const t = to.toISOString().slice(0, 10)
+                          setShowDatePicker(false)
+                          handleSync(f, t)
+                        }}>
                         {label}
                       </button>
                     ))}
                   </div>
                   <button className="ads-btn primary" style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
-                    onClick={() => { setShowDatePicker(false); handleSync() }}>
+                    onClick={(e) => { e.stopPropagation(); setShowDatePicker(false); handleSync() }}>
                     套用並同步資料
                   </button>
                 </div>
@@ -532,7 +544,7 @@ export default function AdsPage() {
           <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
             ✨ AI Sidekick
           </button>
-          <button className="ads-btn" onClick={handleSync} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
+          <button className="ads-btn" onClick={() => handleSync()} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
             {syncing ? '同步中⋯' : syncError ? `⚠ ${syncError}` : '↻ 同步廣告資料'}
           </button>
           <div style={{ position: 'relative' }}>
