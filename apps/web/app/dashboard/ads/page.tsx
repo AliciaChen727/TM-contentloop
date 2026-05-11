@@ -388,7 +388,7 @@ export default function AdsPage() {
     const payload = {
       exportedAt: new Date().toISOString(),
       page: selectedPageName || 'unknown',
-      dateRange: adData.overview.dateRange,
+      dateRange: `${dateFrom} ~ ${dateTo}`,
       summary: adData.overview.summary,
       dailySpend: adData.overview.dailySpend,
       creatives: adData.creatives,
@@ -400,7 +400,7 @@ export default function AdsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ads-report-${adData.overview.dateRange.replace(/[\s~]+/g, '_')}.json`
+    a.download = `ads-report-${dateFrom}_${dateTo}.json`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
     setShowExportMenu(false)
@@ -414,7 +414,7 @@ export default function AdsPage() {
 
     row('整體指標', '')
     row('指標', '數值')
-    row('日期範圍', adData.overview.dateRange)
+    row('日期範圍', `${dateFrom} ~ ${dateTo}`)
     row('總花費', s.spend ?? 0)
     row('ROAS', s.roas ?? 0)
     row('CTR (%)', s.ctr ?? 0)
@@ -441,7 +441,7 @@ export default function AdsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ads-report-${adData.overview.dateRange.replace(/[\s~]+/g, '_')}.csv`
+    a.download = `ads-report-${dateFrom}_${dateTo}.csv`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
     setShowExportMenu(false)
