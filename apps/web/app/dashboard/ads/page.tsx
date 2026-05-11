@@ -30,7 +30,9 @@ const NAV_LABELS: Record<NavId, string> = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapFbPost(p: any, adPostIds: Set<string>): Post {
+function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number }>): Post {
+  const hasAd = adPostIds.has(p.id) || (p.insights?.paidReach ?? 0) > 0
+  const metrics = adPostMetrics?.[p.id]
   return {
     id: p.id,
     date: p.createdTime?.slice(0, 10) ?? '',
@@ -44,9 +46,13 @@ function mapFbPost(p: any, adPostIds: Set<string>): Post {
     plays: null,
     type: 'post',
     url: p.permalink || '#',
-    hasAd: adPostIds.has(p.id) || (p.insights?.paidReach ?? 0) > 0,
+    hasAd,
     paidReach: p.insights?.paidReach ?? 0,
     organicReach: p.insights?.organicReach ?? 0,
+    adRoas: metrics?.roas,
+    adSpend: metrics?.spend,
+    adCpa: metrics?.cpa,
+    adCtr: metrics?.ctr,
   }
 }
 
@@ -286,18 +292,21 @@ export default function AdsPage() {
   const [selectedPageId, setSelectedPageId] = useState('')
   const [selectedPageName, setSelectedPageName] = useState('')
 
-  async function fetchAdData(idToken: string, pageId?: string): Promise<Set<string>> {
+  async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> }> {
     const pid = pageId ?? selectedPageId
     const qs = pid ? `?pageId=${pid}` : ''
     const res = await fetch(`/api/ads/data${qs}`, { headers: { Authorization: `Bearer ${idToken}` } })
-    if (!res.ok) return new Set()
+    if (!res.ok) return { adPostIds: new Set(), adPostMetrics: {} }
     const json = await res.json()
     if (json.data) {
       setAdData(buildAdData(json.data))
       setLastSync(json.data.syncedAt ?? null)
-      return new Set<string>(json.data.adPostIds ?? [])
+      return {
+        adPostIds: new Set<string>(json.data.adPostIds ?? []),
+        adPostMetrics: json.data.adPostMetrics ?? {},
+      }
     }
-    return new Set()
+    return { adPostIds: new Set(), adPostMetrics: {} }
   }
 
   useEffect(() => {
@@ -321,6 +330,7 @@ export default function AdsPage() {
 
         const adJson = adRes.ok ? await adRes.json() : null
         const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
+        const initialAdPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.adPostMetrics ?? {}
         if (adJson?.data) {
           setAdData(buildAdData(adJson.data))
           setLastSync(adJson.data.syncedAt ?? null)
@@ -329,7 +339,7 @@ export default function AdsPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fbJson = fbRes.ok ? await fbRes.json() : null
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fbPosts: Post[] = (fbJson?.posts ?? []).filter((p: any) => p.message).map((p: any) => mapFbPost(p, initialAdPostIds))
+        const fbPosts: Post[] = (fbJson?.posts ?? []).filter((p: any) => p.message).map((p: any) => mapFbPost(p, initialAdPostIds, initialAdPostMetrics))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const igJson = igRes.ok ? await igRes.json() : null
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -370,8 +380,13 @@ export default function AdsPage() {
       })
       const json = await res.json()
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
-      const newIds = await fetchAdData(idToken, selectedPageId)
-      setRealPosts(prev => prev ? prev.map(p => p.platform === 'FB' ? { ...p, hasAd: newIds.has(p.id) } : p) : prev)
+      const { adPostIds: newIds, adPostMetrics: newMetrics } = await fetchAdData(idToken, selectedPageId)
+      setRealPosts(prev => prev ? prev.map(p => {
+        if (p.platform !== 'FB') return p
+        const hasAd = newIds.has(p.id) || (p.paidReach ?? 0) > 0
+        const m = newMetrics[p.id]
+        return { ...p, hasAd, adRoas: m?.roas ?? p.adRoas, adSpend: m?.spend ?? p.adSpend, adCpa: m?.cpa ?? p.adCpa, adCtr: m?.ctr ?? p.adCtr }
+      }) : prev)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步失敗')
     } finally {
