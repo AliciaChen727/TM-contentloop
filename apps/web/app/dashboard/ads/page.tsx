@@ -383,9 +383,15 @@ export default function AdsPage() {
       const { adPostIds: newIds, adPostMetrics: newMetrics } = await fetchAdData(idToken, selectedPageId)
       setRealPosts(prev => prev ? prev.map(p => {
         if (p.platform !== 'FB') return p
-        const hasAd = newIds.has(p.id) || (p.paidReach ?? 0) > 0
         const m = newMetrics[p.id]
-        return { ...p, hasAd, adRoas: m?.roas ?? p.adRoas, adSpend: m?.spend ?? p.adSpend, adCpa: m?.cpa ?? p.adCpa, adCtr: m?.ctr ?? p.adCtr }
+        return {
+          ...p,
+          hasAd: p.hasAd || newIds.has(p.id),  // never demote; only promote
+          adRoas: m?.roas ?? p.adRoas,
+          adSpend: m?.spend ?? p.adSpend,
+          adCpa: m?.cpa ?? p.adCpa,
+          adCtr: m?.ctr ?? p.adCtr,
+        }
       }) : prev)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步失敗')
