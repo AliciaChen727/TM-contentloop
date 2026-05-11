@@ -178,17 +178,38 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
   }
   const adsList: { id: string; name: string; effective_status: string }[] = adsListData.data ?? []
-  const adCreatives: Record<string, unknown>[] = adsList.length > 0
+  const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
     ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
     : (adLevelData.data ?? [])
 
-  // Build adPostIds + adPostMetrics: link ad creatives to FB page posts
+  // Filter creatives to only those belonging to the current page
+  const adCreatives = pageId
+    ? allAdCreatives.filter(c => {
+        const storyId = c.effective_object_story_id as string | undefined
+        return !storyId || storyId.startsWith(`${pageId}_`)
+      })
+    : allAdCreatives
+
+  // Fetch last_90d ad-level data for adPostMetrics (independent of selected date range)
+  // so 內容表現 always shows real metrics even if current window doesn't overlap the campaign
+  const adLevelAllTimeUrl = new URL(`${BASE}/${adAccountId}/insights`)
+  adLevelAllTimeUrl.searchParams.set('fields', 'ad_id,effective_object_story_id,spend,ctr,actions,action_values')
+  adLevelAllTimeUrl.searchParams.set('date_preset', 'last_90d')
+  adLevelAllTimeUrl.searchParams.set('level', 'ad')
+  adLevelAllTimeUrl.searchParams.set('limit', '200')
+  adLevelAllTimeUrl.searchParams.set('access_token', userAccessToken)
+  const adLevelAllTimeRes = await fetch(adLevelAllTimeUrl)
+  const adLevelAllTimeData = await adLevelAllTimeRes.json()
+  const adLevelAllTime: Record<string, unknown>[] = (adLevelAllTimeData.data ?? []) as Record<string, unknown>[]
+
+  // Build adPostIds + adPostMetrics from 90d data, filtered by pageId
   const adPostIds: string[] = []
   const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
-  for (const c of adCreatives) {
+  for (const c of adLevelAllTime) {
     const storyId = c.effective_object_story_id as string | undefined
     if (!storyId) continue
-    const postId = storyId  // Meta returns full ID like "pageId_postId"
+    if (pageId && !storyId.startsWith(`${pageId}_`)) continue
+    const postId = storyId
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -202,8 +223,12 @@ export async function POST(req: NextRequest) {
       : 0
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
-    adPostIds.push(postId)
-    adPostMetrics[postId] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    if (!adPostIds.includes(postId)) adPostIds.push(postId)
+    // Keep highest-spend metrics if same post appears multiple times (different ad sets)
+    const existing = adPostMetrics[postId]
+    if (!existing || cSpend > existing.spend) {
+      adPostMetrics[postId] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    }
   }
 
   const insightsRef = pageId
