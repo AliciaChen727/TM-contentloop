@@ -166,7 +166,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string,
 
 // ── Ads Sync ──────────────────────────────────────────────────────────────────
 
-async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string): Promise<{ adAccountId?: string; spend?: number; reach?: number; conversionType?: string; linkClicks?: number; videoViews?: number; error?: string }> {
+async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string): Promise<{ adAccountId?: string; spend?: number; reach?: number; conversionType?: string; linkClicks?: number; videoViews?: number; pageAdsCount?: number; error?: string }> {
   const accountsUrl = new URL(`${BASE}/me/adaccounts`)
   accountsUrl.searchParams.set('fields', 'id,name')
   accountsUrl.searchParams.set('access_token', userAccessToken)
