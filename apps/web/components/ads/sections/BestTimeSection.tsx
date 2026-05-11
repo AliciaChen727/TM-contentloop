@@ -8,7 +8,8 @@ export function BestTimeSection({ data }: { data: AdData }) {
   const hasRealHourly = data.bestTime.hourly.some(h => h.roas > 0)
   const maxRoas = Math.max(...data.bestTime.hourly.map(h => h.roas))
   const getColor = (r: number) => {
-    const t = (r - 1) / (maxRoas - 1)
+    const range = maxRoas > 1 ? maxRoas - 1 : 1
+    const t = (r - 1) / range
     return t > 0.8 ? '#3B6FD4' : t > 0.6 ? '#6B9AE8' : t > 0.4 ? '#A3BEF0' : t > 0.2 ? '#C2D4F5' : '#E8EFF9'
   }
 
