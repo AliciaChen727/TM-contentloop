@@ -143,6 +143,11 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, metricsC
         body: JSON.stringify({ message: t, contextPage, metricsContext }),
       })
       const data = await res.json()
+      if (!res.ok) {
+        const errMsg = data.error ?? `伺服器錯誤 (${res.status})`
+        setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: errMsg, time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
+        return
+      }
       const r: AiResponse = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
       const aiMsgId = String(Date.now()) + 'a'
       const aiTime = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })

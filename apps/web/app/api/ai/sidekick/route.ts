@@ -108,12 +108,18 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined)
 
-  const claudeRes = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: message }],
-  })
+  let claudeRes
+  try {
+    claudeRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: message }],
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json({ error: 'Claude API error: ' + msg }, { status: 500 })
+  }
 
   const rawText = claudeRes.content[0].type === 'text' ? claudeRes.content[0].text : ''
   const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
@@ -125,14 +131,15 @@ export async function POST(req: NextRequest) {
     parsed = { type: 'general', summary: cleaned, bullets: [], stats: [], actions: [] }
   }
 
-  // Save to Firestore for Cowork memory
-  await adminDb.collection('users').doc(uid).collection('aiInsights').add({
-    question: message,
-    response: parsed,
-    contextPage,
-    metricsSnapshot: metricsContext ?? null,
-    createdAt: FieldValue.serverTimestamp(),
-  })
+  try {
+    await adminDb.collection('users').doc(uid).collection('aiInsights').add({
+      question: message,
+      response: parsed,
+      contextPage,
+      metricsSnapshot: metricsContext ?? null,
+      createdAt: FieldValue.serverTimestamp(),
+    })
+  } catch { /* non-critical */ }
 
   return NextResponse.json({ response: parsed })
 }
