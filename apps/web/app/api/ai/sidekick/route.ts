@@ -89,22 +89,24 @@ export async function POST(req: NextRequest) {
 
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
 
-  const pastSnap = await adminDb
-    .collection('users').doc(uid)
-    .collection('aiInsights')
-    .where('contextPage', '==', contextPage)
-    .orderBy('createdAt', 'desc')
-    .limit(5)
-    .get()
-
-  const memory = pastSnap.docs
-    .map(d => {
-      const r = (d.data().response ?? {}) as { summary?: string; actions?: string[] }
-      const actions = (r.actions ?? []).slice(0, 2).join('、')
-      return `• ${r.summary ?? ''}${actions ? `（建議：${actions}）` : ''}`
-    })
-    .filter(Boolean)
-    .join('\n')
+  let memory = ''
+  try {
+    const pastSnap = await adminDb
+      .collection('users').doc(uid)
+      .collection('aiInsights')
+      .where('contextPage', '==', contextPage)
+      .orderBy('createdAt', 'desc')
+      .limit(5)
+      .get()
+    memory = pastSnap.docs
+      .map(d => {
+        const r = (d.data().response ?? {}) as { summary?: string; actions?: string[] }
+        const actions = (r.actions ?? []).slice(0, 2).join('、')
+        return `• ${r.summary ?? ''}${actions ? `（建議：${actions}）` : ''}`
+      })
+      .filter(Boolean)
+      .join('\n')
+  } catch { /* Firestore index missing or other error: non-critical, proceed without memory */ }
 
   const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined)
 
