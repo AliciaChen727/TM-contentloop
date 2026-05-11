@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
 
   await insightsRef.set({
     syncedAt: Timestamp.now(),
-    dateRange: { from: dateFrom, to: dateTo },
+    dateRange: { from: since ?? dateFrom, to: until ?? dateTo },
     adAccountId,
     conversionType,
     summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
