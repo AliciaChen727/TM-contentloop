@@ -270,6 +270,7 @@ export default function AdsPage() {
   const [active, setActive] = useState<NavId>('overview')
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const [realPosts, setRealPosts] = useState<Post[] | null>(null)
   const [adData, setAdData] = useState<AdData>(MOCK_DATA)
   const [lastSync, setLastSync] = useState<string | null>(null)
@@ -364,6 +365,69 @@ export default function AdsPage() {
     setSkOpen(true)
   }, [])
 
+  function exportJSON() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      page: selectedPageName || 'unknown',
+      dateRange: adData.overview.dateRange,
+      summary: adData.overview.summary,
+      dailySpend: adData.overview.dailySpend,
+      creatives: adData.creatives,
+      diagnosis: adData.diagnosis.map(d => ({ severity: d.severity, title: d.title, desc: d.desc, action: d.action })),
+      bestTime: adData.bestTime,
+      budget: { ...adData.budget },
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ads-report-${adData.overview.dateRange.replace(/[\s~]+/g, '_')}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setShowExportMenu(false)
+  }
+
+  function exportCSV() {
+    const s = adData.overview.summary
+    const lines: string[] = []
+    const row = (...cols: (string | number | undefined)[]) =>
+      lines.push(cols.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+
+    row('整體指標', '')
+    row('指標', '數值')
+    row('日期範圍', adData.overview.dateRange)
+    row('總花費', s.spend ?? 0)
+    row('ROAS', s.roas ?? 0)
+    row('CTR (%)', s.ctr ?? 0)
+    row('CPA', s.cpa ?? 0)
+    row('總觸及', s.reach ?? 0)
+    row('頻率', s.frequency ?? 0)
+    lines.push('')
+
+    row('素材績效', '', '', '', '', '')
+    row('名稱', '花費', 'ROAS', 'CTR(%)', 'CPA', '狀態')
+    adData.creatives.forEach(c => row(c.name, c.spend, c.roas, c.ctr, c.cpa, c.status))
+    lines.push('')
+
+    row('每日花費', '', '', '')
+    row('日期', '花費', '營收', 'ROAS')
+    adData.overview.dailySpend?.forEach(d => row(d.date, d.spend, d.revenue, d.roas))
+    lines.push('')
+
+    row('診斷項目', '', '', '')
+    row('嚴重度', '標題', '描述', '建議行動')
+    adData.diagnosis.forEach(d => row(d.severity, d.title, d.desc, d.action))
+
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ads-report-${adData.overview.dateRange.replace(/[\s~]+/g, '_')}.csv`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setShowExportMenu(false)
+  }
+
   if (!authed) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -435,9 +499,20 @@ export default function AdsPage() {
           <button className="ads-btn" onClick={handleSync} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
             {syncing ? '同步中⋯' : syncError ? `⚠ ${syncError}` : '↻ 同步廣告資料'}
           </button>
-          <button className="ads-btn primary">
-            <Icon name="download" size={13} color="white" />匯出報告
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button className="ads-btn primary" onClick={() => setShowExportMenu(p => !p)}>
+              <Icon name="download" size={13} color="white" />匯出報告 ▾
+            </button>
+            {showExportMenu && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowExportMenu(false)} />
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', border: '1px solid var(--ad-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 148, overflow: 'hidden' }}>
+                  <button style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }} onClick={exportJSON}>📦 匯出 JSON</button>
+                  <button style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }} onClick={exportCSV}>📊 匯出 CSV</button>
+                </div>
+              </>
+            )}
+          </div>
         </header>
 
         <main className="ads-content">
