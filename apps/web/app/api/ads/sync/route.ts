@@ -43,20 +43,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No user access token. Please reconnect Meta to grant ads_read.' }, { status: 400 })
   }
 
-  // Get ad accounts
-  const accountsUrl = new URL(`${BASE}/me/adaccounts`)
-  accountsUrl.searchParams.set('fields', 'id,name')
-  accountsUrl.searchParams.set('access_token', userAccessToken)
-  const accountsRes = await fetch(accountsUrl)
-  const accountsData = await accountsRes.json()
-  if (!accountsRes.ok || accountsData.error) {
-    return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
+  // Get ad accounts: prefer page-linked accounts when pageId is known
+  let adAccountId: string
+  if (pageId) {
+    const pageAdAccountsUrl = new URL(`${BASE}/${pageId}/adaccounts`)
+    pageAdAccountsUrl.searchParams.set('fields', 'id,name')
+    pageAdAccountsUrl.searchParams.set('access_token', userAccessToken)
+    const pageAdAccountsRes = await fetch(pageAdAccountsUrl)
+    const pageAdAccountsData = await pageAdAccountsRes.json()
+    const pageAccounts: { id: string; name: string }[] = pageAdAccountsData.data ?? []
+    if (pageAccounts.length > 0) {
+      adAccountId = pageAccounts[0].id
+    } else {
+      // Fallback to user-level accounts list
+      const accountsUrl = new URL(`${BASE}/me/adaccounts`)
+      accountsUrl.searchParams.set('fields', 'id,name')
+      accountsUrl.searchParams.set('access_token', userAccessToken)
+      const accountsRes = await fetch(accountsUrl)
+      const accountsData = await accountsRes.json()
+      if (!accountsRes.ok || accountsData.error) {
+        return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
+      }
+      const accounts: { id: string; name: string }[] = accountsData.data ?? []
+      if (!accounts.length) {
+        return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
+      }
+      adAccountId = accounts[0].id
+    }
+  } else {
+    const accountsUrl = new URL(`${BASE}/me/adaccounts`)
+    accountsUrl.searchParams.set('fields', 'id,name')
+    accountsUrl.searchParams.set('access_token', userAccessToken)
+    const accountsRes = await fetch(accountsUrl)
+    const accountsData = await accountsRes.json()
+    if (!accountsRes.ok || accountsData.error) {
+      return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
+    }
+    const accounts: { id: string; name: string }[] = accountsData.data ?? []
+    if (!accounts.length) {
+      return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
+    }
+    adAccountId = accounts[0].id
   }
-  const accounts: { id: string; name: string }[] = accountsData.data ?? []
-  if (!accounts.length) {
-    return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
-  }
-  const adAccountId = accounts[0].id
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 
