@@ -5,8 +5,8 @@ import { SvgBarChart } from '../SvgCharts'
 import type { AdData } from '../types'
 
 export function BestTimeSection({ data }: { data: AdData }) {
-  const hourly = hourly ?? []
-  const weekly = weekly ?? []
+  const hourly = data.bestTime.hourly ?? []
+  const weekly = data.bestTime.weekly ?? []
   const hasRealHourly = hourly.some(h => h.roas > 0)
   const maxRoas = Math.max(...hourly.map(h => h.roas), 0)
   const getColor = (r: number) => {
