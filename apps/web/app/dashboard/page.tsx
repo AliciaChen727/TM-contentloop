@@ -101,19 +101,22 @@ export default function DashboardPage() {
       if (pageList.length === 0) {
         const tokenSnap = await getDoc(doc(db, 'users', u.uid, 'metaTokens', 'page'))
         if (tokenSnap.exists()) setPageData(tokenSnap.data() as PageTokenData)
-      } else {
-        const first = pageList[0]
-        setPageData({ pageId: first.pageId, pageName: first.pageName, igUserId: first.igUserId })
       }
 
-      const firstPageId = pageList[0]?.pageId ?? ''
-      const firstPageName = pageList[0]?.pageName ?? ''
-      setSelectedPageId(firstPageId)
-      if (firstPageId) {
-        localStorage.setItem('selectedPageId', firstPageId)
-        localStorage.setItem('selectedPageName', firstPageName)
+      // Respect previously selected page; fall back to first page
+      const savedPageId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
+      const savedPage = pageList.find(p => p.pageId === savedPageId)
+      const activePage = savedPage ?? pageList[0]
+      const activePageId = activePage?.pageId ?? ''
+      const activePageName = activePage?.pageName ?? ''
+
+      if (activePage) setPageData({ pageId: activePage.pageId, pageName: activePage.pageName, igUserId: activePage.igUserId })
+      setSelectedPageId(activePageId)
+      if (activePageId) {
+        localStorage.setItem('selectedPageId', activePageId)
+        localStorage.setItem('selectedPageName', activePageName)
       }
-      await fetchPosts(idToken, firstPageId)
+      await fetchPosts(idToken, activePageId)
       setLoading(false)
     })
     return unsub
