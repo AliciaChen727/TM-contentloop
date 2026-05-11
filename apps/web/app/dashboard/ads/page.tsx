@@ -344,6 +344,14 @@ export default function AdsPage() {
     return unsub
   }, [router])
 
+  useEffect(() => {
+    const parts = adData.overview.dateRange?.split(' ~ ')
+    if (parts?.length === 2 && parts[0] && parts[1]) {
+      setDateFrom(parts[0])
+      setDateTo(parts[1])
+    }
+  }, [adData.overview.dateRange])
+
   async function handleSync(since?: string, until?: string) {
     const syncFrom = since ?? dateFrom
     const syncTo = until ?? dateTo
@@ -503,7 +511,7 @@ export default function AdsPage() {
           </div>
           <div style={{ position: 'relative' }}>
             <div className="ads-date-pill" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowDatePicker(p => !p)}>
-              <Icon name="calendar" size={12} />{adData.overview.dateRange} ▾
+              <Icon name="calendar" size={12} />{dateFrom} ~ {dateTo} ▾
             </div>
             {showDatePicker && (
               <>
