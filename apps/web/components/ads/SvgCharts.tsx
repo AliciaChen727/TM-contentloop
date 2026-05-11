@@ -21,7 +21,8 @@ export function SvgChart({ data, lines, height = 160, roasTarget, yFmt }: {
   const pad = { t: 10, r: 12, b: 28, l: 44 }
   const W = 460, H = height
   const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b
-  const n = data.length
+  const safeData = data ?? []
+  const n = safeData.length
 
   if (n === 0) {
     return (
@@ -31,12 +32,12 @@ export function SvgChart({ data, lines, height = 160, roasTarget, yFmt }: {
     )
   }
 
-  const allVals = lines.flatMap(l => data.map(d => d[l.key] as number))
+  const allVals = lines.flatMap(l => safeData.map(d => d[l.key] as number))
   const minV = Math.min(...allVals) * 0.9, maxVRaw = Math.max(...allVals) * 1.08
   const maxV = maxVRaw === minV ? minV + 1 : maxVRaw
   const x = (i: number) => n <= 1 ? cW / 2 : (i / (n - 1)) * cW
   const y = (v: number) => cH - ((v - minV) / (maxV - minV)) * cH
-  const makePath = (k: string) => data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(d[k] as number)}`).join(' ')
+  const makePath = (k: string) => safeData.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(d[k] as number)}`).join(' ')
   const makeArea = (k: string) => `${makePath(k)} L${x(n - 1)},${cH} L0,${cH} Z`
 
   const handleMM = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -120,11 +121,12 @@ export function SvgBarChart({ data, dataKey, labelKey, height = 140, refLine }: 
   refLine?: number
 }) {
   const [hover, setHover] = useState<number | null>(null)
-  const maxVRaw = Math.max(...data.map(d => d[dataKey] as number))
+  const safeBarData = data ?? []
+  const maxVRaw = safeBarData.length > 0 ? Math.max(...safeBarData.map(d => d[dataKey] as number)) : 0
   const maxV = maxVRaw > 0 ? maxVRaw : 1
   const W = 400, H = height, pad = { t: 8, r: 8, b: 24, l: 32 }
   const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b
-  const bw = cW / data.length, bGap = bw * 0.3
+  const bw = safeBarData.length > 0 ? cW / safeBarData.length : cW
   const yS = (v: number) => cH - (v / (maxV * 1.12)) * cH
 
   return (
@@ -140,7 +142,7 @@ export function SvgBarChart({ data, dataKey, labelKey, height = 140, refLine }: 
           )
         })}
         {refLine && <line x1={0} y1={yS(refLine)} x2={cW} y2={yS(refLine)} stroke="#C96A1A" strokeDasharray="5 4" strokeWidth={1.5} />}
-        {data.map((d, i) => {
+        {safeBarData.map((d, i) => {
           const bx = i * bw + bGap / 2, bh = cH - yS(d[dataKey] as number), by = yS(d[dataKey] as number)
           const isHigh = (d[dataKey] as number) === maxV
           return (

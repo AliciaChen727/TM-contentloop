@@ -84,11 +84,11 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
       <div className="ads-grid-2">
         <div className="ads-card ads-card-pad">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>每日花費 vs 營收</div>
-          <SvgChart data={data.overview.dailySpend} height={170} lines={[{ key: 'revenue', label: '營收', color: '#3B6FD4', isCurr: true }, { key: 'spend', label: '花費', color: '#2E8B57', isCurr: true }]} />
+          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'revenue', label: '營收', color: '#3B6FD4', isCurr: true }, { key: 'spend', label: '花費', color: '#2E8B57', isCurr: true }]} />
         </div>
         <div className="ads-card ads-card-pad">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isVideoBased ? '每日觀看效益趨勢' : isClickBased ? '每日效益指數趨勢' : '每日 ROAS 趨勢'}</div>
-          <SvgChart data={data.overview.dailySpend} height={170} lines={[{ key: 'roas', label: 'ROAS', color: '#3B6FD4' }]} roasTarget={s.roasTarget} />
+          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: 'ROAS', color: '#3B6FD4' }]} roasTarget={s.roasTarget} />
         </div>
       </div>
 
