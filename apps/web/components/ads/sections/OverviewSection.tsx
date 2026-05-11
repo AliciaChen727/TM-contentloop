@@ -20,16 +20,20 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
   const cpaLabel = isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'
   const cpaQ = isVideoBased ? 'CPV 如何進一步降低？' : isClickBased ? 'CPC 如何進一步降低？' : 'CPA 如何進一步降低？'
   const convLabel = isVideoBased ? '影片觀看' : isClickBased ? '點擊數' : '轉換數'
-  const convMeta = isVideoBased ? '影片觀看次數' : isClickBased ? '連結點擊次數' : `營收 ${fmtK(s.revenue)}`
+  const convMeta = isVideoBased ? '影片觀看次數' : isClickBased ? '連結點擊次數' : `營收 ${fmtK(s.revenue ?? 0)}`
+  const roas = s.roas ?? 0
+  const frequency = s.frequency ?? 0
+  const reach = s.reach ?? 0
+  const impressions = s.impressions ?? 0
   const kpis = [
-    { label: roasLabel, value: s.roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: s.roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${s.roas >= s.roasTarget ? '+' : ''}${((s.roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: s.roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : '這週 ROAS 為什麼下降？' },
-    { label: '總花費', value: fmtK(s.spend), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
-    { label: cpaLabel, value: `$${fmt(s.cpa)}`, meta: `目標 $${fmt(s.cpaTarget)}`, color: s.cpa > 0 && s.cpa <= s.cpaTarget ? 'green' : 'orange', delta: s.cpa > 0 && s.cpaTarget > 0 ? (s.cpa <= s.cpaTarget ? `-${((s.cpaTarget - s.cpa) / s.cpaTarget * 100).toFixed(0)}%` : `+${((s.cpa - s.cpaTarget) / s.cpaTarget * 100).toFixed(0)}%`) : '', dir: s.cpa <= s.cpaTarget ? 'up' : 'down', q: cpaQ },
-    { label: 'CTR', value: `${fmt(s.ctr, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
-    { label: 'CPM', value: `$${fmt(s.cpm, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
-    { label: '總觸及', value: `${(s.reach / 10000).toFixed(0)}萬`, meta: `曝光 ${(s.impressions / 10000).toFixed(0)}萬次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
-    { label: convLabel, value: fmt(s.conversions), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
-    { label: '頻率', value: s.frequency.toFixed(2), meta: '建議 < 3.5', color: s.frequency > 3.5 ? 'red' : 'green', delta: s.frequency > 3.5 ? '⚠ 偏高' : '正常', dir: s.frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
+    { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : '這週 ROAS 為什麼下降？' },
+    { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
+    { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
+    { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
+    { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
+    { label: '總觸及', value: `${(reach / 10000).toFixed(0)}萬`, meta: `曝光 ${(impressions / 10000).toFixed(0)}萬次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
+    { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
+    { label: '頻率', value: frequency.toFixed(2), meta: '建議 < 3.5', color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? '⚠ 偏高' : '正常', dir: frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
   ]
 
   const postsSource = posts ?? POSTS_DATA
