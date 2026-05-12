@@ -481,7 +481,7 @@ export default function AdsPage() {
       diagnosis: adData.diagnosis.map(d => ({ severity: d.severity, title: d.title, desc: d.desc, action: d.action })),
       bestTime: adData.bestTime,
       budget: { ...adData.budget },
-      posts: (realPosts ?? []).map(p => ({
+      posts: (realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo).map(p => ({
         id: p.id,
         date: p.date,
         platform: p.platform,
@@ -550,7 +550,7 @@ export default function AdsPage() {
 
     row('內容表現', '', '', '', '', '', '', '', '', '', '', '', '')
     row('日期', '平台', '類型', '標題', '觸及', '自然觸及', '付費觸及', '按讚', '留言', '收藏', '分享', '播放', '互動率(%)', '有廣告', '廣告花費', '廣告ROAS', '廣告CPA', '廣告CTR(%)')
-    ;(realPosts ?? []).forEach(p => {
+    ;(realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo).forEach(p => {
       const er = (p.reach && p.reach > 0)
         ? ((p.likes + p.comments + p.shares) / p.reach * 100).toFixed(2)
         : ''
