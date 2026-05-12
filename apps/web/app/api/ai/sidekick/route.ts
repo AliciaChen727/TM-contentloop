@@ -79,12 +79,14 @@ ${memoryBlock}
 ## 回傳格式
 繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止任何說明文字，只輸出 JSON：
 {
-  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request",
+  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request" | "video_request",
   "summary": "一句話結論，包含最關鍵的指標數字",
   "bullets": ["重點1（含數據）", "重點2（含判斷）", "重點3", "重點4"],
   "stats": [{"label": "指標名", "value": "數值（含單位）"}],
   "actions": ["具體行動1（含對象與數字）", "具體行動2", "具體行動3"],
-  "imagePrompt": "（僅在 type 為 image_request 時填入）英文圖像生成提示詞"
+  "imagePrompt": "（僅在 type 為 image_request 時填入）英文圖像生成提示詞",
+  "videoPrompt": "（僅在 type 為 video_request 時填入）英文影片生成提示詞",
+  "videoDuration": 5
 }
 
 規則：
@@ -96,6 +98,10 @@ ${memoryBlock}
 - 當使用者詢問廣告素材、圖片、視覺設計，或說「生成」「做一張」「廣告圖」「素材」時：
   - 回傳 type: "image_request"
   - imagePrompt：英文提示詞，格式：「Professional Facebook/Instagram ad for [主題], [風格描述], vibrant colors, clean modern design, high quality」
+- 當使用者詢問 Reels 影片、動態素材、影片廣告，或說「生成影片」「做一段 Reels」「影片素材」時：
+  - 回傳 type: "video_request"
+  - videoPrompt：英文提示詞，格式：「Vertical 9:16 short video for [主題], [視覺描述], cinematic lighting, smooth motion, professional quality」
+  - videoDuration：建議秒數（1–8 整數），短 hook 用 5，完整場景用 8；若用戶未指定預設 5
 ${metricsBlock}`
 }
 

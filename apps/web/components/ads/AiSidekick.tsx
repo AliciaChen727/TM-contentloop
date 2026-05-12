@@ -11,6 +11,8 @@ interface AiResponse {
   stats: { label: string; value: string }[]
   actions: string[]
   imagePrompt?: string
+  videoPrompt?: string
+  videoDuration?: number
 }
 
 export interface MetricsContext {
@@ -65,6 +67,9 @@ interface Message {
   response?: AiResponse | null
   imageUrl?: string
   imageLoading?: boolean
+  videoUrl?: string
+  videoLoading?: boolean
+  videoDuration?: number
   filePreview?: { name: string; type: string }
 }
 
@@ -148,6 +153,8 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [typing, setTyping] = useState(false)
   const [showCtx, setShowCtx] = useState(true)
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
+  const [editedVideoPrompts, setEditedVideoPrompts] = useState<Record<string, string>>({})
+  const [editedDurations, setEditedDurations] = useState<Record<string, number>>({})
   const [fileAttachment, setFileAttachment] = useState<FileAttachment | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([])
@@ -173,6 +180,52 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         : m))
     } catch {
       setMessages(p => p.map(m => m.id === msgId ? { ...m, imageLoading: false } : m))
+    }
+  }, [])
+
+  const generateVideo = useCallback(async (msgId: string, prompt: string, duration: number) => {
+    const user = auth.currentUser
+    if (!user) return
+    try {
+      const idToken = await user.getIdToken()
+      const submitRes = await fetch('/api/ai/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ prompt, durationSeconds: duration }),
+      })
+      const submitData = await submitRes.json()
+      if (!submitRes.ok || !submitData.operationName) {
+        setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
+        return
+      }
+      const operationName: string = submitData.operationName
+      let attempts = 0
+      const interval = setInterval(async () => {
+        attempts++
+        if (attempts > 18) {
+          clearInterval(interval)
+          setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
+          return
+        }
+        try {
+          const token = await user.getIdToken()
+          const pollRes = await fetch(`/api/ai/video?op=${encodeURIComponent(operationName)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          const pollData = await pollRes.json()
+          if (pollData.done && pollData.videoData) {
+            clearInterval(interval)
+            setMessages(p => p.map(m => m.id === msgId
+              ? { ...m, videoLoading: false, videoUrl: `data:${pollData.mimeType ?? 'video/mp4'};base64,${pollData.videoData}` }
+              : m))
+          } else if (!pollRes.ok) {
+            clearInterval(interval)
+            setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
+          }
+        } catch { /* continue polling */ }
+      }, 10000)
+    } catch {
+      setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
     }
   }, [])
 
@@ -204,14 +257,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       }
       const r: AiResponse = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
       const aiMsgId = String(Date.now()) + 'a'
-      setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r, imageLoading: r.type === 'image_request' }])
+      setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r, imageLoading: r.type === 'image_request', videoLoading: r.type === 'video_request', videoDuration: r.videoDuration }])
       if (r.type === 'image_request' && r.imagePrompt) generateImage(aiMsgId, r.imagePrompt)
+      if (r.type === 'video_request' && r.videoPrompt) generateVideo(aiMsgId, r.videoPrompt, r.videoDuration ?? 5)
     } catch {
       setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '網路錯誤，請稍後再試。', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
     } finally {
       setTyping(false)
     }
-  }, [input, fileAttachment, contextPage, metricsContext, generateImage])
+  }, [input, fileAttachment, contextPage, metricsContext, generateImage, generateVideo])
 
   // Auto-send when creative pin triggers
   useEffect(() => {
@@ -396,6 +450,33 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                               setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageUrl: undefined, imageLoading: true } : m))
                               generateImage(msg.id, prompt)
                             }}>↻ 重新生成</button>
+                          </div>
+                        )}
+                        {msg.videoLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎬 生成 Reels 中⋯ 預計需要 1–3 分鐘</div>}
+                        {msg.videoUrl && (
+                          <div style={{ marginTop: 8 }}>
+                            <video src={msg.videoUrl} controls playsInline style={{ width: '100%', borderRadius: 8, display: 'block', maxHeight: 400 }} />
+                            <textarea value={editedVideoPrompts[msg.id] ?? (msg.response?.videoPrompt ?? '')}
+                              onChange={e => setEditedVideoPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                              style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                              <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 5)}
+                                onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
+                                style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
+                                {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
+                              </select>
+                              <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={() => {
+                                const prompt = editedVideoPrompts[msg.id] ?? msg.response?.videoPrompt ?? ''
+                                if (!prompt) return
+                                const dur = editedDurations[msg.id] ?? msg.videoDuration ?? 5
+                                setMessages(p => p.map(m => m.id === msg.id ? { ...m, videoUrl: undefined, videoLoading: true } : m))
+                                generateVideo(msg.id, prompt, dur)
+                              }}>↻ 重新生成</button>
+                              <a href={msg.videoUrl} download="reels.mp4"
+                                style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', color: 'var(--ad-text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                ⬇ 下載 MP4
+                              </a>
+                            </div>
                           </div>
                         )}
                       </div>
