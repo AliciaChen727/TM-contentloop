@@ -121,8 +121,17 @@ export async function POST(req: NextRequest) {
   adsListUrl.searchParams.set('limit', '100')
   adsListUrl.searchParams.set('access_token', userAccessToken)
 
-  const [summaryRes, dailyRes, adLevelRes, adsListRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl), fetch(adsListUrl)])
-  const [summaryData, dailyData, adLevelData, adsListData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json(), adsListRes.json()])
+  // Fetch last_90d ad-level data in parallel — used as fallback for creative library
+  // AND for adPostMetrics (independent of selected date range)
+  const adLevelAllTimeUrl = new URL(`${BASE}/${adAccountId}/insights`)
+  adLevelAllTimeUrl.searchParams.set('fields', 'ad_id,ad_name,effective_object_story_id,spend,impressions,ctr,actions,action_values')
+  adLevelAllTimeUrl.searchParams.set('date_preset', 'last_90d')
+  adLevelAllTimeUrl.searchParams.set('level', 'ad')
+  adLevelAllTimeUrl.searchParams.set('limit', '200')
+  adLevelAllTimeUrl.searchParams.set('access_token', userAccessToken)
+
+  const [summaryRes, dailyRes, adLevelRes, adsListRes, adLevelAllTimeRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl), fetch(adsListUrl), fetch(adLevelAllTimeUrl)])
+  const [summaryData, dailyData, adLevelData, adsListData, adLevelAllTimeData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json(), adsListRes.json(), adLevelAllTimeRes.json()])
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
@@ -173,14 +182,19 @@ export async function POST(req: NextRequest) {
   const dateFrom = daily[0]?.date ?? ''
   const dateTo = daily[daily.length - 1]?.date ?? ''
 
-  // Merge ads list with insights: show all ads even if spend=0
+  // Merge: date-range insights → 90d insights (reliable storyId) → bare stub
   const insightsByAdId = new Map<string, Record<string, unknown>>()
   for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
     if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
   }
+  const adLevelAllTime: Record<string, unknown>[] = (adLevelAllTimeData.data ?? []) as Record<string, unknown>[]
+  const allTimeByAdId = new Map<string, Record<string, unknown>>()
+  for (const item of adLevelAllTime) {
+    if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
+  }
   const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string }[] = adsListData.data ?? []
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
-    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, ...(ad.effective_object_story_id ? { effective_object_story_id: ad.effective_object_story_id } : {}), spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? allTimeByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
     : (adLevelData.data ?? [])
 
   // Filter creatives to only those belonging to the current page.
@@ -192,18 +206,6 @@ export async function POST(req: NextRequest) {
         return typeof storyId === 'string' && storyId.startsWith(`${pageId}_`)
       })
     : allAdCreatives
-
-  // Fetch last_90d ad-level data for adPostMetrics (independent of selected date range)
-  // so 內容表現 always shows real metrics even if current window doesn't overlap the campaign
-  const adLevelAllTimeUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  adLevelAllTimeUrl.searchParams.set('fields', 'ad_id,effective_object_story_id,spend,ctr,actions,action_values')
-  adLevelAllTimeUrl.searchParams.set('date_preset', 'last_90d')
-  adLevelAllTimeUrl.searchParams.set('level', 'ad')
-  adLevelAllTimeUrl.searchParams.set('limit', '200')
-  adLevelAllTimeUrl.searchParams.set('access_token', userAccessToken)
-  const adLevelAllTimeRes = await fetch(adLevelAllTimeUrl)
-  const adLevelAllTimeData = await adLevelAllTimeRes.json()
-  const adLevelAllTime: Record<string, unknown>[] = (adLevelAllTimeData.data ?? []) as Record<string, unknown>[]
 
   // Build adPostIds + adPostMetrics from 90d data, filtered by pageId
   const adPostIds: string[] = []
