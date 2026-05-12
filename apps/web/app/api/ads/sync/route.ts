@@ -195,6 +195,29 @@ export async function POST(req: NextRequest) {
     ? allAdCreatives.filter(c => matchesPage(c.effective_object_story_id as string | undefined))
     : allAdCreatives
 
+  // Fetch post message for each creative with a storyId so the UI can show post content
+  // instead of the internal ad name. Fire in parallel, ignore failures.
+  const storyIds = [...new Set(adCreatives.map(c => c.effective_object_story_id as string).filter(Boolean))]
+  const postMessageMap: Record<string, string> = {}
+  if (storyIds.length > 0) {
+    await Promise.all(storyIds.map(async sid => {
+      try {
+        const postUrl = new URL(`${BASE}/${sid}`)
+        postUrl.searchParams.set('fields', 'message,story')
+        postUrl.searchParams.set('access_token', userAccessToken)
+        const res = await fetch(postUrl)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.message || data.story) postMessageMap[sid] = data.message ?? data.story
+        }
+      } catch { /* ignore */ }
+    }))
+  }
+  const adCreativesWithTitle = adCreatives.map(c => {
+    const sid = c.effective_object_story_id as string | undefined
+    return sid && postMessageMap[sid] ? { ...c, post_title: postMessageMap[sid] } : c
+  })
+
   // Build adPostIds + adPostMetrics from 90d data, filtered by pageId
   const adPostIds: string[] = []
   const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
@@ -235,14 +258,14 @@ export async function POST(req: NextRequest) {
     conversionType,
     summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
     daily,
-    adCreatives,
+    adCreatives: adCreativesWithTitle,
     adPostIds,
     adPostMetrics,
   })
 
   return NextResponse.json({
     success: true, adAccountId, spend, conversions, conversionType,
-    adCreativesCount: adCreatives.length,
+    adCreativesCount: adCreativesWithTitle.length,
     _debug: {
       adsListCount: adsList.length,
       allTimeCount: adLevelAllTime.length,

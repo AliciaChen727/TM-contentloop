@@ -111,10 +111,11 @@ function mapRawAdCreative(c: any, idx: number) {
     ? (hasPurchase ? parseFloat((primaryMetric / spend).toFixed(2)) : parseFloat((primaryMetric / spend * 100).toFixed(2)))
     : 0
   const cpa = primaryMetric > 0 ? parseFloat((spend / primaryMetric).toFixed(2)) : 0
+  const postTitle = c.post_title ? (c.post_title as string).slice(0, 60) : null
   const type = inferCreativeType(c.ad_name ?? '')
   return {
     id: c.ad_id ?? String(idx),
-    name: c.ad_name ?? `廣告 ${idx + 1}`,
+    name: postTitle ?? c.ad_name ?? `廣告 ${idx + 1}`,
     type,
     channel: 'Meta',
     spend,
