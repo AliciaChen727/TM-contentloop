@@ -230,6 +230,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     }
   }, [open, initialPrompt, autoSendPrompt])
 
+  // Auto-focus textarea on open so Ctrl+V paste works immediately
+  useEffect(() => {
+    if (open && !autoSendPrompt && !showHistory) {
+      setTimeout(() => textareaRef.current?.focus(), 350)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
 
   // Load history

@@ -24,7 +24,13 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: { k: SortKey; label: str
   )
 }
 
-export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void; posts: Post[] | null }) {
+function buildPostPrompt(p: Post): string {
+  const eng = (p.reach ?? 0) > 0 ? ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100).toFixed(2) : '0.00'
+  const adPart = p.hasAd ? `\nROAS：${(p.adRoas ?? 0).toFixed(1)}x｜廣告花費：$${p.adSpend ?? 0}｜CPA：$${p.adCpa ?? 0}｜廣告 CTR：${Number(p.adCtr ?? 0).toFixed(2)}%` : ''
+  return `請分析這篇貼文：\n日期：${p.date}｜平台：${p.platform}｜類型：${p.type === 'reels' ? 'Reels' : '貼文'}\n內容：${p.title.slice(0, 100)}\n觸及：${fmt(p.reach)}｜按讚：${p.likes}｜留言：${p.comments}｜收藏：${fmt(p.saves)}｜分享：${p.shares}｜播放：${fmt(p.plays)}\n互動率：${eng}%${adPart}\n\n請給出成效診斷和具體優化建議。`
+}
+
+export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend?: boolean) => void; posts: Post[] | null }) {
   const [platform, setPlatform] = useState<Platform>('all')
   const [view, setView] = useState<View>('raw')
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -138,6 +144,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                   <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortTh k="plays" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <th>互動率</th><th>廣告</th>
+                  <th style={{ width: 60 }} />
                 </tr>
               </thead>
               <tbody>
@@ -185,6 +192,13 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                           </div>
                         ) : <span style={{ color: 'var(--ad-text3)', fontSize: 12 }}>—</span>}
                       </td>
+                      <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
+                        <button
+                          title="用 AI 分析此貼文"
+                          onClick={() => onAskAI(buildPostPrompt(p), true)}
+                          style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
+                        >✨ 分析</button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -211,7 +225,12 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string) => void;
                 {adPosts.map(p => {
                   const rc = roasColor(p.adRoas ?? 0)
                   return (
-                    <div key={p.id} className="ads-posts-ad-card">
+                    <div key={p.id} className="ads-posts-ad-card" style={{ position: 'relative' }}>
+                      <button
+                        title="用 AI 分析此貼文"
+                        onClick={() => onAskAI(buildPostPrompt(p), true)}
+                        style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
+                      >✨ 分析</button>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                         <span style={{ fontSize: 10.5, fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)' }}>{p.date}</span>
                         <PlatBadge p={p.platform} />
