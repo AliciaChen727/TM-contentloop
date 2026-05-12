@@ -89,8 +89,9 @@ export async function POST(req: NextRequest) {
   adLevelUrl.searchParams.set('access_token', userAccessToken)
 
   // Fetch all ads regardless of spend (for creative library)
+  // Include creative fields as reliable storyId source when insights haven't populated yet
   const adsListUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsListUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id')
+  adsListUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id}')
   adsListUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
   adsListUrl.searchParams.set('limit', '100')
   adsListUrl.searchParams.set('access_token', userAccessToken)
@@ -166,9 +167,18 @@ export async function POST(req: NextRequest) {
   for (const item of adLevelAllTime) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string }[] = adsListData.data ?? []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string } }[] = adsListData.data ?? []
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
-    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? allTimeByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    ? adsList.map(ad => {
+        if (insightsByAdId.has(ad.id)) return insightsByAdId.get(ad.id)!
+        if (allTimeByAdId.has(ad.id)) return allTimeByAdId.get(ad.id)!
+        // Fallback: use storyId from ad-level fields or creative object (reliable even before insights propagate)
+        const storyId = ad.effective_object_story_id
+          ?? ad.creative?.effective_object_story_id
+          ?? ad.creative?.object_story_id
+        return { ad_id: ad.id, ad_name: ad.name, ...(storyId ? { effective_object_story_id: storyId } : {}), spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
+      })
     : (adLevelData.data ?? [])
 
   // Filter creatives to only those belonging to the current page.
