@@ -279,6 +279,28 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Supplement adPostMetrics from adCreatives — Meta 90d insights sometimes omit
+  // effective_object_story_id, so some ads land in adCreatives but miss adPostMetrics.
+  for (const c of adCreatives) {
+    const storyId = c.effective_object_story_id as string | undefined
+    if (!storyId || adPostMetrics[storyId]) continue
+    const cSpend = parseFloat(c.spend as string ?? '0')
+    const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
+    const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
+    const cPurchases = parseActions(cActions, 'purchase')
+    const cLinkClicks = parseActions(cActions, 'link_click')
+    const cVideoViews = parseActions(cActions, 'video_view')
+    const cRevenue = parseActions(cActionValues, 'purchase')
+    const cPrimaryMetric = cPurchases > 0 ? cRevenue : cLinkClicks > 0 ? cLinkClicks : cVideoViews
+    const cRoas = cSpend > 0 && cPrimaryMetric > 0
+      ? (cPurchases > 0 ? cPrimaryMetric / cSpend : cPrimaryMetric / cSpend * 100)
+      : 0
+    const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
+    const cCtr = parseFloat(c.ctr as string ?? '0')
+    if (!adPostIds.includes(storyId)) adPostIds.push(storyId)
+    adPostMetrics[storyId] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+  }
+
   const insightsRef = pageId
     ? userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest')
     : userRef.collection('adInsights').doc('latest')
@@ -317,6 +339,7 @@ export async function POST(req: NextRequest) {
       effectivePagePrefix: effectivePagePrefix ?? null,
       sampleStoryIds: allAdCreatives.slice(0, 5).map(c => c.effective_object_story_id ?? null),
       postTitlesFound: Object.keys(postMessageMap).length,
+      adPostMetricsCount: Object.keys(adPostMetrics).length,
     },
   })
   } catch (err) {
