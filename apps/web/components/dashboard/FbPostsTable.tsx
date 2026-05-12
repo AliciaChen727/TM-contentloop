@@ -38,7 +38,11 @@ function SortTh({ k, label, sortKey, sortDir, onSort, className }: {
   )
 }
 
-export function FbPostsTable({ posts }: { posts: FbPost[] }) {
+function buildFbPrompt(post: FbPost): string {
+  return `請分析這篇 Facebook 貼文：\n日期：${post.createdTime.slice(0, 10)}\n內容：${(post.message || '（無文字內容）').slice(0, 100)}\n按讚：${post.insights.reactions}｜留言：${post.insights.comments}｜分享：${post.insights.shares}\n\n請給出成效診斷和具體優化建議。`
+}
+
+export function FbPostsTable({ posts, onAskAI }: { posts: FbPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
   const [sortKey, setSortKey] = useState<SortKey>('createdTime')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -73,6 +77,7 @@ export function FbPostsTable({ posts }: { posts: FbPost[] }) {
             <SortTh k="reactions" label="按讚" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="comments" label="留言" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            {onAskAI && <th style={{ width: 60 }} />}
           </tr>
         </thead>
         <tbody>
@@ -101,6 +106,15 @@ export function FbPostsTable({ posts }: { posts: FbPost[] }) {
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.reactions)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.comments)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.shares)}</td>
+              {onAskAI && (
+                <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
+                  <button
+                    title="用 AI 分析此貼文"
+                    onClick={() => onAskAI(buildFbPrompt(post), true)}
+                    style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
+                  >✨ 分析</button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

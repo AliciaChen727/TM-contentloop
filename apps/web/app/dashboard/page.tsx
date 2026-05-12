@@ -198,8 +198,10 @@ export default function DashboardPage() {
 
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
-  const openSidekick = useCallback((prompt = '') => {
+  const [skAutoSend, setSkAutoSend] = useState(false)
+  const openSidekick = useCallback((prompt = '', autoSend = false) => {
     setSkInitPrompt(prompt)
+    setSkAutoSend(autoSend)
     setSkOpen(true)
   }, [])
 
@@ -390,9 +392,9 @@ export default function DashboardPage() {
                   }} />
                 </div>
               )}
-              {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} />}
-              {activeTab === 'fb' && <FbPostsTable posts={filteredFb} />}
-              {activeTab === 'ig' && <IgPostsTable posts={filteredIg} />}
+              {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} onAskAI={(q, a) => openSidekick(q, a)} />}
+              {activeTab === 'fb' && <FbPostsTable posts={filteredFb} onAskAI={(q, a) => openSidekick(q, a)} />}
+              {activeTab === 'ig' && <IgPostsTable posts={filteredIg} onAskAI={(q, a) => openSidekick(q, a)} />}
             </div>
           </>
         )}
@@ -403,6 +405,7 @@ export default function DashboardPage() {
         onClose={() => setSkOpen(false)}
         contextPage="posts"
         initialPrompt={skInitPrompt}
+        autoSendPrompt={skAutoSend ? skInitPrompt : undefined}
         metricsContext={{
           totalPosts: stats.totalPosts,
           totalReach: stats.totalReach,

@@ -46,7 +46,12 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: {
   )
 }
 
-export function IgPostsTable({ posts }: { posts: IgPost[] }) {
+function buildIgPrompt(post: IgPost): string {
+  const MEDIA_LABEL: Record<IgPost['mediaType'], string> = { IMAGE: '圖片', VIDEO: '影片', CAROUSEL_ALBUM: '輪播', REELS: 'Reels' }
+  return `請分析這篇 Instagram 貼文：\n日期：${post.timestamp.slice(0, 10)}｜類型：${MEDIA_LABEL[post.mediaType] ?? post.mediaType}\n內容：${(post.caption || '（無文字內容）').slice(0, 100)}\n觸及：${post.insights.reach}｜按讚：${post.insights.likes}｜留言：${post.insights.comments}｜收藏：${post.insights.saved}｜分享：${post.insights.shares}｜播放：${post.insights.views}\n\n請給出成效診斷和具體優化建議。`
+}
+
+export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
   const [sortKey, setSortKey] = useState<SortKey>('timestamp')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -85,6 +90,7 @@ export function IgPostsTable({ posts }: { posts: IgPost[] }) {
             <SortTh k="saved" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            {onAskAI && <th style={{ width: 60 }} />}
           </tr>
         </thead>
         <tbody>
@@ -118,6 +124,15 @@ export function IgPostsTable({ posts }: { posts: IgPost[] }) {
                 <td className="ads-posts-num" style={{ textAlign: 'right' }}>
                   {post.insights.views > 0 ? fmt(post.insights.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
                 </td>
+                {onAskAI && (
+                  <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
+                    <button
+                      title="用 AI 分析此貼文"
+                      onClick={() => onAskAI(buildIgPrompt(post), true)}
+                      style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
+                    >✨ 分析</button>
+                  </td>
+                )}
               </tr>
             )
           })}

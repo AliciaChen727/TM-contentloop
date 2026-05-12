@@ -37,6 +37,12 @@ type SortKey = 'date' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'v
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 
+function buildPostPrompt(row: CombinedRow): string {
+  const platform = row.fbOnly ? 'Facebook' : row.igOnly ? 'Instagram' : 'FB+IG'
+  const engRate = row.reach > 0 ? ((row.likes + row.comments + row.shares) / row.reach * 100).toFixed(2) : '0.00'
+  return `請分析這篇貼文：\n日期：${row.date}｜平台：${platform}\n內容：${row.content.slice(0, 100)}\n觸及：${fmt(row.reach)}｜按讚：${row.likes}｜留言：${row.comments}｜收藏：${row.saved}｜分享：${row.shares}｜播放：${row.views}\n互動率：${engRate}%\n\n請給出這篇貼文的成效診斷和具體優化建議。`
+}
+
 function fullDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('zh-TW', {
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -63,7 +69,7 @@ function PlatBadge({ row }: { row: CombinedRow }) {
   return <span className="ads-posts-platform-badge both" style={{ marginLeft: 6 }}>FB+IG</span>
 }
 
-export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; igPosts: IgPost[] }) {
+export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbPost[]; igPosts: IgPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -131,6 +137,7 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
             <SortTh k="saved" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            {onAskAI && <th style={{ width: 60 }} />}
           </tr>
         </thead>
         <tbody>
@@ -168,6 +175,15 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>
                 {row.views > 0 ? fmt(row.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
+              {onAskAI && (
+                <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
+                  <button
+                    title="用 AI 分析此貼文"
+                    onClick={() => onAskAI(buildPostPrompt(row), true)}
+                    style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
+                  >✨ 分析</button>
+                </td>
+              )}
             </tr>
           ))}
           <tr style={{ background: 'var(--ad-surface2)', fontWeight: 600, borderTop: '2px solid var(--ad-border)' }}>
@@ -181,6 +197,7 @@ export function CombinedPostsTable({ fbPosts, igPosts }: { fbPosts: FbPost[]; ig
             <td className="ads-posts-num" style={{ textAlign: 'right' }}>
               {totals.views > 0 ? fmt(totals.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
             </td>
+            {onAskAI && <td />}
           </tr>
         </tbody>
       </table>
