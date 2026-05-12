@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
 
   // Fetch all ads regardless of spend (for creative library)
   const adsListUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsListUrl.searchParams.set('fields', 'id,name,effective_status')
+  adsListUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id')
   adsListUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
   adsListUrl.searchParams.set('limit', '100')
   adsListUrl.searchParams.set('access_token', userAccessToken)
@@ -177,9 +177,9 @@ export async function POST(req: NextRequest) {
   for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
     if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
   }
-  const adsList: { id: string; name: string; effective_status: string }[] = adsListData.data ?? []
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string }[] = adsListData.data ?? []
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
-    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, effective_object_story_id: ad.effective_object_story_id, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
     : (adLevelData.data ?? [])
 
   // Filter creatives to only those belonging to the current page
