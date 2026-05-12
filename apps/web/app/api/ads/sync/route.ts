@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
   // Include creative fields as reliable storyId source when insights haven't populated yet
   const adsListUrl = new URL(`${BASE}/${adAccountId}/ads`)
   adsListUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id}')
-  adsListUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
+  adsListUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
   adsListUrl.searchParams.set('limit', '100')
   adsListUrl.searchParams.set('access_token', userAccessToken)
 

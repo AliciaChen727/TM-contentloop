@@ -391,6 +391,14 @@ export default function AdsPage() {
       })
       const json = await res.json()
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
+      // Fire IG sync in parallel — doesn't block ads sync result
+      if (selectedPageId) {
+        fetch('/api/insights/ig/sync', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: selectedPageId }),
+        }).catch(() => {})
+      }
       const { adPostIds: newIds, adPostMetrics: newMetrics } = await fetchAdData(idToken, selectedPageId)
       setRealPosts(prev => prev ? prev.map(p => {
         if (p.platform !== 'FB') return p
