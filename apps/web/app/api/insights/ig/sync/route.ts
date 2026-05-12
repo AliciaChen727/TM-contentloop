@@ -41,6 +41,14 @@ export async function POST(req: NextRequest) {
       igUserId = fetchedIgId
     }
 
+    // Verify which IG account we're querying (helps diagnose wrong igUserId)
+    const verifyUrl = new URL(`${BASE}/${igUserId}`)
+    verifyUrl.searchParams.set('fields', 'username,media_count')
+    verifyUrl.searchParams.set('access_token', accessToken)
+    const verifyRes = await fetch(verifyUrl)
+    const verifyData = await verifyRes.json()
+    const igUsername: string = verifyData.username ?? 'unknown'
+
     const mediaUrl = new URL(`${BASE}/${igUserId}/media`)
     mediaUrl.searchParams.set('fields', 'id,timestamp,caption,media_type,media_product_type,permalink,like_count,comments_count')
     mediaUrl.searchParams.set('limit', '50')
@@ -99,7 +107,7 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit()
 
-    return NextResponse.json({ success: true, synced: posts.length, igUserId })
+    return NextResponse.json({ success: true, synced: posts.length, igUserId, igUsername, mediaCount: verifyData.media_count ?? null })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'IG sync failed' }, { status: 500 })
   }
