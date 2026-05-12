@@ -91,25 +91,34 @@ export async function POST(req: NextRequest) {
   adLevelUrl.searchParams.set('limit', '100')
   adLevelUrl.searchParams.set('access_token', userAccessToken)
 
-  // Fetch all ads regardless of spend (for creative library)
-  // Include creative fields as reliable storyId source when insights haven't populated yet
-  const adsListUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsListUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id}')
-  adsListUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
-  adsListUrl.searchParams.set('limit', '100')
-  adsListUrl.searchParams.set('access_token', userAccessToken)
-
-  // Fetch last_90d ad-level data in parallel — used as fallback for creative library
-  // AND for adPostMetrics (independent of selected date range)
-  const adLevelAllTimeUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  adLevelAllTimeUrl.searchParams.set('fields', 'ad_id,ad_name,effective_object_story_id,spend,impressions,ctr,actions,action_values')
-  adLevelAllTimeUrl.searchParams.set('date_preset', 'last_90d')
-  adLevelAllTimeUrl.searchParams.set('level', 'ad')
-  adLevelAllTimeUrl.searchParams.set('limit', '200')
-  adLevelAllTimeUrl.searchParams.set('access_token', userAccessToken)
-
-  const [summaryRes, dailyRes, adLevelRes, adsListRes, adLevelAllTimeRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl), fetch(adsListUrl), fetch(adLevelAllTimeUrl)])
-  const [summaryData, dailyData, adLevelData, adsListData, adLevelAllTimeData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json(), adsListRes.json(), adLevelAllTimeRes.json()])
+  // Fetch ads list and all-time insights across ALL accounts — Speech Festival may be
+  // in a different ad account (e.g. created by another admin) than the primary account.
+  // Summary/daily/ad-level still use accounts[0] for aggregate metrics.
+  const [[summaryRes, dailyRes, adLevelRes], adsListResArray, allTimeResArray] = await Promise.all([
+    Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl)]),
+    Promise.all(accounts.map(account => {
+      const url = new URL(`${BASE}/${account.id}/ads`)
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id}')
+      url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
+      url.searchParams.set('limit', '100')
+      url.searchParams.set('access_token', userAccessToken)
+      return fetch(url)
+    })),
+    Promise.all(accounts.map(account => {
+      const url = new URL(`${BASE}/${account.id}/insights`)
+      url.searchParams.set('fields', 'ad_id,ad_name,effective_object_story_id,spend,impressions,ctr,actions,action_values')
+      url.searchParams.set('date_preset', 'last_90d')
+      url.searchParams.set('level', 'ad')
+      url.searchParams.set('limit', '200')
+      url.searchParams.set('access_token', userAccessToken)
+      return fetch(url)
+    })),
+  ])
+  const [summaryData, dailyData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json()])
+  const adsListArrays = await Promise.all(adsListResArray.map(r => r.json()))
+  const adsListData = { data: adsListArrays.flatMap((d: { data?: unknown[] }) => d.data ?? []) }
+  const allTimeArrays = await Promise.all(allTimeResArray.map(r => r.json()))
+  const adLevelAllTimeData = { data: allTimeArrays.flatMap((d: { data?: unknown[] }) => d.data ?? []) }
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
