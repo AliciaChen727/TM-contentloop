@@ -41,9 +41,23 @@ interface Message {
   imageLoading?: boolean
 }
 
-function AiMessageBody({ r }: { r: AiResponse }) {
-  const [checked, setChecked] = useState<Record<number, boolean>>({})
+function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) => void }) {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+  const [otherText, setOtherText] = useState('')
+  const [sent, setSent] = useState<number | 'other' | null>(null)
+
+  function handleAction(text: string, idx: number) {
+    if (sent !== null) return
+    setSent(idx)
+    onSend(text)
+  }
+
+  function handleOtherSubmit() {
+    if (!otherText.trim() || sent !== null) return
+    setSent('other')
+    onSend(otherText.trim())
+  }
+
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
       {r.summary && <p style={{ marginBottom: r.bullets.length ? 8 : 0 }}>{r.summary}</p>}
@@ -60,11 +74,36 @@ function AiMessageBody({ r }: { r: AiResponse }) {
       {r.actions.length > 0 && (
         <div className="ads-sk-action-list">
           {r.actions.map((a, i) => (
-            <div key={i} className={`ads-sk-action-item ${checked[i] ? 'done' : ''}`} onClick={() => setChecked(p => ({ ...p, [i]: !p[i] }))}>
-              <div className="ads-sk-action-cb">{checked[i] && <span style={{ fontSize: 10 }}>✓</span>}</div>
+            <button
+              key={i}
+              className={`ads-sk-action-item${sent === i ? ' done' : ''}`}
+              disabled={sent !== null}
+              onClick={() => handleAction(a, i)}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: sent !== null ? 'default' : 'pointer', padding: 0 }}
+            >
+              <div className="ads-sk-action-cb">{sent === i && <span style={{ fontSize: 10 }}>✓</span>}</div>
               <div className="ads-sk-action-text">{a}</div>
-            </div>
+            </button>
           ))}
+          {sent === null && (
+            <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="text"
+                value={otherText}
+                onChange={e => setOtherText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleOtherSubmit() }}
+                placeholder="其他問題…"
+                style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit' }}
+              />
+              <button
+                onClick={handleOtherSubmit}
+                disabled={!otherText.trim()}
+                style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: otherText.trim() ? 'pointer' : 'default', opacity: otherText.trim() ? 1 : 0.4, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+              >
+                送出
+              </button>
+            </div>
+          )}
         </div>
       )}
       <div className="ads-sk-feedback">
@@ -186,7 +225,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, metricsC
                 <div className="ads-sk-msg-bubble">
                   <div className="ads-sk-msg-text">
                     {msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
-                    {msg.response && <AiMessageBody r={msg.response} />}
+                    {msg.response && <AiMessageBody r={msg.response} onSend={send} />}
                     {msg.imageLoading && (
                       <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎨 生成圖片中⋯</div>
                     )}
