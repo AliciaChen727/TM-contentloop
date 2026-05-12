@@ -183,11 +183,13 @@ export async function POST(req: NextRequest) {
     ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, ...(ad.effective_object_story_id ? { effective_object_story_id: ad.effective_object_story_id } : {}), spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
     : (adLevelData.data ?? [])
 
-  // Filter creatives to only those belonging to the current page
+  // Filter creatives to only those belonging to the current page.
+  // Strict: when pageId is set, require storyId to match — ads without storyId are excluded
+  // because /ads endpoint doesn't reliably return effective_object_story_id for all ad types.
   const adCreatives = pageId
     ? allAdCreatives.filter(c => {
         const storyId = c.effective_object_story_id as string | undefined
-        return !storyId || storyId.startsWith(`${pageId}_`)
+        return typeof storyId === 'string' && storyId.startsWith(`${pageId}_`)
       })
     : allAdCreatives
 
