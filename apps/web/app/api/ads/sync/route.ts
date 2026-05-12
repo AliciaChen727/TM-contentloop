@@ -39,10 +39,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No Meta token. Please reconnect.' }, { status: 400 })
   }
 
-  const { userAccessToken } = tokenDoc.data() as { userAccessToken?: string }
+  const { userAccessToken, storyIdPrefix } = tokenDoc.data() as { userAccessToken?: string; storyIdPrefix?: string }
   if (!userAccessToken) {
     return NextResponse.json({ error: 'No user access token. Please reconnect Meta to grant ads_read.' }, { status: 400 })
   }
+  // storyIdPrefix: optional override for pages that migrated to New Page Experience.
+  // The page's /me/accounts ID may differ from the old ID used in effective_object_story_id.
+  const effectivePagePrefix = storyIdPrefix ?? pageId
 
   // Always use /me/adaccounts — page isolation is handled by effective_object_story_id filtering.
   // Using /{pageId}/adaccounts can return a different (empty) account than the shared account
@@ -184,10 +187,10 @@ export async function POST(req: NextRequest) {
   // Filter creatives to only those belonging to the current page.
   // Strict: when pageId is set, require storyId to match — ads without storyId are excluded
   // because /ads endpoint doesn't reliably return effective_object_story_id for all ad types.
-  const adCreatives = pageId
+  const adCreatives = effectivePagePrefix
     ? allAdCreatives.filter(c => {
         const storyId = c.effective_object_story_id as string | undefined
-        return typeof storyId === 'string' && storyId.startsWith(`${pageId}_`)
+        return typeof storyId === 'string' && storyId.startsWith(`${effectivePagePrefix}_`)
       })
     : allAdCreatives
 
@@ -197,7 +200,7 @@ export async function POST(req: NextRequest) {
   for (const c of adLevelAllTime) {
     const storyId = c.effective_object_story_id as string | undefined
     if (!storyId) continue
-    if (pageId && !storyId.startsWith(`${pageId}_`)) continue
+    if (effectivePagePrefix && !storyId.startsWith(`${effectivePagePrefix}_`)) continue
     const postId = storyId
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
@@ -244,6 +247,7 @@ export async function POST(req: NextRequest) {
       allTimeCount: adLevelAllTime.length,
       allAdCreativesCount: allAdCreatives.length,
       pageId: pageId ?? null,
+      effectivePagePrefix: effectivePagePrefix ?? null,
       sampleStoryIds: allAdCreatives.slice(0, 5).map(c => c.effective_object_story_id ?? null),
     },
   })
