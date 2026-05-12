@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit()
 
-    return NextResponse.json({ success: true, synced: posts.length })
+    return NextResponse.json({ success: true, synced: posts.length, igUserId })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'IG sync failed' }, { status: 500 })
   }
