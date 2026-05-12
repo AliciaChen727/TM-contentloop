@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
   }
   const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string }[] = adsListData.data ?? []
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
-    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, effective_object_story_id: ad.effective_object_story_id, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+    ? adsList.map(ad => insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, ...(ad.effective_object_story_id ? { effective_object_story_id: ad.effective_object_story_id } : {}), spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
     : (adLevelData.data ?? [])
 
   // Filter creatives to only those belonging to the current page
