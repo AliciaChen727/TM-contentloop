@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
   // old posts (storyIdPrefix) and new posts (pageId) using different page IDs.
   const pageIdPrefixes = new Set([pageId, effectivePagePrefix].filter(Boolean) as string[])
   const matchesPage = (storyId: string | undefined) =>
-    typeof storyId === 'string' && [...pageIdPrefixes].some(p => storyId.startsWith(`${p}_`))
+    typeof storyId === 'string' && Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))
 
   const adCreatives = pageIdPrefixes.size > 0
     ? allAdCreatives.filter(c => matchesPage(c.effective_object_story_id as string | undefined))
