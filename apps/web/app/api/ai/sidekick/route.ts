@@ -90,13 +90,14 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { message, contextPage, metricsContext } = body as {
+  const { message, contextPage, metricsContext, fileAttachment } = body as {
     message: string
     contextPage: string
     metricsContext?: MetricsContext
+    fileAttachment?: { type: 'image' | 'pdf' | 'text'; mimeType: string; content: string; name: string }
   }
 
-  if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
+  if (!message?.trim() && !fileAttachment) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
 
   let memory = ''
   try {
@@ -119,13 +120,27 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined)
 
+  // Build user message content (text + optional file)
+  const userContent: Anthropic.MessageParam['content'] = []
+  if (fileAttachment) {
+    if (fileAttachment.type === 'image') {
+      userContent.push({ type: 'image', source: { type: 'base64', media_type: fileAttachment.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: fileAttachment.content } })
+    } else if (fileAttachment.type === 'pdf') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileAttachment.content } } as any)
+    } else {
+      userContent.push({ type: 'text', text: `以下是上傳的檔案「${fileAttachment.name}」內容：\n\`\`\`\n${fileAttachment.content.slice(0, 8000)}\n\`\`\`` })
+    }
+  }
+  if (message?.trim()) userContent.push({ type: 'text', text: message })
+
   let claudeRes
   try {
     claudeRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
-      messages: [{ role: 'user', content: message }],
+      messages: [{ role: 'user', content: userContent }],
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

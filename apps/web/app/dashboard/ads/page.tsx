@@ -277,6 +277,7 @@ export default function AdsPage() {
   const [active, setActive] = useState<NavId>('overview')
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
+  const [skAutoSend, setSkAutoSend] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [dateFrom, setDateFrom] = useState(() => {
@@ -465,8 +466,9 @@ export default function AdsPage() {
     setDataLoaded(true)
   }
 
-  const openSidekick = useCallback((prompt = '') => {
+  const openSidekick = useCallback((prompt = '', autoSend = false) => {
     setSkInitPrompt(prompt)
+    setSkAutoSend(autoSend)
     setSkOpen(true)
   }, [])
 
@@ -746,7 +748,7 @@ export default function AdsPage() {
       <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
 
       {/* AI Sidekick Drawer */}
-      <AiSidekick open={skOpen} onClose={() => setSkOpen(false)} contextPage={active} initialPrompt={skInitPrompt} />
+      <AiSidekick open={skOpen} onClose={() => setSkOpen(false)} contextPage={active} initialPrompt={skInitPrompt} autoSendPrompt={skAutoSend ? skInitPrompt : undefined} />
     </div>
   )
 }

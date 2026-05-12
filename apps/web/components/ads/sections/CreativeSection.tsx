@@ -9,7 +9,13 @@ const STATUS_LABEL: Record<string, string> = { top: '🏆 最佳', good: '👍 �
 const TYPES = ['全部', 'Reels', '貼文', 'Stories', '海報']
 type SortBy = 'roas' | 'spend' | 'cpa'
 
-export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: string) => void }) {
+const STATUS_LABEL_TEXT: Record<string, string> = { top: '最佳', good: '良好', ok: '一般', bad: '待優' }
+
+function buildCreativePrompt(c: AdData['creatives'][number]): string {
+  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nROAS：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜CPA：$${c.cpa}｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
+}
+
+export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: string, autoSend?: boolean) => void }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
 
@@ -50,7 +56,12 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
       )}
       <div className="ads-creative-grid">
         {sorted.map((c, i) => (
-          <div key={c.id} className="ads-creative-card">
+          <div key={c.id} className="ads-creative-card" style={{ position: 'relative' }}>
+            <button
+              title="用 AI 分析此素材"
+              onClick={() => onAskAI(buildCreativePrompt(c), true)}
+              style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
+            >✨ 分析</button>
             <div className={`ads-creative-thumb ${c.thumb}`}>
               <div className={`ads-creative-rank ${c.status === 'top' ? 'top' : c.status === 'bad' ? 'bad' : ''}`}>{i + 1}</div>
               <div className={`ads-creative-status ${c.status}`}>{STATUS_LABEL[c.status]}</div>
