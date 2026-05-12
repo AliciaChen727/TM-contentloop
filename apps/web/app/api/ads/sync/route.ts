@@ -194,9 +194,13 @@ export async function POST(req: NextRequest) {
   const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string } }[] = (adsListData.data ?? []) as any
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
     ? adsList.map(ad => {
-        if (insightsByAdId.has(ad.id)) return insightsByAdId.get(ad.id)!
-        if (allTimeByAdId.has(ad.id)) return allTimeByAdId.get(ad.id)!
-        // Fallback: use storyId from ad-level fields or creative object (reliable even before insights propagate)
+        const dateRangeItem = insightsByAdId.get(ad.id)
+        const allTimeItem = allTimeByAdId.get(ad.id)
+        // Prefer date-range only if it has real spend; otherwise fall back to 90d all-time
+        if (dateRangeItem && parseFloat(dateRangeItem.spend as string ?? '0') > 0) return dateRangeItem
+        if (allTimeItem) return allTimeItem
+        if (dateRangeItem) return dateRangeItem  // date-range exists but spend=0 (e.g. just launched)
+        // No insights at all: bare stub with storyId for post title lookup
         const storyId = ad.effective_object_story_id
           ?? ad.creative?.effective_object_story_id
           ?? ad.creative?.object_story_id

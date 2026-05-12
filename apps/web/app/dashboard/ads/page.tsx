@@ -748,7 +748,28 @@ export default function AdsPage() {
       <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
 
       {/* AI Sidekick Drawer */}
-      <AiSidekick open={skOpen} onClose={() => setSkOpen(false)} contextPage={active} initialPrompt={skInitPrompt} autoSendPrompt={skAutoSend ? skInitPrompt : undefined} />
+      <AiSidekick
+        open={skOpen}
+        onClose={() => setSkOpen(false)}
+        contextPage={active}
+        initialPrompt={skInitPrompt}
+        autoSendPrompt={skAutoSend ? skInitPrompt : undefined}
+        metricsContext={{
+          spend: adData.overview.summary.spend,
+          roas: adData.overview.summary.roas,
+          cpa: adData.overview.summary.cpa,
+          ctr: adData.overview.summary.ctr,
+          cpm: adData.overview.summary.cpm,
+          impressions: adData.overview.summary.impressions,
+          frequency: adData.overview.summary.frequency,
+          conversions: adData.overview.summary.conversions,
+          revenue: adData.overview.summary.revenue,
+          dateRange: adData.overview.dateRange,
+          topCreatives: adData.creatives.slice(0, 5).map(c => ({
+            name: c.name, roas: c.roas, spend: c.spend, ctr: Number(c.ctr), cpa: c.cpa,
+          })),
+        }}
+      />
     </div>
   )
 }

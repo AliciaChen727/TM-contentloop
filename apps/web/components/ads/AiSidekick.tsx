@@ -14,6 +14,7 @@ interface AiResponse {
 }
 
 export interface MetricsContext {
+  // Posts context
   totalPosts?: number
   totalReach?: number
   totalLikes?: number
@@ -23,6 +24,17 @@ export interface MetricsContext {
   reelsCount?: number
   dateRange?: string
   topPosts?: { title: string; reach: number; likes: number; engRate: number; platform: string }[]
+  // Ads context
+  spend?: number
+  roas?: number
+  cpa?: number
+  ctr?: number
+  cpm?: number
+  impressions?: number
+  frequency?: number
+  conversions?: number
+  revenue?: number
+  topCreatives?: { name: string; roas: number; spend: number; ctr: number; cpa: number }[]
 }
 
 interface FileAttachment {
@@ -75,7 +87,7 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
-      {r.summary && <p style={{ marginBottom: r.bullets.length ? 8 : 0 }}>{r.summary}</p>}
+      {r.summary && <p style={{ marginBottom: r.bullets.length ? 8 : 0 }}>{r.summary.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim()}</p>}
       {r.bullets.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
           {r.bullets.map((b, i) => <li key={i} style={{ display: 'flex', gap: 6 }}><span style={{ color: 'var(--ad-blue)' }}>▸</span><span>{b}</span></li>)}
@@ -232,6 +244,22 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         .finally(() => setHistoryLoading(false))
     })
   }, [showHistory])
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(e.clipboardData.items)
+    const imageItem = items.find(item => item.type.startsWith('image/'))
+    if (!imageItem) return
+    e.preventDefault()
+    const file = imageItem.getAsFile()
+    if (!file) return
+    if (file.size > SIZE_LIMITS.image) { alert('圖片不能超過 4MB'); return }
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string
+      setFileAttachment({ type: 'image', mimeType: file.type || 'image/png', content: dataUrl.split(',')[1], name: file.name || 'paste.png' })
+    }
+    reader.readAsDataURL(file)
+  }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -397,6 +425,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                   <textarea ref={textareaRef} className="ads-sk-textarea" rows={1} placeholder="問我任何問題…"
                     value={input} onChange={e => setInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); send() } }}
+                    onPaste={handlePaste}
                     onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }} />
                   <button className="ads-sk-send-btn" onClick={() => send()} disabled={(!input.trim() && !fileAttachment) || typing}>
                     <Icon name="send" size={15} color="white" />

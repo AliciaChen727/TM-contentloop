@@ -17,6 +17,16 @@ interface MetricsContext {
   reelsCount?: number
   dateRange?: string
   topPosts?: { title: string; reach: number; likes: number; engRate: number; platform: string }[]
+  spend?: number
+  roas?: number
+  cpa?: number
+  ctr?: number
+  cpm?: number
+  impressions?: number
+  frequency?: number
+  conversions?: number
+  revenue?: number
+  topCreatives?: { name: string; roas: number; spend: number; ctr: number; cpa: number }[]
 }
 
 function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string): string {
@@ -32,7 +42,18 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
 
   let metricsBlock = ''
   if (metrics && Object.keys(metrics).length > 0) {
-    metricsBlock = `
+    if (metrics.spend !== undefined || metrics.roas !== undefined) {
+      metricsBlock = `
+## 廣告帳戶數據（${metrics.dateRange ?? '近期'}）
+- 總花費：$${metrics.spend?.toLocaleString('zh-TW') ?? 'N/A'}　收益：$${metrics.revenue?.toLocaleString('zh-TW') ?? 'N/A'}
+- ROAS：${metrics.roas?.toFixed(2) ?? 'N/A'}x　CPA：$${metrics.cpa?.toFixed(0) ?? 'N/A'}
+- CTR：${metrics.ctr?.toFixed(2) ?? 'N/A'}%　CPM：$${metrics.cpm?.toFixed(0) ?? 'N/A'}
+- 曝光：${metrics.impressions?.toLocaleString('zh-TW') ?? 'N/A'}　轉換：${metrics.conversions ?? 'N/A'}　頻率：${metrics.frequency?.toFixed(1) ?? 'N/A'}
+${metrics.topCreatives?.length ? `
+## 素材表現（前 ${metrics.topCreatives.length} 名）
+${metrics.topCreatives.map((c, i) => `${i + 1}. ${c.name.slice(0, 35)} | ROAS ${c.roas.toFixed(1)}x | 花費 $${c.spend} | CTR ${c.ctr.toFixed(2)}%`).join('\n')}` : ''}`
+    } else {
+      metricsBlock = `
 ## 用戶當前數據（${metrics.dateRange ?? '近期'}）
 - 總貼文數：${metrics.totalPosts ?? 'N/A'}（其中 Reels：${metrics.reelsCount ?? 'N/A'}）
 - 總觸擊：${metrics.totalReach?.toLocaleString('zh-TW') ?? 'N/A'}
@@ -43,6 +64,7 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
 ${metrics.topPosts?.length ? `
 ## 近期貼文表現
 ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 40)}... | 觸擊 ${p.reach} | 按讚 ${p.likes} | 互動率 ${p.engRate}%`).join('\n')}` : ''}`
+    }
   }
 
   return `${role}
@@ -154,7 +176,14 @@ export async function POST(req: NextRequest) {
   try {
     parsed = JSON.parse(cleaned)
   } catch {
-    parsed = { type: 'general', summary: cleaned, bullets: [], stats: [], actions: [] }
+    try {
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0])
+      else throw new Error('no json')
+    } catch {
+      const shortText = cleaned.replace(/```[\s\S]*?```/g, '').trim().slice(0, 200)
+      parsed = { type: 'general', summary: shortText || 'AI 回應解析失敗，請再試一次', bullets: [], stats: [], actions: [] }
+    }
   }
 
   try {
