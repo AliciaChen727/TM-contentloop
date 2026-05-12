@@ -481,6 +481,30 @@ export default function AdsPage() {
       diagnosis: adData.diagnosis.map(d => ({ severity: d.severity, title: d.title, desc: d.desc, action: d.action })),
       bestTime: adData.bestTime,
       budget: { ...adData.budget },
+      posts: (realPosts ?? []).map(p => ({
+        id: p.id,
+        date: p.date,
+        platform: p.platform,
+        type: p.type,
+        title: p.title,
+        reach: p.reach,
+        organicReach: p.organicReach ?? null,
+        paidReach: p.paidReach ?? null,
+        likes: p.likes,
+        comments: p.comments,
+        saves: p.saves,
+        shares: p.shares,
+        plays: p.plays,
+        engagementRate: (p.reach && p.reach > 0)
+          ? parseFloat(((p.likes + p.comments + p.shares) / p.reach * 100).toFixed(2))
+          : null,
+        hasAd: p.hasAd,
+        adSpend: p.adSpend ?? null,
+        adRoas: p.adRoas ?? null,
+        adCpa: p.adCpa ?? null,
+        adCtr: p.adCtr ?? null,
+        url: p.url,
+      })),
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -522,6 +546,16 @@ export default function AdsPage() {
     row('診斷項目', '', '', '')
     row('嚴重度', '標題', '描述', '建議行動')
     adData.diagnosis.forEach(d => row(d.severity, d.title, d.desc, d.action))
+    lines.push('')
+
+    row('內容表現', '', '', '', '', '', '', '', '', '', '', '', '')
+    row('日期', '平台', '類型', '標題', '觸及', '自然觸及', '付費觸及', '按讚', '留言', '收藏', '分享', '播放', '互動率(%)', '有廣告', '廣告花費', '廣告ROAS', '廣告CPA', '廣告CTR(%)')
+    ;(realPosts ?? []).forEach(p => {
+      const er = (p.reach && p.reach > 0)
+        ? ((p.likes + p.comments + p.shares) / p.reach * 100).toFixed(2)
+        : ''
+      row(p.date, p.platform, p.type, p.title, p.reach ?? '', p.organicReach ?? '', p.paidReach ?? '', p.likes, p.comments, p.saves ?? '', p.shares, p.plays ?? '', er, p.hasAd ? '是' : '否', p.adSpend ?? '', p.adRoas ?? '', p.adCpa ?? '', p.adCtr ?? '')
+    })
 
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
