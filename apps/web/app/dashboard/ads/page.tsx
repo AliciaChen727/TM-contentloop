@@ -294,6 +294,7 @@ export default function AdsPage() {
   const [selectedPageName, setSelectedPageName] = useState('')
   const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
   const [showPageMenu, setShowPageMenu] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> }> {
     const pid = pageId ?? selectedPageId
@@ -357,9 +358,11 @@ export default function AdsPage() {
         const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map(mapIgPost)
         const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
         setRealPosts(merged)
+        setDataLoaded(true)
       } catch (err) {
         console.error('ads page load error', err)
         setRealPosts([])
+        setDataLoaded(true)
       }
     })
     return unsub
@@ -431,7 +434,7 @@ export default function AdsPage() {
     setSelectedPageName(pname)
     localStorage.setItem('selectedPageId', pid)
     localStorage.setItem('selectedPageName', pname)
-    setAdData(MOCK_DATA)
+    setDataLoaded(false)
     setRealPosts(null)
     const u = auth.currentUser
     if (!u) return
@@ -459,6 +462,7 @@ export default function AdsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map(mapIgPost)
     setRealPosts([...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date)))
+    setDataLoaded(true)
   }
 
   const openSidekick = useCallback((prompt = '') => {
@@ -687,12 +691,20 @@ export default function AdsPage() {
         </header>
 
         <main className="ads-content">
-          {active === 'overview' && <OverviewSection data={adData} onAskAI={openSidekick} posts={realPosts} />}
-          {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={openSidekick} />}
-          {active === 'creative' && <CreativeSection data={adData} onAskAI={openSidekick} />}
-          {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts} />}
-          {active === 'time' && <BestTimeSection data={adData} />}
-          {active === 'budget' && <BudgetSection data={adData} />}
+          {!dataLoaded ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+              <p style={{ fontSize: 14, color: 'var(--ad-text3)' }}>載入中⋯⋯</p>
+            </div>
+          ) : (
+            <>
+              {active === 'overview' && <OverviewSection data={adData} onAskAI={openSidekick} posts={realPosts} />}
+              {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={openSidekick} />}
+              {active === 'creative' && <CreativeSection data={adData} onAskAI={openSidekick} />}
+              {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts} />}
+              {active === 'time' && <BestTimeSection data={adData} />}
+              {active === 'budget' && <BudgetSection data={adData} />}
+            </>
+          )}
         </main>
       </div>
 
