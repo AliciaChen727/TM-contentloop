@@ -185,13 +185,14 @@ export async function POST(req: NextRequest) {
     : (adLevelData.data ?? [])
 
   // Filter creatives to only those belonging to the current page.
-  // Strict: when pageId is set, require storyId to match — ads without storyId are excluded
-  // because /ads endpoint doesn't reliably return effective_object_story_id for all ad types.
-  const adCreatives = effectivePagePrefix
-    ? allAdCreatives.filter(c => {
-        const storyId = c.effective_object_story_id as string | undefined
-        return typeof storyId === 'string' && storyId.startsWith(`${effectivePagePrefix}_`)
-      })
+  // Accept both pageId and storyIdPrefix — pages migrated to New Page Experience may have
+  // old posts (storyIdPrefix) and new posts (pageId) using different page IDs.
+  const pageIdPrefixes = new Set([pageId, effectivePagePrefix].filter(Boolean) as string[])
+  const matchesPage = (storyId: string | undefined) =>
+    typeof storyId === 'string' && [...pageIdPrefixes].some(p => storyId.startsWith(`${p}_`))
+
+  const adCreatives = pageIdPrefixes.size > 0
+    ? allAdCreatives.filter(c => matchesPage(c.effective_object_story_id as string | undefined))
     : allAdCreatives
 
   // Build adPostIds + adPostMetrics from 90d data, filtered by pageId
@@ -200,7 +201,7 @@ export async function POST(req: NextRequest) {
   for (const c of adLevelAllTime) {
     const storyId = c.effective_object_story_id as string | undefined
     if (!storyId) continue
-    if (effectivePagePrefix && !storyId.startsWith(`${effectivePagePrefix}_`)) continue
+    if (pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
     const postId = storyId
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
