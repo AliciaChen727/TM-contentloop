@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
 
   // Fetch post message for each creative with a storyId so the UI can show post content
   // instead of the internal ad name. Fire in parallel, ignore failures.
-  const storyIds = [...new Set(adCreatives.map(c => c.effective_object_story_id as string).filter(Boolean))]
+  const storyIds = Array.from(new Set(adCreatives.map(c => c.effective_object_story_id as string).filter(Boolean)))
   const postMessageMap: Record<string, string> = {}
   if (storyIds.length > 0) {
     await Promise.all(storyIds.map(async sid => {
