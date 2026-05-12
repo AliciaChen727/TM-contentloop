@@ -84,23 +84,25 @@ export async function POST(req: NextRequest) {
   dailyUrl.searchParams.set('level', 'account')
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
-  const adLevelUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values,effective_object_story_id')
-  Object.entries(dateRange).forEach(([k, v]) => adLevelUrl.searchParams.set(k, v))
-  adLevelUrl.searchParams.set('level', 'ad')
-  adLevelUrl.searchParams.set('limit', '100')
-  adLevelUrl.searchParams.set('access_token', userAccessToken)
-
-  // Fetch ads list and all-time insights across ALL accounts — Speech Festival may be
-  // in a different ad account (e.g. created by another admin) than the primary account.
-  // Summary/daily/ad-level still use accounts[0] for aggregate metrics.
-  const [[summaryRes, dailyRes, adLevelRes], adsListResArray, allTimeResArray] = await Promise.all([
-    Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adLevelUrl)]),
+  // Fetch summary + daily from accounts[0] (aggregate stats).
+  // Fetch per-ad insights (date-range + all-time) and ads list across ALL accounts —
+  // ads created by other admins may live in a different ad account.
+  const [[summaryRes, dailyRes], adsListResArray, adLevelResArray, allTimeResArray] = await Promise.all([
+    Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
       url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
+      url.searchParams.set('access_token', userAccessToken)
+      return fetch(url)
+    })),
+    Promise.all(accounts.map(account => {
+      const url = new URL(`${BASE}/${account.id}/insights`)
+      url.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values,effective_object_story_id')
+      Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
+      url.searchParams.set('level', 'ad')
+      url.searchParams.set('limit', '200')
       url.searchParams.set('access_token', userAccessToken)
       return fetch(url)
     })),
@@ -114,14 +116,20 @@ export async function POST(req: NextRequest) {
       return fetch(url)
     })),
   ])
-  const [summaryData, dailyData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json()])
+  const [summaryData, dailyData] = await Promise.all([summaryRes.json(), dailyRes.json()])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adsListArrays = await Promise.all(adsListResArray.map(r => r.json()))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adsListData = { data: adsListArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[]) }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adLevelArrays = await Promise.all(adLevelResArray.map(r => r.json()))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adLevelData = { data: adLevelArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[]) }
   const allTimeArrays = await Promise.all(allTimeResArray.map(r => r.json()))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adLevelAllTimeData = { data: allTimeArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[]) }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allTimeErrors = allTimeArrays.filter((d: any) => d.error).map((d: any) => d.error?.message)
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
@@ -340,6 +348,7 @@ export async function POST(req: NextRequest) {
       sampleStoryIds: allAdCreatives.slice(0, 5).map(c => c.effective_object_story_id ?? null),
       postTitlesFound: Object.keys(postMessageMap).length,
       adPostMetricsCount: Object.keys(adPostMetrics).length,
+      allTimeErrors,
     },
   })
   } catch (err) {
