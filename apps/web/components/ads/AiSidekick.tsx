@@ -226,12 +226,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, metricsC
             <div className="ads-sk-input-box">
               <textarea ref={textareaRef} className="ads-sk-textarea" rows={1} placeholder="問我任何問題…"
                 value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); send() } }}
                 onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }} />
               <button className="ads-sk-send-btn" onClick={() => send()} disabled={!input.trim() || typing}>
                 <Icon name="send" size={15} color="white" />
               </button>
             </div>
+            <div style={{ fontSize: 11, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4, paddingRight: 2 }}>Enter 換行　Shift+Enter 送出</div>
           </div>
         </div>
       </div>
