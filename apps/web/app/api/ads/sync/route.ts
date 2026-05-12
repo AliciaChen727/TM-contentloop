@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
+  try {
   const body = await req.json().catch(() => ({}))
   const pageId: string | undefined = body.pageId
   const since: string | undefined = body.since
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     pageAdAccountsUrl.searchParams.set('fields', 'id,name')
     pageAdAccountsUrl.searchParams.set('access_token', userAccessToken)
     const pageAdAccountsRes = await fetch(pageAdAccountsUrl)
-    const pageAdAccountsData = await pageAdAccountsRes.json()
+    const pageAdAccountsData = pageAdAccountsRes.ok ? await pageAdAccountsRes.json().catch(() => ({})) : {}
     const pageAccounts: { id: string; name: string }[] = pageAdAccountsData.data ?? []
     if (pageAccounts.length > 0) {
       adAccountId = pageAccounts[0].id
@@ -251,4 +252,8 @@ export async function POST(req: NextRequest) {
     success: true, adAccountId, spend, conversions, conversionType,
     adCreativesCount: adCreatives.length,
   })
+  } catch (err) {
+    console.error('ads sync error', err)
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Sync failed' }, { status: 500 })
+  }
 }
