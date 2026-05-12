@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 
-function serializeSnap(raw: FirebaseFirestore.DocumentData) {
+function serializeSnap(raw: FirebaseFirestore.DocumentData): Record<string, unknown> {
   return { ...raw, syncedAt: raw.syncedAt?.toDate?.()?.toISOString() ?? null }
 }
 
