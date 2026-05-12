@@ -44,48 +44,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No user access token. Please reconnect Meta to grant ads_read.' }, { status: 400 })
   }
 
-  // Get ad accounts: prefer page-linked accounts when pageId is known
-  let adAccountId: string
-  if (pageId) {
-    const pageAdAccountsUrl = new URL(`${BASE}/${pageId}/adaccounts`)
-    pageAdAccountsUrl.searchParams.set('fields', 'id,name')
-    pageAdAccountsUrl.searchParams.set('access_token', userAccessToken)
-    const pageAdAccountsRes = await fetch(pageAdAccountsUrl)
-    const pageAdAccountsData = pageAdAccountsRes.ok ? await pageAdAccountsRes.json().catch(() => ({})) : {}
-    const pageAccounts: { id: string; name: string }[] = pageAdAccountsData.data ?? []
-    if (pageAccounts.length > 0) {
-      adAccountId = pageAccounts[0].id
-    } else {
-      // Fallback to user-level accounts list
-      const accountsUrl = new URL(`${BASE}/me/adaccounts`)
-      accountsUrl.searchParams.set('fields', 'id,name')
-      accountsUrl.searchParams.set('access_token', userAccessToken)
-      const accountsRes = await fetch(accountsUrl)
-      const accountsData = await accountsRes.json()
-      if (!accountsRes.ok || accountsData.error) {
-        return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
-      }
-      const accounts: { id: string; name: string }[] = accountsData.data ?? []
-      if (!accounts.length) {
-        return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
-      }
-      adAccountId = accounts[0].id
-    }
-  } else {
-    const accountsUrl = new URL(`${BASE}/me/adaccounts`)
-    accountsUrl.searchParams.set('fields', 'id,name')
-    accountsUrl.searchParams.set('access_token', userAccessToken)
-    const accountsRes = await fetch(accountsUrl)
-    const accountsData = await accountsRes.json()
-    if (!accountsRes.ok || accountsData.error) {
-      return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
-    }
-    const accounts: { id: string; name: string }[] = accountsData.data ?? []
-    if (!accounts.length) {
-      return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
-    }
-    adAccountId = accounts[0].id
+  // Always use /me/adaccounts — page isolation is handled by effective_object_story_id filtering.
+  // Using /{pageId}/adaccounts can return a different (empty) account than the shared account
+  // that actually contains the campaigns for both D67 and Legacy pages.
+  const accountsUrl = new URL(`${BASE}/me/adaccounts`)
+  accountsUrl.searchParams.set('fields', 'id,name')
+  accountsUrl.searchParams.set('access_token', userAccessToken)
+  const accountsRes = await fetch(accountsUrl)
+  const accountsData = await accountsRes.json()
+  if (!accountsRes.ok || accountsData.error) {
+    return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
   }
+  const accounts: { id: string; name: string }[] = accountsData.data ?? []
+  if (!accounts.length) {
+    return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
+  }
+  const adAccountId = accounts[0].id
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 
@@ -255,6 +229,13 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true, adAccountId, spend, conversions, conversionType,
     adCreativesCount: adCreatives.length,
+    _debug: {
+      adsListCount: adsList.length,
+      allTimeCount: adLevelAllTime.length,
+      allAdCreativesCount: allAdCreatives.length,
+      pageId: pageId ?? null,
+      sampleStoryIds: allAdCreatives.slice(0, 5).map(c => c.effective_object_story_id ?? null),
+    },
   })
   } catch (err) {
     console.error('ads sync error', err)
