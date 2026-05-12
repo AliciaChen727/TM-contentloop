@@ -295,6 +295,17 @@ export async function POST(req: NextRequest) {
     adPostMetrics,
   })
 
+  // If this sync found creatives, write them to the shared page-level path so other
+  // page admins (who may not have access to this ad account) can read them.
+  if (pageId && adCreativesWithTitle.length > 0) {
+    await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
+      syncedAt: Timestamp.now(),
+      adCreatives: adCreativesWithTitle,
+      adPostIds,
+      adPostMetrics,
+    }, { merge: true })
+  }
+
   return NextResponse.json({
     success: true, adAccountId, spend, conversions, conversionType,
     adCreativesCount: adCreativesWithTitle.length,
