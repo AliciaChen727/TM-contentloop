@@ -405,7 +405,7 @@ export default function AdsPage() {
             body: JSON.stringify({ pageId: selectedPageId }),
           })
           const igJson = await igRes.json()
-          if (!igRes.ok) setSyncError(`IG 同步失敗：${igJson.error ?? '未知錯誤'}`)
+          if (!igRes.ok) console.warn('[ig sync]', igJson.error ?? '未知錯誤')
         } catch { /* ignore */ }
       }
       const { adPostIds: newIds, adPostMetrics: newMetrics } = await fetchAdData(idToken, selectedPageId)
