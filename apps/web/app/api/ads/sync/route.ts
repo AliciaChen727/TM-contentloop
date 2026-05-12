@@ -195,12 +195,32 @@ export async function POST(req: NextRequest) {
     ? allAdCreatives.filter(c => matchesPage(c.effective_object_story_id as string | undefined))
     : allAdCreatives
 
-  // Fetch post message for each creative with a storyId so the UI can show post content
-  // instead of the internal ad name. Fire in parallel, ignore failures.
+  // Look up post message from Firestore fbPosts for each creative with a storyId.
+  // Searches under both pageId and storyIdPrefix paths since page IDs may differ.
   const storyIds = Array.from(new Set(adCreatives.map(c => c.effective_object_story_id as string).filter(Boolean)))
   const postMessageMap: Record<string, string> = {}
   if (storyIds.length > 0) {
+    const searchPaths = Array.from(new Set([pageId, effectivePagePrefix].filter(Boolean) as string[]))
     await Promise.all(storyIds.map(async sid => {
+      // 1. Try Firestore fbPosts (fast, no API call)
+      for (const pid of searchPaths) {
+        try {
+          const doc = await userRef.collection('pages').doc(pid).collection('fbPosts').doc(sid).get()
+          if (doc.exists) {
+            const msg = (doc.data() as { message?: string }).message
+            if (msg) { postMessageMap[sid] = msg; return }
+          }
+        } catch { /* ignore */ }
+      }
+      // Legacy path
+      try {
+        const doc = await userRef.collection('fbPosts').doc(sid).get()
+        if (doc.exists) {
+          const msg = (doc.data() as { message?: string }).message
+          if (msg) { postMessageMap[sid] = msg; return }
+        }
+      } catch { /* ignore */ }
+      // 2. Fallback: Meta Graph API
       try {
         const postUrl = new URL(`${BASE}/${sid}`)
         postUrl.searchParams.set('fields', 'message,story')
@@ -273,6 +293,7 @@ export async function POST(req: NextRequest) {
       pageId: pageId ?? null,
       effectivePagePrefix: effectivePagePrefix ?? null,
       sampleStoryIds: allAdCreatives.slice(0, 5).map(c => c.effective_object_story_id ?? null),
+      postTitlesFound: Object.keys(postMessageMap).length,
     },
   })
   } catch (err) {
