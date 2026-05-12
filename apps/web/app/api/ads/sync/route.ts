@@ -115,10 +115,13 @@ export async function POST(req: NextRequest) {
     })),
   ])
   const [summaryData, dailyData, adLevelData] = await Promise.all([summaryRes.json(), dailyRes.json(), adLevelRes.json()])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adsListArrays = await Promise.all(adsListResArray.map(r => r.json()))
-  const adsListData = { data: adsListArrays.flatMap((d: { data?: unknown[] }) => d.data ?? []) }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adsListData = { data: adsListArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[]) }
   const allTimeArrays = await Promise.all(allTimeResArray.map(r => r.json()))
-  const adLevelAllTimeData = { data: allTimeArrays.flatMap((d: { data?: unknown[] }) => d.data ?? []) }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adLevelAllTimeData = { data: allTimeArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[]) }
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
@@ -180,7 +183,7 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string } }[] = adsListData.data ?? []
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string } }[] = (adsListData.data ?? []) as any
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
     ? adsList.map(ad => {
         if (insightsByAdId.has(ad.id)) return insightsByAdId.get(ad.id)!
