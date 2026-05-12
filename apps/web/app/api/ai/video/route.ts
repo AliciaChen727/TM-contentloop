@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
         numberOfVideos: 1,
         aspectRatio: '9:16',
         resolution: '720p',
-        personGeneration: 'dont_allow',
+        personGeneration: 'allow_adult',
         durationSeconds: duration,
       },
     })
