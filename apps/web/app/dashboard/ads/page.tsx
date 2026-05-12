@@ -390,14 +390,19 @@ export default function AdsPage() {
         body: JSON.stringify({ pageId: selectedPageId, since: syncFrom, until: syncTo }),
       })
       const json = await res.json()
+      if (json._debug) console.log('[ads sync debug]', json._debug)
       if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
-      // Fire IG sync in parallel — doesn't block ads sync result
+      // Await IG sync so errors are surfaced to the user
       if (selectedPageId) {
-        fetch('/api/insights/ig/sync', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pageId: selectedPageId }),
-        }).catch(() => {})
+        try {
+          const igRes = await fetch('/api/insights/ig/sync', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pageId: selectedPageId }),
+          })
+          const igJson = await igRes.json()
+          if (!igRes.ok) setSyncError(`IG 同步失敗：${igJson.error ?? '未知錯誤'}`)
+        } catch { /* ignore */ }
       }
       const { adPostIds: newIds, adPostMetrics: newMetrics } = await fetchAdData(idToken, selectedPageId)
       setRealPosts(prev => prev ? prev.map(p => {

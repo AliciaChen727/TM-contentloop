@@ -25,9 +25,21 @@ export async function POST(req: NextRequest) {
     const tokenDoc = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
     if (!tokenDoc.exists) return NextResponse.json({ error: 'No Meta token for this page' }, { status: 400 })
 
-    const { accessToken, igUserId } = tokenDoc.data() as { accessToken?: string; igUserId?: string }
-    if (!igUserId) return NextResponse.json({ error: 'No IG account linked to this page' }, { status: 400 })
+    const tokenData = tokenDoc.data() as { accessToken?: string; igUserId?: string }
+    const { accessToken } = tokenData
+    let igUserId = tokenData.igUserId
     if (!accessToken) return NextResponse.json({ error: 'No page access token' }, { status: 400 })
+
+    // Self-heal: if igUserId is missing (token was connected before IG permission was granted),
+    // fetch it from Meta API and persist so future syncs skip this step.
+    if (!igUserId) {
+      const pageRes = await fetch(`${BASE}/${pageId}?fields=instagram_business_account&access_token=${accessToken}`)
+      const pageData = await pageRes.json()
+      const fetchedIgId: string | undefined = pageData.instagram_business_account?.id
+      if (!fetchedIgId) return NextResponse.json({ error: 'No IG account linked to this page' }, { status: 400 })
+      await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).update({ igUserId: fetchedIgId })
+      igUserId = fetchedIgId
+    }
 
     const mediaUrl = new URL(`${BASE}/${igUserId}/media`)
     mediaUrl.searchParams.set('fields', 'id,timestamp,caption,media_type,media_product_type,permalink,like_count,comments_count')
