@@ -67,6 +67,7 @@ interface Message {
   response?: AiResponse | null
   imageUrl?: string
   imageLoading?: boolean
+  imageError?: string
   videoUrl?: string
   videoLoading?: boolean
   videoDuration?: number
@@ -175,11 +176,18 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         body: JSON.stringify({ prompt }),
       })
       const data = await res.json()
+      if (!res.ok || !data.imageData) {
+        setMessages(p => p.map(m => m.id === msgId
+          ? { ...m, imageLoading: false, imageError: data.error ?? '圖片生成失敗，請重試' }
+          : m))
+        return
+      }
       setMessages(p => p.map(m => m.id === msgId
-        ? { ...m, imageLoading: false, imageUrl: data.imageData ? `data:${data.mimeType};base64,${data.imageData}` : undefined }
+        ? { ...m, imageLoading: false, imageUrl: `data:${data.mimeType};base64,${data.imageData}` }
         : m))
-    } catch {
-      setMessages(p => p.map(m => m.id === msgId ? { ...m, imageLoading: false } : m))
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : '網路錯誤'
+      setMessages(p => p.map(m => m.id === msgId ? { ...m, imageLoading: false, imageError: errMsg } : m))
     }
   }, [])
 
@@ -439,6 +447,26 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                         {msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
                         {msg.response && <AiMessageBody r={msg.response} onSend={send} />}
                         {msg.imageLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎨 生成圖片中⋯</div>}
+                        {msg.imageError && (
+                          <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>
+                            <div style={{ color: '#ef4444', marginBottom: 6 }}>❌ {msg.imageError}</div>
+                            {msg.response?.imagePrompt && (
+                              <>
+                                <textarea
+                                  defaultValue={msg.response.imagePrompt}
+                                  style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }}
+                                  onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                                />
+                                <button className="ads-btn" style={{ fontSize: 12 }} onClick={() => {
+                                  const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
+                                  if (!prompt) return
+                                  setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageError: undefined, imageLoading: true } : m))
+                                  generateImage(msg.id, prompt)
+                                }}>↻ 重新生成</button>
+                              </>
+                            )}
+                          </div>
+                        )}
                         {msg.imageUrl && (
                           <div style={{ marginTop: 8 }}>
                             <img src={msg.imageUrl} alt="生成的廣告素材" style={{ width: '100%', borderRadius: 8 }} />
