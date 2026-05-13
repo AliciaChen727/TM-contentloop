@@ -269,6 +269,17 @@ export async function POST(req: NextRequest) {
     return sid && postMessageMap[sid] ? { ...c, post_title: postMessageMap[sid] } : c
   })
 
+  // Load known IG media IDs from Firestore to catch cross-account and cross-format ads.
+  // Handles two cases: (A) fbPageId_igMediaId format (Meta Ads Manager cross-posts),
+  // (B) oldIgUserId_igMediaId format (boosts from a previously linked IG account).
+  let igMediaIdSet = new Set<string>()
+  if (pageId) {
+    try {
+      const igPostsSnap = await userRef.collection('pages').doc(pageId).collection('igPosts').get()
+      igMediaIdSet = new Set(igPostsSnap.docs.map(d => d.id))
+    } catch { /* non-critical */ }
+  }
+
   // Build adPostIds + adPostMetrics (FB) and igPostIds + igPostMetrics (IG) from 90d data
   const adPostIds: string[] = []
   const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
@@ -277,10 +288,10 @@ export async function POST(req: NextRequest) {
   for (const c of adLevelAllTime) {
     const storyId = adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
-    const isIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
-    if (!isIgPost && pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
-    // Strip prefix: "userId_postId" → "postId"
     const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+    const isCurrentIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
+    const treatAsIg = isCurrentIgPost || igMediaIdSet.has(postId)
+    if (!treatAsIg && pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -295,7 +306,7 @@ export async function POST(req: NextRequest) {
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
     const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
-    if (isIgPost) {
+    if (treatAsIg) {
       if (!igPostIds.includes(postId)) igPostIds.push(postId)
       const existing = igPostMetrics[postId]
       if (!existing || cSpend > existing.spend) igPostMetrics[postId] = metricsVal
@@ -312,9 +323,10 @@ export async function POST(req: NextRequest) {
     const storyId = (c.effective_object_story_id as string | undefined)
       ?? adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
-    const isIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
     const postIdKey = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
-    if (isIgPost ? igPostMetrics[postIdKey] : adPostMetrics[postIdKey]) continue
+    const isCurrentIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
+    const treatAsIg = isCurrentIgPost || igMediaIdSet.has(postIdKey)
+    if (treatAsIg ? igPostMetrics[postIdKey] : adPostMetrics[postIdKey]) continue
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -329,7 +341,7 @@ export async function POST(req: NextRequest) {
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
     const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
-    if (isIgPost) {
+    if (treatAsIg) {
       if (!igPostIds.includes(postIdKey)) igPostIds.push(postIdKey)
       igPostMetrics[postIdKey] = metricsVal
     } else {
@@ -383,6 +395,8 @@ export async function POST(req: NextRequest) {
       adPostMetricsCount: Object.keys(adPostMetrics).length,
       adPostMetricsSample: Object.entries(adPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
       igPostMetricsCount: Object.keys(igPostMetrics).length,
+      igPostMetricsSample: Object.entries(igPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
+      igMediaIdSetSize: igMediaIdSet.size,
       igUserId: igUserId ?? null,
       allTimeErrors,
     },
