@@ -303,7 +303,8 @@ export default function AdsPage() {
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
 
-  async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> }> {
+  type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number }>
+  async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: AdMetricsMap; igPostIds: Set<string>; igPostMetrics: AdMetricsMap }> {
     const pid = pageId ?? selectedPageId
     const qs = pid ? `?pageId=${pid}` : ''
     const res = await fetch(`/api/ads/data${qs}`, { headers: { Authorization: `Bearer ${idToken}` } })
