@@ -16,6 +16,10 @@ interface IgPost {
     shares: number
     views: number
   }
+  hasAd?: boolean
+  adSpend?: number
+  adRoas?: number
+  adCtr?: number
 }
 
 type SortKey = 'timestamp' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'views'
@@ -90,6 +94,9 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
             <SortTh k="saved" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>花費</th>
+            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>ROAS</th>
+            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>CTR</th>
             {onAskAI && <th style={{ width: 60 }} />}
           </tr>
         </thead>
@@ -123,6 +130,15 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
                 <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.shares)}</td>
                 <td className="ads-posts-num" style={{ textAlign: 'right' }}>
                   {post.insights.views > 0 ? fmt(post.insights.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+                </td>
+                <td className="ads-posts-num" style={{ textAlign: 'right', color: post.hasAd ? 'var(--ad-text)' : 'var(--ad-text3)' }}>
+                  {post.hasAd && post.adSpend != null && post.adSpend > 0 ? `$${post.adSpend.toLocaleString('zh-TW')}` : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+                </td>
+                <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: post.hasAd && (post.adRoas ?? 0) > 0 ? 600 : undefined, color: post.hasAd && (post.adRoas ?? 0) >= 2 ? 'var(--ad-green)' : undefined }}>
+                  {post.hasAd && post.adRoas != null && post.adRoas > 0 ? `${post.adRoas.toFixed(1)}x` : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+                </td>
+                <td className="ads-posts-num" style={{ textAlign: 'right' }}>
+                  {post.hasAd && post.adCtr != null && post.adCtr > 0 ? `${post.adCtr.toFixed(2)}%` : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
                 </td>
                 {onAskAI && (
                   <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>

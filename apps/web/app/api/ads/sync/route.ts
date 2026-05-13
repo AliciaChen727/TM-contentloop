@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No Meta token. Please reconnect.' }, { status: 400 })
   }
 
-  const { userAccessToken, storyIdPrefix } = tokenDoc.data() as { userAccessToken?: string; storyIdPrefix?: string }
+  const { userAccessToken, storyIdPrefix, igUserId } = tokenDoc.data() as { userAccessToken?: string; storyIdPrefix?: string; igUserId?: string }
   if (!userAccessToken) {
     return NextResponse.json({ error: 'No user access token. Please reconnect Meta to grant ads_read.' }, { status: 400 })
   }
@@ -269,14 +269,17 @@ export async function POST(req: NextRequest) {
     return sid && postMessageMap[sid] ? { ...c, post_title: postMessageMap[sid] } : c
   })
 
-  // Build adPostIds + adPostMetrics from 90d data, filtered by pageId
+  // Build adPostIds + adPostMetrics (FB) and igPostIds + igPostMetrics (IG) from 90d data
   const adPostIds: string[] = []
   const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
+  const igPostIds: string[] = []
+  const igPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
   for (const c of adLevelAllTime) {
     const storyId = adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
-    if (pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
-    // Strip pageId prefix: "pageId_postId" → "postId" to match FB Insights post IDs
+    const isIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
+    if (!isIgPost && pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
+    // Strip prefix: "userId_postId" → "postId"
     const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
@@ -291,22 +294,27 @@ export async function POST(req: NextRequest) {
       : 0
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
-    if (!adPostIds.includes(postId)) adPostIds.push(postId)
-    // Keep highest-spend metrics if same post appears multiple times (different ad sets)
-    const existing = adPostMetrics[postId]
-    if (!existing || cSpend > existing.spend) {
-      adPostMetrics[postId] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    if (isIgPost) {
+      if (!igPostIds.includes(postId)) igPostIds.push(postId)
+      const existing = igPostMetrics[postId]
+      if (!existing || cSpend > existing.spend) igPostMetrics[postId] = metricsVal
+    } else {
+      if (!adPostIds.includes(postId)) adPostIds.push(postId)
+      // Keep highest-spend metrics if same post appears multiple times (different ad sets)
+      const existing = adPostMetrics[postId]
+      if (!existing || cSpend > existing.spend) adPostMetrics[postId] = metricsVal
     }
   }
 
-  // Supplement adPostMetrics from adCreatives — Meta 90d insights sometimes omit
-  // effective_object_story_id, so some ads land in adCreatives but miss adPostMetrics.
+  // Supplement adPostMetrics / igPostMetrics from adCreatives
   for (const c of adCreatives) {
     const storyId = (c.effective_object_story_id as string | undefined)
       ?? adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
+    const isIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
     const postIdKey = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
-    if (adPostMetrics[postIdKey]) continue
+    if (isIgPost ? igPostMetrics[postIdKey] : adPostMetrics[postIdKey]) continue
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -320,8 +328,14 @@ export async function POST(req: NextRequest) {
       : 0
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
-    if (!adPostIds.includes(postIdKey)) adPostIds.push(postIdKey)
-    adPostMetrics[postIdKey] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    if (isIgPost) {
+      if (!igPostIds.includes(postIdKey)) igPostIds.push(postIdKey)
+      igPostMetrics[postIdKey] = metricsVal
+    } else {
+      if (!adPostIds.includes(postIdKey)) adPostIds.push(postIdKey)
+      adPostMetrics[postIdKey] = metricsVal
+    }
   }
 
   const insightsRef = pageId
@@ -338,6 +352,8 @@ export async function POST(req: NextRequest) {
     adCreatives: adCreativesWithTitle,
     adPostIds,
     adPostMetrics,
+    igPostIds,
+    igPostMetrics,
   })
 
   // If this sync found creatives, write them to the shared page-level path so other
@@ -348,6 +364,8 @@ export async function POST(req: NextRequest) {
       adCreatives: adCreativesWithTitle,
       adPostIds,
       adPostMetrics,
+      igPostIds,
+      igPostMetrics,
     }, { merge: true })
   }
 
@@ -364,6 +382,8 @@ export async function POST(req: NextRequest) {
       postTitlesFound: Object.keys(postMessageMap).length,
       adPostMetricsCount: Object.keys(adPostMetrics).length,
       adPostMetricsSample: Object.entries(adPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
+      igPostMetricsCount: Object.keys(igPostMetrics).length,
+      igUserId: igUserId ?? null,
       allTimeErrors,
     },
   })

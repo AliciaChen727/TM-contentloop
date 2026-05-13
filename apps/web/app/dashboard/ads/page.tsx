@@ -57,8 +57,10 @@ function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapIgPost(p: any): Post {
+function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number }>): Post {
   const isVideo = p.mediaType === 'REELS' || p.mediaType === 'VIDEO'
+  const hasAd = igPostIds?.has(p.id) ?? false
+  const metrics = igPostMetrics?.[p.id]
   return {
     id: p.id,
     date: p.timestamp?.slice(0, 10) ?? '',
@@ -72,7 +74,11 @@ function mapIgPost(p: any): Post {
     plays: isVideo && (p.insights?.views ?? 0) > 0 ? p.insights.views : null,
     type: isVideo ? 'reels' : 'post',
     url: p.permalink || '#',
-    hasAd: false,
+    hasAd,
+    adRoas: metrics?.roas,
+    adSpend: metrics?.spend,
+    adCpa: metrics?.cpa,
+    adCtr: metrics?.ctr,
   }
 }
 
@@ -309,9 +315,11 @@ export default function AdsPage() {
       return {
         adPostIds: new Set<string>(json.data.adPostIds ?? []),
         adPostMetrics: json.data.adPostMetrics ?? {},
+        igPostIds: new Set<string>(json.data.igPostIds ?? []),
+        igPostMetrics: json.data.igPostMetrics ?? {},
       }
     }
-    return { adPostIds: new Set(), adPostMetrics: {} }
+    return { adPostIds: new Set(), adPostMetrics: {}, igPostIds: new Set(), igPostMetrics: {} }
   }
 
   useEffect(() => {
@@ -344,6 +352,8 @@ export default function AdsPage() {
         const adJson = adRes.ok ? await adRes.json() : null
         const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
         const initialAdPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.adPostMetrics ?? {}
+        const initialIgPostIds = new Set<string>(adJson?.data?.igPostIds ?? [])
+        const initialIgPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.igPostMetrics ?? {}
         if (adJson?.data) {
           setAdData(buildAdData(adJson.data))
           setLastSync(adJson.data.syncedAt ?? null)
@@ -356,7 +366,7 @@ export default function AdsPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const igJson = igRes.ok ? await igRes.json() : null
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map(mapIgPost)
+        const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map((p: any) => mapIgPost(p, initialIgPostIds, initialIgPostMetrics))
         const merged = [...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date))
         setRealPosts(merged)
         setDataLoaded(true)
@@ -408,18 +418,31 @@ export default function AdsPage() {
           if (!igRes.ok) console.warn('[ig sync]', igJson.error ?? '未知錯誤')
         } catch { /* ignore */ }
       }
-      const { adPostIds: newIds, adPostMetrics: newMetrics } = await fetchAdData(idToken, selectedPageId)
+      const { adPostIds: newIds, adPostMetrics: newMetrics, igPostIds: newIgIds, igPostMetrics: newIgMetrics } = await fetchAdData(idToken, selectedPageId)
       setRealPosts(prev => prev ? prev.map(p => {
-        if (p.platform !== 'FB') return p
-        const m = newMetrics[p.id]
-        return {
-          ...p,
-          hasAd: p.hasAd || newIds.has(p.id),  // never demote; only promote
-          adRoas: m?.roas ?? p.adRoas,
-          adSpend: m?.spend ?? p.adSpend,
-          adCpa: m?.cpa ?? p.adCpa,
-          adCtr: m?.ctr ?? p.adCtr,
+        if (p.platform === 'FB') {
+          const m = newMetrics[p.id]
+          return {
+            ...p,
+            hasAd: p.hasAd || newIds.has(p.id),
+            adRoas: m?.roas ?? p.adRoas,
+            adSpend: m?.spend ?? p.adSpend,
+            adCpa: m?.cpa ?? p.adCpa,
+            adCtr: m?.ctr ?? p.adCtr,
+          }
         }
+        if (p.platform === 'IG') {
+          const m = newIgMetrics[p.id]
+          return {
+            ...p,
+            hasAd: p.hasAd || newIgIds.has(p.id),
+            adRoas: m?.roas ?? p.adRoas,
+            adSpend: m?.spend ?? p.adSpend,
+            adCpa: m?.cpa ?? p.adCpa,
+            adCtr: m?.ctr ?? p.adCtr,
+          }
+        }
+        return p
       }) : prev)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步失敗')
@@ -450,6 +473,8 @@ export default function AdsPage() {
     const adJson = adRes.ok ? await adRes.json() : null
     const adPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
     const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.adPostMetrics ?? {}
+    const igPostIdsSwitch = new Set<string>(adJson?.data?.igPostIds ?? [])
+    const igPostMetricsSwitch: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.igPostMetrics ?? {}
     if (adJson?.data) {
       setAdData(buildAdData(adJson.data))
       setLastSync(adJson.data.syncedAt ?? null)
@@ -461,7 +486,7 @@ export default function AdsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const igJson = igRes.ok ? await igRes.json() : null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map(mapIgPost)
+    const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map((p: any) => mapIgPost(p, igPostIdsSwitch, igPostMetricsSwitch))
     setRealPosts([...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date)))
     setDataLoaded(true)
   }

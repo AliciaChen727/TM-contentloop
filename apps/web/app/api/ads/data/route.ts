@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
             data.adCreatives = shared.adCreatives
             data.adPostIds = shared.adPostIds ?? data.adPostIds
             data.adPostMetrics = shared.adPostMetrics ?? data.adPostMetrics
+            data.igPostIds = shared.igPostIds ?? data.igPostIds
+            data.igPostMetrics = shared.igPostMetrics ?? data.igPostMetrics
           }
         }
       }
