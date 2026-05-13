@@ -308,7 +308,7 @@ export default function AdsPage() {
     const pid = pageId ?? selectedPageId
     const qs = pid ? `?pageId=${pid}` : ''
     const res = await fetch(`/api/ads/data${qs}`, { headers: { Authorization: `Bearer ${idToken}` } })
-    if (!res.ok) return { adPostIds: new Set(), adPostMetrics: {} }
+    if (!res.ok) return { adPostIds: new Set(), adPostMetrics: {}, igPostIds: new Set(), igPostMetrics: {} }
     const json = await res.json()
     if (json.data) {
       setAdData(buildAdData(json.data))
