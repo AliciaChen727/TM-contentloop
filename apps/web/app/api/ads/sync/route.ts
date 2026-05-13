@@ -269,7 +269,8 @@ export async function POST(req: NextRequest) {
     const storyId = c.effective_object_story_id as string | undefined
     if (!storyId) continue
     if (pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
-    const postId = storyId
+    // Strip pageId prefix: "pageId_postId" → "postId" to match FB Insights post IDs
+    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -295,7 +296,9 @@ export async function POST(req: NextRequest) {
   // effective_object_story_id, so some ads land in adCreatives but miss adPostMetrics.
   for (const c of adCreatives) {
     const storyId = c.effective_object_story_id as string | undefined
-    if (!storyId || adPostMetrics[storyId]) continue
+    if (!storyId) continue
+    const postIdKey = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+    if (adPostMetrics[postIdKey]) continue
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -309,8 +312,8 @@ export async function POST(req: NextRequest) {
       : 0
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
-    if (!adPostIds.includes(storyId)) adPostIds.push(storyId)
-    adPostMetrics[storyId] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    if (!adPostIds.includes(postIdKey)) adPostIds.push(postIdKey)
+    adPostMetrics[postIdKey] = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
   }
 
   const insightsRef = pageId
