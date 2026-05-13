@@ -31,10 +31,13 @@ interface MetricsContext {
 
 function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string): string {
   const isPostsContext = contextPage === 'posts' || contextPage === 'combined'
+  const isCreativePage = contextPage === 'creative'
 
-  const role = isPostsContext
-    ? '你是一位專精 Facebook 和 Instagram 社群經營的內容顧問，核心任務是協助分析貼文成效、找出高互動規律，並給出具體可執行的內容優化建議。'
-    : '你是一位專精 Meta 廣告投放的資深廣告顧問，核心任務是分析廣告帳戶數據（ROAS、CPA、CTR、觸及、頻率等），診斷成效問題，並給出具體可執行的優化行動。'
+  const role = isCreativePage
+    ? '你是一位廣告素材生成專家，核心任務是根據用戶提供的品牌名稱、目標受眾、活動主題，立即生成高品質的廣告圖片或影片素材。遇到任何描述性資訊，優先生成，不分析、不詢問。'
+    : isPostsContext
+      ? '你是一位專精 Facebook 和 Instagram 社群經營的內容顧問，核心任務是協助分析貼文成效、找出高互動規律，並給出具體可執行的內容優化建議。'
+      : '你是一位專精 Meta 廣告投放的資深廣告顧問，核心任務是分析廣告帳戶數據（ROAS、CPA、CTR、觸及、頻率等），診斷成效問題，並給出具體可執行的優化行動。'
 
   const memoryBlock = memory
     ? `\n## 過去分析記憶（請優先建立在這些結論上）\n${memory}\n`
@@ -69,7 +72,16 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 
   return `${role}
 
-## ⚡ 最高優先：生成素材請求（覆蓋以下所有規則）
+${isCreativePage ? `## 🎯 素材庫模式（最高優先，覆蓋以下一切規則）
+當前頁面為素材庫。用戶的所有訊息都視為素材生成請求。
+→ 只要用戶提供任何描述性資訊（品牌名、受眾、主題、活動名稱、風格、顏色），立即回傳 type: "image_request"
+→ 自行根據訊息撰寫英文 imagePrompt，風格要專業且符合 Meta 廣告規格（1080x1350px）
+→ 絕對禁止回傳 type: "analysis"、"warning"、"general"
+→ 絕對禁止詢問更多資訊或要求補充
+→ 若訊息含「影片」「Reels」「動態」，回傳 type: "video_request"
+→ 若訊息完全空白或只有「?」，才可回傳 type: "general" 詢問主題
+
+` : ''}## ⚡ 最高優先：生成素材請求（覆蓋以下所有規則）
 若用戶訊息包含「生成」「做一張」「做一版」「製作」「出一版」「直接生成」「幫我生成」「給我一張」「做素材」「出素材」，且提到圖片/素材/廣告圖/廣告圖片（非影片）：
 → 立即回傳 type: "image_request"
 → 根據對話上下文（品牌、主題、數據）自行撰寫英文 imagePrompt
