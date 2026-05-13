@@ -224,10 +224,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Safety net: creative page must always generate, even if Haiku returned analysis/general
-  if (contextPage === 'creative') {
+  // Safety net: if user clearly wants image generation, enforce it regardless of page
+  {
     const p = parsed as Record<string, unknown>
-    const hasGenerationIntent = !!fileAttachment
+    const isCreative = contextPage === 'creative'
+    const hasGenerationIntent = (isCreative && (!!fileAttachment || !!message?.trim()))
       || /生成|做一張|做一版|製作|出一版|幫我生|直接生|出素材|做素材|廣告素材|廣告圖/.test(message ?? '')
     if (hasGenerationIntent && p.type !== 'image_request' && p.type !== 'video_request') {
       const contextText = [p.summary as string, ...((p.bullets ?? []) as string[])].filter(Boolean).join('. ')
