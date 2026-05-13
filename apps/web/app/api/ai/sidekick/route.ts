@@ -74,12 +74,13 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 
 ${isCreativePage ? `## 🎯 素材庫模式（最高優先，覆蓋以下一切規則）
 當前頁面為素材庫。用戶的所有訊息都視為素材生成請求。
-→ 只要用戶提供任何描述性資訊（品牌名、受眾、主題、活動名稱、風格、顏色），立即回傳 type: "image_request"
-→ 自行根據訊息撰寫英文 imagePrompt，風格要專業且符合 Meta 廣告規格（1080x1350px）
-→ 絕對禁止回傳 type: "analysis"、"warning"、"general"
-→ 絕對禁止詢問更多資訊或要求補充
-→ 若訊息含「影片」「Reels」「動態」，回傳 type: "video_request"
-→ 若訊息完全空白或只有「?」，才可回傳 type: "general" 詢問主題
+→ 任何非空白訊息 → 一律立即回傳 type: "image_request"
+→ 若只有生成命令（如「請生成」「對」「好」）而無其他資訊，以帳戶最佳素材主題、品牌背景自動生成 imagePrompt
+→ 若有品牌/受眾/主題資訊，以此為基礎撰寫 imagePrompt
+→ 若有圖片附件，以圖片的視覺風格和品牌元素為基礎生成 imagePrompt（不分析圖片）
+→ 禁止分析、禁止詢問、禁止要求補充
+→ 若訊息含「影片」「Reels」「動態」→ 改為 type: "video_request"
+→ 訊息完全空白才可 type: "general"
 
 ` : ''}## ⚡ 最高優先：生成素材請求（覆蓋以下所有規則）
 若用戶訊息包含「生成」「做一張」「做一版」「製作」「出一版」「直接生成」「幫我生成」「給我一張」「做素材」「出素材」，且提到圖片/素材/廣告圖/廣告圖片（非影片）：
@@ -220,6 +221,20 @@ export async function POST(req: NextRequest) {
     } catch {
       const shortText = cleaned.replace(/```[\s\S]*?```/g, '').trim().slice(0, 200)
       parsed = { type: 'general', summary: shortText || 'AI 回應解析失敗，請再試一次', bullets: [], stats: [], actions: [] }
+    }
+  }
+
+  // Safety net: creative page must always generate, even if Haiku returned analysis/general
+  if (contextPage === 'creative') {
+    const p = parsed as Record<string, unknown>
+    const hasGenerationIntent = !!fileAttachment
+      || /生成|做一張|做一版|製作|出一版|幫我生|直接生|出素材|做素材|廣告素材|廣告圖/.test(message ?? '')
+    if (hasGenerationIntent && p.type !== 'image_request' && p.type !== 'video_request') {
+      const contextText = [p.summary as string, ...((p.bullets ?? []) as string[])].filter(Boolean).join('. ')
+      p.type = 'image_request'
+      if (!p.imagePrompt) {
+        p.imagePrompt = `Professional Meta advertisement creative for Toastmasters District 67, ${contextText.slice(0, 200)}, vibrant gold and blue colors, clean modern design, 1080x1350px vertical format`
+      }
     }
   }
 
