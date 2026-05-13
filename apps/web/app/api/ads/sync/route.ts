@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     })),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/insights`)
-      url.searchParams.set('fields', 'ad_id,ad_name,effective_object_story_id,spend,impressions,ctr,actions,action_values')
+      url.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
       url.searchParams.set('date_preset', 'last_90d')
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
@@ -192,6 +192,13 @@ export async function POST(req: NextRequest) {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string } }[] = (adsListData.data ?? []) as any
+  const adIdToStoryId = new Map<string, string>()
+  for (const ad of adsList) {
+    const sid = ad.effective_object_story_id
+      ?? ad.creative?.effective_object_story_id
+      ?? ad.creative?.object_story_id
+    if (ad.id && sid) adIdToStoryId.set(ad.id, sid)
+  }
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
     ? adsList.map(ad => {
         const dateRangeItem = insightsByAdId.get(ad.id)
@@ -266,7 +273,7 @@ export async function POST(req: NextRequest) {
   const adPostIds: string[] = []
   const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
   for (const c of adLevelAllTime) {
-    const storyId = c.effective_object_story_id as string | undefined
+    const storyId = adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
     if (pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
     // Strip pageId prefix: "pageId_postId" → "postId" to match FB Insights post IDs
@@ -295,7 +302,8 @@ export async function POST(req: NextRequest) {
   // Supplement adPostMetrics from adCreatives — Meta 90d insights sometimes omit
   // effective_object_story_id, so some ads land in adCreatives but miss adPostMetrics.
   for (const c of adCreatives) {
-    const storyId = c.effective_object_story_id as string | undefined
+    const storyId = (c.effective_object_story_id as string | undefined)
+      ?? adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
     const postIdKey = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
     if (adPostMetrics[postIdKey]) continue
@@ -355,6 +363,7 @@ export async function POST(req: NextRequest) {
       sampleStoryIds: allAdCreatives.slice(0, 5).map(c => c.effective_object_story_id ?? null),
       postTitlesFound: Object.keys(postMessageMap).length,
       adPostMetricsCount: Object.keys(adPostMetrics).length,
+      adPostMetricsSample: Object.entries(adPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
       allTimeErrors,
     },
   })
