@@ -30,16 +30,16 @@ export async function POST(req: NextRequest) {
     let igUserId = tokenData.igUserId
     if (!accessToken) return NextResponse.json({ error: 'No page access token' }, { status: 400 })
 
-    // Self-heal: if igUserId is missing (token was connected before IG permission was granted),
-    // fetch it from Meta API and persist so future syncs skip this step.
-    if (!igUserId) {
-      const pageRes = await fetch(`${BASE}/${pageId}?fields=instagram_business_account&access_token=${accessToken}`)
-      const pageData = await pageRes.json()
-      const fetchedIgId: string | undefined = pageData.instagram_business_account?.id
-      if (!fetchedIgId) return NextResponse.json({ error: 'No IG account linked to this page' }, { status: 400 })
+    // Always verify the currently-linked IG account from Meta API.
+    // This ensures we pick up new connections when the user re-links IG via Meta Business.
+    const pageRes = await fetch(`${BASE}/${pageId}?fields=instagram_business_account&access_token=${accessToken}`)
+    const pageData = await pageRes.json()
+    const fetchedIgId: string | undefined = pageData.instagram_business_account?.id
+    if (!fetchedIgId) return NextResponse.json({ error: 'No IG account linked to this page' }, { status: 400 })
+    if (fetchedIgId !== igUserId) {
       await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).update({ igUserId: fetchedIgId })
-      igUserId = fetchedIgId
     }
+    igUserId = fetchedIgId
 
     // Verify which IG account we're querying (helps diagnose wrong igUserId)
     const verifyUrl = new URL(`${BASE}/${igUserId}`)
