@@ -26,7 +26,12 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: { k: SortKey; label: str
 
 function buildPostPrompt(p: Post): string {
   const eng = (p.reach ?? 0) > 0 ? ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100).toFixed(2) : '0.00'
-  const adPart = p.hasAd ? `\nROAS：${(p.adRoas ?? 0).toFixed(1)}x｜廣告花費：$${p.adSpend ?? 0}｜CPA：$${p.adCpa ?? 0}｜廣告 CTR：${Number(p.adCtr ?? 0).toFixed(2)}%` : ''
+  const hasAdMetrics = p.hasAd && ((p.adSpend ?? 0) > 0 || (p.adRoas ?? 0) > 0)
+  const adPart = p.hasAd
+    ? hasAdMetrics
+      ? `\nROAS：${(p.adRoas ?? 0).toFixed(1)}x｜廣告花費：$${p.adSpend ?? 0}｜CPA：$${p.adCpa ?? 0}｜廣告 CTR：${Number(p.adCtr ?? 0).toFixed(2)}%`
+      : '\n此貼文有投放廣告，但廣告細項數據尚未同步（可重新同步後查看）'
+    : ''
   return `請分析這篇貼文：\n日期：${p.date}｜平台：${p.platform}｜類型：${p.type === 'reels' ? 'Reels' : '貼文'}\n內容：${p.title.slice(0, 100)}\n觸及：${fmt(p.reach)}｜按讚：${p.likes}｜留言：${p.comments}｜收藏：${fmt(p.saves)}｜分享：${p.shares}｜播放：${fmt(p.plays)}\n互動率：${eng}%${adPart}\n\n請給出成效診斷和具體優化建議。`
 }
 
