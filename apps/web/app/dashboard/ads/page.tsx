@@ -115,8 +115,17 @@ function mapRawAdCreative(c: any, idx: number) {
   const revenue = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value ?? '0')
   const hasPurchase = purchases > 0
   const primaryMetric = hasPurchase ? revenue : linkClicks > 0 ? linkClicks : videoViews
+  // For non-revenue accounts (e.g. D67 non-profit), ROAS is meaningless.
+  // Instead, compute a "Click Efficiency Score" = link_clicks / spend * 100
+  // which represents "how many clicks per $1 spent × 100".
+  // If purchases exist, use real ROAS. Otherwise use click efficiency score.
+  const clickEfficiency = spend > 0 && linkClicks > 0
+    ? parseFloat((linkClicks / spend * 100).toFixed(2))
+    : 0
   const roas = spend > 0 && primaryMetric > 0
-    ? (hasPurchase ? parseFloat((primaryMetric / spend).toFixed(2)) : parseFloat((primaryMetric / spend * 100).toFixed(2)))
+    ? (hasPurchase
+        ? parseFloat((primaryMetric / spend).toFixed(2))   // Real ROAS for e-commerce
+        : clickEfficiency)                                  // Click efficiency score for non-profit
     : 0
   const cpa = primaryMetric > 0 ? parseFloat((spend / primaryMetric).toFixed(2)) : 0
   const postTitle = c.post_title ? (c.post_title as string).slice(0, 60) : null
@@ -147,10 +156,17 @@ function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof 
       adset: '整體帳戶', metric: `Frequency ${(s.frequency).toFixed(2)}`, threshold: '> 3.5', action: '更換素材 / 擴大受眾' })
   }
 
-  if ((s.roas ?? 0) < roasTarget && (s.spend ?? 0) > 0) {
-    items.push({ id: 'd2', severity: 'critical', type: 'low_roas', title: 'ROAS 低於門檻',
-      desc: `整體 ROAS 僅 ${(s.roas).toFixed(2)}x，低於目標 ${roasTarget}x，持續虧損。`,
-      adset: '整體帳戶', metric: `ROAS ${(s.roas).toFixed(2)}`, threshold: `< ${roasTarget}`, action: '調低預算 / 檢視受眾重疊' })
+  // For non-profit accounts (no revenue): skip ROAS warning entirely.
+  // Instead, warn if CPL (cost per link click) is high (> $10 per click).
+  const cpl = (s.conversions ?? 0) > 0 ? (s.spend ?? 0) / (s.conversions ?? 1) : 0
+  if ((s.spend ?? 0) > 0 && (s.conversions ?? 0) === 0) {
+    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: '尚無點擊轉換數據',
+      desc: '目前未偵測到報名連結點擊數據，建議確認廣告目標是否設為「流量」或「互動」。',
+      adset: '整體帳戶', metric: '轉換數 0', threshold: '需 > 0', action: '檢查廣告目標設定 / 確認連結正確' })
+  } else if (cpl > 10 && (s.spend ?? 0) > 0) {
+    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: 'CPL 偏高',
+      desc: `每次點擊報名連結成本為 $${cpl.toFixed(2)}，建議優化素材或縮小受眾。`,
+      adset: '整體帳戶', metric: `CPL $${cpl.toFixed(2)}`, threshold: '建議 < $10', action: '優化 CTA 文案 / 縮小受眾' })
   }
 
   const budgetPct = budget > 0 ? (s.spend / budget) * 100 : 0
@@ -173,10 +189,10 @@ function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof 
   }
 
   const top = [...creatives].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas)[0]
-  if (top && top.roas >= roasTarget) {
-    items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: '最佳表現素材',
-      desc: `素材「${top.name.slice(0, 25)}」ROAS 達 ${top.roas.toFixed(1)}x，建議增加預算。`,
-      adset: top.name.slice(0, 30), metric: `ROAS ${top.roas.toFixed(1)}`, threshold: `目標 ${roasTarget}`, action: `增加預算 20-30%` })
+  if (top && top.roas >= 5) {
+    items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: '最佳點擊效率素材',
+      desc: `素材「${top.name.slice(0, 25)}」點擊效率達 ${top.roas.toFixed(1)}x，建議增加預算。`,
+      adset: top.name.slice(0, 30), metric: `點擊效率 ${top.roas.toFixed(1)}`, threshold: '目標 > 5', action: `增加預算 20-30%` })
   }
 
   if (items.length === 0) {
