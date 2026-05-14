@@ -85,7 +85,7 @@ ${isCreativePage ? `## 🎯 素材庫模式（最高優先，覆蓋以下一切�
 ` : ''}## ⚡ 最高優先：生成素材請求（覆蓋以下所有規則）
 若用戶訊息包含「生成」「做一張」「做一版」「製作」「出一版」「直接生成」「幫我生成」「給我一張」「做素材」「出素材」，且提到圖片/素材/廣告圖/廣告圖片（非影片）：
 → 立即回傳 type: "image_request"
-→ 根據對話上下文（品牌、主題、數據）自行撰寫英文 imagePrompt
+→ 根據對話上下文自行撰寫英文 imagePrompt。極度重要：為了避免生成扭曲亂碼，除非用戶明確要求文字，否則必須在提示詞結尾強制加上「No text, no typography, no letters, clean background with empty space for text layout」。
 → 禁止先分析或詢問問題，直接生成
 → summary 說明生成方向（含尺寸建議如 1080x1350px）
 
@@ -129,7 +129,7 @@ ${memoryBlock}
 - 若數據全為 0 或缺失，type 用 "warning"，在 summary 說明資料不完整，不要硬給建議
 - 當使用者詢問廣告素材、圖片、視覺設計，或說「生成」「做一張」「廣告圖」「素材」時：
   - 回傳 type: "image_request"
-  - imagePrompt：英文提示詞，格式：「Professional Facebook/Instagram ad for [主題], [風格描述], vibrant colors, clean modern design, high quality」
+  - imagePrompt：英文提示詞，格式：「Professional Facebook/Instagram ad for [主題], [風格描述], vibrant colors, clean modern design, high quality. No text, no typography, no letters, clean background space for layout.」
 - 當使用者詢問 Reels 影片、動態素材、影片廣告，或說「生成影片」「做一段 Reels」「影片素材」時：
   - 回傳 type: "video_request"
   - videoPrompt：英文提示詞，格式：「Vertical 9:16 short video for [主題], [視覺描述], cinematic lighting, smooth motion, professional quality」
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
       const contextText = [p.summary as string, ...((p.bullets ?? []) as string[])].filter(Boolean).join('. ')
       p.type = 'image_request'
       if (!p.imagePrompt) {
-        p.imagePrompt = `Professional Meta advertisement creative for Toastmasters District 67, ${contextText.slice(0, 200)}, vibrant gold and blue colors, clean modern design, 1080x1350px vertical format`
+        p.imagePrompt = `Professional Meta advertisement creative for Toastmasters District 67, ${contextText.slice(0, 200)}, vibrant gold and blue colors, clean modern design, 1080x1350px vertical format. No text, no typography, clean background.`
       }
     }
   }
