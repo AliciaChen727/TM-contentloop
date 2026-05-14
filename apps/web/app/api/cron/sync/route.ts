@@ -360,7 +360,6 @@ function mergeSummaries(snapshots: { summary?: Record<string, number> }[]): Reco
     conversions += m.conversions ?? 0
     revenue     += m.revenue     ?? 0
   }
-  const hasPurchaseInSnapshots = snapshots.some(s => (s.summary as Record<string, number> | undefined)?.revenue === (s.summary as Record<string, number> | undefined)?.spend)
   return {
     spend, reach, impressions, clicks, conversions, revenue,
     ctr:       impressions > 0 ? clicks / impressions : 0,
