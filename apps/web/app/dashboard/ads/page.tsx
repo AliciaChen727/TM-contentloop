@@ -289,6 +289,8 @@ function buildAdData(raw: any): AdData {
         spend: d.spend,
         revenue: d.revenue,
         roas: d.roas,
+        clicks: d.clicks ?? 0,
+        conversions: d.conversions ?? 0,
       })),
     },
   }

@@ -26,6 +26,8 @@ export interface DailyData {
   spend: number
   revenue: number
   roas: number
+  clicks?: number      // Link clicks (proxy for registrations)
+  conversions?: number // Conversion events
 }
 
 export interface Creative {

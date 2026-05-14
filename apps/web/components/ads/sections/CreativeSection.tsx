@@ -12,7 +12,7 @@ type SortBy = 'roas' | 'spend' | 'cpa'
 const STATUS_LABEL_TEXT: Record<string, string> = { top: '最佳', good: '良好', ok: '一般', bad: '待優' }
 
 function buildCreativePrompt(c: AdData['creatives'][number]): string {
-  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nROAS：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜CPA：$${c.cpa}｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
+  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPL：$${c.cpa.toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
 }
 
 const PlatformIcon = ({ type }: { type: 'IG' | 'FB' }) => (
@@ -108,7 +108,7 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
             <div className="ads-creative-info">
               <div className="ads-creative-name">{renderAdName(c.name)}</div>
               <div className="ads-creative-meta">
-                {[['ROAS', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPA', '$' + c.cpa]].map(([k, v]) => (
+                {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPL', '$' + c.cpa]].map(([k, v]) => (
                   <div key={k} className="ads-creative-kv">
                     <span style={{ color: 'var(--ad-text3)' }}>{k}</span>
                     <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{v}</span>
