@@ -199,7 +199,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   adsUrl.searchParams.set('access_token', userAccessToken)
 
   const adLevelUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
+  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,ctr,actions,action_values')
   adLevelUrl.searchParams.set('date_preset', 'last_30d')
   adLevelUrl.searchParams.set('level', 'ad')
   adLevelUrl.searchParams.set('limit', '100')
@@ -326,7 +326,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     hourly,
     adPostIds,
     adCreatives,
-  })
+  }, { merge: true })
 
   // NEW: shared page-level snapshot (enables cross-admin merged view)
   await adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').doc(adAccountId).set({
@@ -339,7 +339,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     daily,
     hourly,
     adCreatives,
-  })
+  }, { merge: true })
 
   return { adAccountId, spend, reach, conversionType, linkClicks, videoViews, pageAdsCount: pageAdsList.length }
 }
@@ -447,13 +447,13 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     syncedAt: Timestamp.now(),
     dateRange: { from: mergedDaily[0]?.date ?? '', to: mergedDaily[mergedDaily.length - 1]?.date ?? '' },
     conversionType: deduped[0]?.conversionType ?? 'link_click',
-    contributorAccounts: deduped.map(s => ({ adAccountId: s.adAccountId, contributorUid: s.contributorUid, spend: s.summary?.spend ?? 0 })),
+    contributorAccounts: deduped.map(s => ({ adAccountId: s.adAccountId, contributorUid: s.uid, spend: s.summary?.spend ?? 0 })),
     summary: mergedSummary,
     daily: mergedDaily,
     hourly: mergeHourlyArrays(deduped as { hourly?: HourRow[] }[]),
     adPostIds: mergedPostIds,
     adCreatives: Array.from(creativesById.values()),
-  })
+  }, { merge: true })
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
