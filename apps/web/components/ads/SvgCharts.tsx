@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 
 interface LineConfig { key: string; label: string; color: string; isCurr?: boolean; isInt?: boolean }
-interface DataPoint { [key: string]: number | string }
+interface DataPoint { [key: string]: number | string | undefined }
 
 function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)) }
 
