@@ -193,7 +193,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
   const adsUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsUrl.searchParams.set('fields', 'id,name,effective_status,creative{object_story_id,effective_instagram_story_id,instagram_actor_id}')
+  adsUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id}')
   adsUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
   adsUrl.searchParams.set('limit', '100')
   adsUrl.searchParams.set('access_token', userAccessToken)
