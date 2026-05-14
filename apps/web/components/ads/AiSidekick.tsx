@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { auth } from '@/lib/firebase/client'
 import { Icon } from './Icon'
 
@@ -74,6 +74,22 @@ interface Message {
   filePreview?: { name: string; type: string }
 }
 
+function renderWithLinks(text: string): React.ReactNode {
+  const parts = text.split(/(\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g)
+  const result: React.ReactNode[] = []
+  let i = 0
+  while (i < parts.length) {
+    if (parts[i].startsWith('[') && i + 2 < parts.length) {
+      result.push(<a key={i} href={parts[i + 2]} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ad-blue)', textDecoration: 'underline' }}>{parts[i + 1]}</a>)
+      i += 3
+    } else {
+      if (parts[i]) result.push(parts[i])
+      i++
+    }
+  }
+  return result
+}
+
 function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) => void }) {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const [otherText, setOtherText] = useState('')
@@ -93,10 +109,10 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
-      {r.summary && <p style={{ marginBottom: r.bullets.length ? 8 : 0 }}>{r.summary.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim()}</p>}
+      {r.summary && <p style={{ marginBottom: r.bullets.length ? 8 : 0 }}>{renderWithLinks(r.summary.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim())}</p>}
       {r.bullets.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-          {r.bullets.map((b, i) => <li key={i} style={{ display: 'flex', gap: 6 }}><span style={{ color: 'var(--ad-blue)' }}>▸</span><span>{b}</span></li>)}
+          {r.bullets.map((b, i) => <li key={i} style={{ display: 'flex', gap: 6 }}><span style={{ color: 'var(--ad-blue)' }}>▸</span><span>{renderWithLinks(b)}</span></li>)}
         </ul>
       )}
       {r.stats.length > 0 && (
