@@ -18,17 +18,13 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: 'Gemini API not configured' }, { status: 500 })
 
   const geminiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ['IMAGE', 'TEXT'],
-          temperature: 0.75,
-          topP: 0.9,
-        },
+        instances: [{ prompt }],
+        parameters: { sampleCount: 1 }
       }),
     }
   )
@@ -38,15 +34,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: data.error?.message ?? 'Image generation failed' }, { status: 500 })
   }
 
-  type GeminiPart = { inlineData?: { data: string; mimeType: string } }
-  const parts: GeminiPart[] = data.candidates?.[0]?.content?.parts ?? []
-  const imagePart = parts.find(p => p.inlineData)
-  if (!imagePart?.inlineData) {
+  const b64 = data.predictions?.[0]?.bytesBase64Encoded
+  const mime = data.predictions?.[0]?.mimeType ?? 'image/jpeg'
+  
+  if (!b64) {
     return NextResponse.json({ error: 'No image in response' }, { status: 500 })
   }
 
   return NextResponse.json({
-    imageData: imagePart.inlineData.data,
-    mimeType: imagePart.inlineData.mimeType ?? 'image/png',
+    imageData: b64,
+    mimeType: mime,
   })
 }
