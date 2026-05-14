@@ -21,7 +21,7 @@ export interface Post {
 }
 
 export interface DailyData {
-  [key: string]: number | string
+  [key: string]: number | string | undefined
   date: string
   spend: number
   revenue: number
