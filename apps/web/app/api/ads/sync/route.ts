@@ -262,6 +262,32 @@ export async function POST(req: NextRequest) {
       })
     : allAdCreatives
 
+  // Compute page-filtered summary from date-range ad-level data.
+  // The account-level summary includes all pages sharing the same ad account,
+  // so we must aggregate from the already-filtered adCreatives instead.
+  const filteredAdIds = new Set(adCreatives.map(c => c.ad_id as string).filter(Boolean))
+  const filteredDateRangeAds = (adLevelData.data as Record<string, unknown>[]).filter(
+    c => filteredAdIds.has(c.ad_id as string)
+  )
+  let pageSpend = spend, pageReach = reach, pageImpressions = impressions, pageClicks = clicks
+  let pageConversions = conversions, pageRevenue = revenue
+  if (filteredDateRangeAds.length > 0) {
+    pageSpend = filteredDateRangeAds.reduce((s, c) => s + parseFloat((c.spend as string) ?? '0'), 0)
+    pageImpressions = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.impressions as string) ?? '0'), 0)
+    pageClicks = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.clicks as string) ?? '0'), 0)
+    pageReach = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.reach as string) ?? '0'), 0)
+    const fActions: MetaAction[] = filteredDateRangeAds.flatMap(c => (c.actions as MetaAction[]) ?? [])
+    const fActionValues: MetaAction[] = filteredDateRangeAds.flatMap(c => (c.action_values as MetaAction[]) ?? [])
+    pageConversions = fActions.filter(a => a.action_type === conversionType).reduce((s, a) => s + parseFloat(a.value), 0)
+    pageRevenue = fActionValues.filter(a => a.action_type === 'purchase').reduce((s, a) => s + parseFloat(a.value), 0)
+  }
+  const pageRoas = pageSpend > 0 && pageConversions > 0
+    ? (hasPurchase ? pageRevenue / pageSpend : pageConversions / pageSpend * 100) : 0
+  const pageCpa = pageConversions > 0 ? pageSpend / pageConversions : 0
+  const pageCtr = pageImpressions > 0 ? pageClicks / pageImpressions * 100 : ctr
+  const pageCpm = pageImpressions > 0 ? pageSpend / pageImpressions * 1000 : cpm
+  const pageFrequency = pageReach > 0 ? pageImpressions / pageReach : frequency
+
   // Look up post message from Firestore fbPosts for each creative with a storyId.
   // Searches under both pageId and storyIdPrefix paths since page IDs may differ.
   const storyIds = Array.from(new Set(adCreatives.map(c => c.effective_object_story_id as string).filter(Boolean)))
@@ -399,7 +425,7 @@ export async function POST(req: NextRequest) {
     dateRange: { from: since ?? dateFrom, to: until ?? dateTo },
     adAccountId,
     conversionType,
-    summary: { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa },
+    summary: { spend: pageSpend, reach: pageReach, impressions: pageImpressions, clicks: pageClicks, ctr: pageCtr, cpm: pageCpm, frequency: pageFrequency, conversions: pageConversions, revenue: pageRevenue, roas: pageRoas, cpa: pageCpa },
     daily,
     adCreatives: adCreativesWithTitle,
     adPostIds,
