@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 
 export async function POST(req: NextRequest) {
@@ -65,6 +63,7 @@ export async function POST(req: NextRequest) {
   const permText = permLabels.length > 0 ? permLabels.join('、') : '貼文成效首頁'
 
   if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY)
     await resend.emails.send({
       from: 'ContentLoop <onboarding@resend.dev>',
       to: email,
