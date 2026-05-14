@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
       url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
-      url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
+      url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS","DELETED"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
       return fetch(url)
@@ -248,8 +248,9 @@ export async function POST(req: NextRequest) {
   const adCreatives = pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
     ? allAdCreatives.filter(c => {
         const sid = c.effective_object_story_id as string | undefined
-        if (!sid) return false
-        return matchesPage(sid) || matchesIg(sid)
+        const igId = adIdToIgStoryId.get(c.ad_id as string)
+        if (!sid && !igId) return false
+        return matchesPage(sid) || matchesIg(sid) || (igId ? matchesIg(igId) : false)
       })
     : allAdCreatives
 
@@ -369,11 +370,13 @@ export async function POST(req: NextRequest) {
     const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
     if (treatAsIg) {
       if (!igPostIds.includes(finalIgPostIdKey)) igPostIds.push(finalIgPostIdKey)
-      igPostMetrics[finalIgPostIdKey] = metricsVal
+      const existing = igPostMetrics[finalIgPostIdKey]
+      if (!existing || cSpend > existing.spend) igPostMetrics[finalIgPostIdKey] = metricsVal
     }
     if (isFb) {
       if (!adPostIds.includes(postIdKey)) adPostIds.push(postIdKey)
-      adPostMetrics[postIdKey] = metricsVal
+      const existing = adPostMetrics[postIdKey]
+      if (!existing || cSpend > existing.spend) adPostMetrics[postIdKey] = metricsVal
     }
   }
 
