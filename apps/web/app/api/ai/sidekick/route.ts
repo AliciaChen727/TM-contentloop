@@ -45,16 +45,16 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
 
   let metricsBlock = ''
   if (metrics && Object.keys(metrics).length > 0) {
-    if (metrics.spend !== undefined || metrics.roas !== undefined) {
+    if (metrics.spend !== undefined || metrics.roas !== undefined || (metrics.topCreatives?.length ?? 0) > 0) {
       metricsBlock = `
 ## 廣告帳戶數據（${metrics.dateRange ?? '近期'}）
 - 總花費：$${metrics.spend?.toLocaleString('zh-TW') ?? 'N/A'}　收益：$${metrics.revenue?.toLocaleString('zh-TW') ?? 'N/A'}
-- ROAS：${metrics.roas?.toFixed(2) ?? 'N/A'}x　CPA：$${metrics.cpa?.toFixed(0) ?? 'N/A'}
-- CTR：${metrics.ctr?.toFixed(2) ?? 'N/A'}%　CPM：$${metrics.cpm?.toFixed(0) ?? 'N/A'}
+- 帳戶整高 ROAS：${metrics.roas != null ? metrics.roas.toFixed(2) : 'N/A'}x（若為 0.00x 表示未偵測到購買轉換、以影片觀看計算，請參考個別素材的 ROAS）
+- CPA：$${metrics.cpa != null ? metrics.cpa.toFixed(0) : 'N/A'}　CTR：${metrics.ctr != null ? metrics.ctr.toFixed(2) : 'N/A'}%　CPM：$${metrics.cpm != null ? metrics.cpm.toFixed(0) : 'N/A'}
 - 曝光：${metrics.impressions?.toLocaleString('zh-TW') ?? 'N/A'}　轉換：${metrics.conversions ?? 'N/A'}　頻率：${metrics.frequency?.toFixed(1) ?? 'N/A'}
 ${metrics.topCreatives?.length ? `
 ## 素材表現（前 ${metrics.topCreatives.length} 名）
-${metrics.topCreatives.map((c, i) => `${i + 1}. ${c.name.slice(0, 35)} | ROAS ${c.roas.toFixed(1)}x | 花費 $${c.spend} | CTR ${c.ctr.toFixed(2)}%`).join('\n')}` : ''}`
+${metrics.topCreatives.map((c, i) => `${i + 1}. ${c.name.slice(0, 35)} | ROAS ${c.roas.toFixed(1)}x | 花費 $${c.spend} | CTR ${c.ctr.toFixed(2)}% | CPA $${c.cpa.toFixed(0)}`).join('\n')}` : ''}`
     } else {
       metricsBlock = `
 ## 用戶當前數據（${metrics.dateRange ?? '近期'}）
