@@ -15,6 +15,44 @@ function buildCreativePrompt(c: AdData['creatives'][number]): string {
   return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nROAS：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜CPA：$${c.cpa}｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
 }
 
+const PlatformIcon = ({ type }: { type: 'IG' | 'FB' }) => (
+  <span style={{ 
+    display: 'inline-flex', 
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '2px 5px', 
+    borderRadius: 6, 
+    fontSize: 10, 
+    fontWeight: 700, 
+    marginRight: 6,
+    verticalAlign: 'text-bottom',
+    ...(type === 'IG' 
+      ? { background: '#fce4ec', color: '#c2185b' } 
+      : { background: '#e3f2fd', color: '#1976d2' })
+  }}>
+    {type}
+  </span>
+)
+
+function renderAdName(name: string) {
+  let isIg = false
+  let cleanName = name
+  
+  if (/^Instagram (post|貼文)[:：\s]*/i.test(name)) {
+    isIg = true
+    cleanName = name.replace(/^Instagram (post|貼文)[:：\s]*/i, '')
+  } else if (/Instagram/i.test(name)) {
+    isIg = true
+  }
+  
+  return (
+    <>
+      <PlatformIcon type={isIg ? 'IG' : 'FB'} />
+      {cleanName}
+    </>
+  )
+}
+
 export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: string, autoSend?: boolean) => void }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
@@ -68,7 +106,7 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
               <span style={{ opacity: 0.5 }}>{c.type} · {c.channel}</span>
             </div>
             <div className="ads-creative-info">
-              <div className="ads-creative-name">{c.name}</div>
+              <div className="ads-creative-name">{renderAdName(c.name)}</div>
               <div className="ads-creative-meta">
                 {[['ROAS', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPA', '$' + c.cpa]].map(([k, v]) => (
                   <div key={k} className="ads-creative-kv">

@@ -8,6 +8,44 @@ const fmt = (n: number) => n.toLocaleString('zh-TW')
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${fmt(n)}`
 const roasColor = (r: number) => r >= 4 ? 'var(--ad-green)' : r >= 3.5 ? 'var(--ad-blue)' : r >= 2.5 ? 'var(--ad-orange)' : 'var(--ad-red)'
 
+const PlatformIcon = ({ type }: { type: 'IG' | 'FB' }) => (
+  <span style={{ 
+    display: 'inline-flex', 
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '2px 5px', 
+    borderRadius: 6, 
+    fontSize: 10, 
+    fontWeight: 700, 
+    marginRight: 6,
+    verticalAlign: 'text-bottom',
+    ...(type === 'IG' 
+      ? { background: '#fce4ec', color: '#c2185b' } 
+      : { background: '#e3f2fd', color: '#1976d2' })
+  }}>
+    {type}
+  </span>
+)
+
+function renderAdName(name: string) {
+  let isIg = false
+  let cleanName = name
+  
+  if (/^Instagram (post|貼文)[:：\s]*/i.test(name)) {
+    isIg = true
+    cleanName = name.replace(/^Instagram (post|貼文)[:：\s]*/i, '')
+  } else if (/Instagram/i.test(name)) {
+    isIg = true
+  }
+  
+  return (
+    <>
+      <PlatformIcon type={isIg ? 'IG' : 'FB'} />
+      {cleanName}
+    </>
+  )
+}
+
 type AdsetRow = Adset & { newBudget: number }
 
 export function BudgetSection({ data }: { data: AdData }) {
@@ -72,7 +110,7 @@ export function BudgetSection({ data }: { data: AdData }) {
               const pct = (a.spent / a.budget) * 100
               return (
                 <tr key={i}>
-                  <td style={{ fontWeight: 500 }}>{a.name}</td>
+                  <td style={{ fontWeight: 500, lineHeight: 1.4 }}>{renderAdName(a.name)}</td>
                   <td><span style={{ fontFamily: 'var(--font-dm-mono)' }}>{fmtK(a.budget)}</span></td>
                   <td>
                     <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 3 }}>{fmtK(a.spent)} ({pct.toFixed(0)}%)</div>
