@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
   const adIdToStoryId = new Map<string, string>()
   const adIdToIgStoryId = new Map<string, string>()
   for (const ad of adsList) {
@@ -199,8 +199,10 @@ export async function POST(req: NextRequest) {
       ?? ad.creative?.effective_object_story_id
       ?? ad.creative?.object_story_id
       ?? ad.creative?.effective_instagram_story_id
+      ?? ad.creative?.instagram_story_id
     if (ad.id && sid) adIdToStoryId.set(ad.id, sid)
-    if (ad.id && ad.creative?.effective_instagram_story_id) adIdToIgStoryId.set(ad.id, ad.creative.effective_instagram_story_id)
+    const igId = ad.creative?.effective_instagram_story_id ?? ad.creative?.instagram_story_id ?? ad.creative?.source_instagram_media_id
+    if (ad.id && igId) adIdToIgStoryId.set(ad.id, igId)
   }
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
     ? adsList.map(ad => {
@@ -411,6 +413,7 @@ export async function POST(req: NextRequest) {
     adCreativesCount: adCreativesWithTitle.length,
     _debug: {
       adsListCount: adsList.length,
+      adsListSample: adsList.slice(0, 5).map(ad => ({ id: ad.id, sid: ad.effective_object_story_id, creative: ad.creative })),
       allTimeCount: adLevelAllTime.length,
       allAdCreativesCount: allAdCreatives.length,
       pageId: pageId ?? null,
