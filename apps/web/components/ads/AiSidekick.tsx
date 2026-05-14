@@ -115,9 +115,10 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
           ))}
           {sent === null && (
             <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input type="text" value={otherText} onChange={e => setOtherText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleOtherSubmit() }} placeholder="其他問題…"
-                style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit' }} />
+              <textarea rows={1} value={otherText} onChange={e => setOtherText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleOtherSubmit() } }} placeholder="其他問題…"
+                onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
+                style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
               <button onClick={handleOtherSubmit} disabled={!otherText.trim()}
                 style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: otherText.trim() ? 'pointer' : 'default', opacity: otherText.trim() ? 1 : 0.4, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                 送出
