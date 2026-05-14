@@ -88,7 +88,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
         </div>
         <div className="ads-card ads-card-pad">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isVideoBased ? '每日觀看效益趨勢' : isClickBased ? '每日點擊效益趨勢' : '每日 CPL 趨勢'}</div>
-          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: isClickBased ? '點擊效益' : 'CPL', color: '#3B6FD4' }]} roasTarget={s.roasTarget} />
+          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: isClickBased ? '點擊效益' : 'CPL', color: '#3B6FD4' }]} />
         </div>
       </div>
 
