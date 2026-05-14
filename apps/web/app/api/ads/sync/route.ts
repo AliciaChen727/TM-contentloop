@@ -302,9 +302,9 @@ export async function POST(req: NextRequest) {
 
   // Build adPostIds + adPostMetrics (FB) and igPostIds + igPostMetrics (IG) from 90d data
   const adPostIds: string[] = []
-  const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
+  const adPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }> = {}
   const igPostIds: string[] = []
-  const igPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = {}
+  const igPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }> = {}
   for (const c of adLevelAllTime) {
     const storyId = adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
@@ -328,7 +328,8 @@ export async function POST(req: NextRequest) {
       : 0
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
-    const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    const cReach = parseInt(c.reach as string ?? '0')
+    const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr, reach: cReach }
     if (treatAsIg) {
       if (!igPostIds.includes(finalIgPostId)) igPostIds.push(finalIgPostId)
       const existing = igPostMetrics[finalIgPostId]
