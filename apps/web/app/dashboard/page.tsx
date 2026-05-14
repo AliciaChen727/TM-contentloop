@@ -70,6 +70,11 @@ export default function DashboardPage() {
   const [addingPage, setAddingPage] = useState(false)
   const [addPageInput, setAddPageInput] = useState('')
   const [addPageError, setAddPageError] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [inviting, setInviting] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [inviteError, setInviteError] = useState('')
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
@@ -116,6 +121,11 @@ export default function DashboardPage() {
         localStorage.setItem('selectedPageId', activePageId)
         localStorage.setItem('selectedPageName', activePageName)
       }
+      // Determine if user is admin (has Facebook token)
+      const { getDocs: getDocsClient, collection: collectionClient } = await import('firebase/firestore')
+      const tokensSnap = await getDocsClient(collectionClient(db, 'users', u.uid, 'metaTokens'))
+      setIsAdmin(tokensSnap.docs.some(d => d.id !== 'userToken'))
+
       await fetchPosts(idToken, activePageId)
       setLoading(false)
     })
@@ -239,6 +249,29 @@ export default function DashboardPage() {
     setAddPageInput('')
   }
 
+  async function handleInvite() {
+    if (!inviteEmail.trim() || !selectedPageId) return
+    setInviteStatus('idle')
+    setInviteError('')
+    const u = auth.currentUser
+    if (!u) return
+    const idToken = await u.getIdToken()
+    const res = await fetch('/api/auth/invite', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail.trim(), pageId: selectedPageId }),
+    })
+    if (res.ok) {
+      setInviteStatus('ok')
+      setInviteEmail('')
+      setTimeout(() => { setInviting(false); setInviteStatus('idle') }, 2000)
+    } else {
+      const d = await res.json()
+      setInviteStatus('error')
+      setInviteError(d.error ?? '邀請失敗')
+    }
+  }
+
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
 
   if (loading) {
@@ -290,6 +323,28 @@ export default function DashboardPage() {
             <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
               📊 廣告儀表板
             </button>
+            {isAdmin && (
+              inviting ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleInvite(); if (e.key === 'Escape') { setInviting(false); setInviteStatus('idle') } }}
+                    placeholder="輸入 Gmail 邀請成員"
+                    className="text-xs border border-gray-200 rounded px-2 py-1 outline-none w-44"
+                  />
+                  <button onClick={handleInvite} className="text-xs text-blue-500 hover:text-blue-700">送出</button>
+                  <button onClick={() => { setInviting(false); setInviteStatus('idle') }} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
+                  {inviteStatus === 'ok' && <span className="text-xs text-green-500">已邀請 ✓</span>}
+                  {inviteStatus === 'error' && <span className="text-xs text-red-500">{inviteError}</span>}
+                </div>
+              ) : (
+                <button onClick={() => setInviting(true)} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors">
+                  👥 邀請成員
+                </button>
+              )
+            )}
             <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
               ✨ AI Sidekick
             </button>

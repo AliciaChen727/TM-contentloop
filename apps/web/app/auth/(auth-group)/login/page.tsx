@@ -1,16 +1,40 @@
 'use client'
 
 import { signInWithPopup } from 'firebase/auth'
+import { collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { auth, googleProvider } from '@/lib/firebase/client'
+import { auth, googleProvider, db } from '@/lib/firebase/client'
 
 export default function LoginPage() {
   const router = useRouter()
 
   async function handleGoogleLogin() {
     try {
-      await signInWithPopup(auth, googleProvider)
-      router.push('/auth/connect')
+      const result = await signInWithPopup(auth, googleProvider)
+      const user = result.user
+      const idToken = await user.getIdToken()
+
+      // Accept any pending invites for this email
+      await fetch('/api/auth/accept-invite', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+
+      // Check if user already has admin pages (Facebook connected)
+      const tokensSnap = await getDocs(collection(db, 'users', user.uid, 'metaTokens'))
+      const hasAdminPages = tokensSnap.docs.some(d => d.id !== 'userToken')
+
+      if (hasAdminPages) {
+        router.push('/dashboard')
+      } else {
+        // Check if accepted invites gave viewer access
+        const pagesRes = await fetch('/api/pages', { headers: { Authorization: `Bearer ${idToken}` } })
+        if (pagesRes.ok) {
+          const { pages } = await pagesRes.json()
+          if (pages.length > 0) { router.push('/dashboard'); return }
+        }
+        router.push('/auth/connect')
+      }
     } catch (err) {
       console.error('Login failed:', err)
     }

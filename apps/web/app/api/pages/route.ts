@@ -31,5 +31,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Also include viewer pages granted via invite
+  const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+  if (viewerSnap.exists) {
+    const viewerPages: { pageId: string; pageName: string; igUserId: string | null }[] = viewerSnap.data()?.pages ?? []
+    for (const vp of viewerPages) {
+      if (!pages.find(p => p.pageId === vp.pageId)) {
+        pages.push({ pageId: vp.pageId, pageName: vp.pageName, igUserId: vp.igUserId ?? null })
+      }
+    }
+  }
+
   return NextResponse.json({ pages })
 }
