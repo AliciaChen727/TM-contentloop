@@ -151,19 +151,13 @@ export async function POST(req: NextRequest) {
   // Parse summary
   const s = summaryData.data?.[0] ?? {}
   const spend = parseFloat(s.spend ?? '0')
-  const reach = parseInt(s.reach ?? '0')
-  const impressions = parseInt(s.impressions ?? '0')
-  const clicks = parseInt(s.clicks ?? '0')
 
   const sActions: MetaAction[] = s.actions ?? []
-  const sActionValues: MetaAction[] = s.action_values ?? []
 
   // Determine conversion type: purchase > link_click > video_view
   const hasPurchase = sActions.some(a => a.action_type === 'purchase')
   const hasLinkClick = sActions.some(a => a.action_type === 'link_click')
   const conversionType = hasPurchase ? 'purchase' : hasLinkClick ? 'link_click' : 'video_view'
-  const conversions = parseActions(sActions, conversionType)
-  const revenue = parseActions(sActionValues, 'purchase')
 
   // Parse daily
   const rawDaily: Record<string, unknown>[] = dailyData.data ?? []
@@ -267,39 +261,9 @@ export async function POST(req: NextRequest) {
       })
     : allAdCreatives
 
-  // Compute page-filtered summary from date-range ad-level data.
-  // The account-level summary includes all pages sharing the same ad account,
-  // so we must aggregate from the already-filtered adCreatives instead.
+  // Use dailyAdLevelData as single source of truth for both charts and KPI summary.
+  // adLevelData (aggregate, no time_increment) can silently fail; dailyAdLevelData is more reliable.
   const filteredAdIds = new Set(adCreatives.map(c => c.ad_id as string).filter(Boolean))
-  const filteredDateRangeAds = (adLevelData.data as Record<string, unknown>[]).filter(
-    c => filteredAdIds.has(c.ad_id as string)
-  )
-  const pageFilterApplied = pageIdPrefixes.size > 0 || !!igUserId || igMediaIdSet.size > 0
-  let pageSpend = 0, pageReach = 0, pageImpressions = 0, pageClicks = 0
-  let pageConversions = 0, pageRevenue = 0
-  if (filteredDateRangeAds.length > 0) {
-    pageSpend = filteredDateRangeAds.reduce((s, c) => s + parseFloat((c.spend as string) ?? '0'), 0)
-    pageImpressions = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.impressions as string) ?? '0'), 0)
-    pageClicks = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.clicks as string) ?? '0'), 0)
-    pageReach = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.reach as string) ?? '0'), 0)
-    const fActions: MetaAction[] = filteredDateRangeAds.flatMap(c => (c.actions as MetaAction[]) ?? [])
-    const fActionValues: MetaAction[] = filteredDateRangeAds.flatMap(c => (c.action_values as MetaAction[]) ?? [])
-    pageConversions = fActions.filter(a => a.action_type === conversionType).reduce((s, a) => s + parseFloat(a.value), 0)
-    pageRevenue = fActionValues.filter(a => a.action_type === 'purchase').reduce((s, a) => s + parseFloat(a.value), 0)
-  } else if (!pageFilterApplied) {
-    // No page filter — use account-level totals as fallback
-    pageSpend = spend; pageReach = reach; pageImpressions = impressions; pageClicks = clicks
-    pageConversions = conversions; pageRevenue = revenue
-  }
-  // If pageFilterApplied but no matching ads in date range → all zeros (this page didn't spend)
-  const pageRoas = pageSpend > 0 && pageConversions > 0
-    ? (hasPurchase ? pageRevenue / pageSpend : pageConversions / pageSpend * 100) : 0
-  const pageCpa = pageConversions > 0 ? pageSpend / pageConversions : 0
-  const pageCtr = pageImpressions > 0 ? pageClicks / pageImpressions * 100 : 0
-  const pageCpm = pageImpressions > 0 ? pageSpend / pageImpressions * 1000 : 0
-  const pageFrequency = pageReach > 0 ? pageImpressions / pageReach : 0
-
-  // Page-filtered daily: aggregate per-ad daily data by date for the filtered ads only
   const filteredDailyAds = dailyAdLevelData.filter(c => filteredAdIds.has(c.ad_id as string))
   const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
   for (const c of filteredDailyAds) {
@@ -316,15 +280,28 @@ export async function POST(req: NextRequest) {
     d.revenue += parseActions(cDayActionValues, 'purchase')
     dailyByDate.set(date, d)
   }
-  const pageFilteredDaily = filteredDailyAds.length > 0
-    ? Array.from(dailyByDate.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, d]) => {
-          const dayRoas = d.spend > 0 && d.conversions > 0
-            ? (hasPurchase ? d.revenue / d.spend : d.conversions / d.spend * 100) : 0
-          return { date, spend: d.spend, reach: d.reach, impressions: d.impressions, clicks: d.clicks, ctr: d.impressions > 0 ? d.clicks / d.impressions * 100 : 0, roas: dayRoas, conversions: d.conversions, revenue: d.revenue }
-        })
-    : pageFilterApplied ? [] : daily
+  const pageFilteredDaily = Array.from(dailyByDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, d]) => {
+      const dayRoas = d.spend > 0 && d.conversions > 0
+        ? (hasPurchase ? d.revenue / d.spend : d.conversions / d.spend * 100) : 0
+      return { date, spend: d.spend, reach: d.reach, impressions: d.impressions, clicks: d.clicks, ctr: d.impressions > 0 ? d.clicks / d.impressions * 100 : 0, roas: dayRoas, conversions: d.conversions, revenue: d.revenue }
+    })
+
+  // Aggregate KPI summary by summing the daily values (same data source as charts)
+  const allDailyValues = Array.from(dailyByDate.values())
+  const pageSpend = allDailyValues.reduce((s, d) => s + d.spend, 0)
+  const pageReach = allDailyValues.reduce((s, d) => s + d.reach, 0)
+  const pageImpressions = allDailyValues.reduce((s, d) => s + d.impressions, 0)
+  const pageClicks = allDailyValues.reduce((s, d) => s + d.clicks, 0)
+  const pageConversions = allDailyValues.reduce((s, d) => s + d.conversions, 0)
+  const pageRevenue = allDailyValues.reduce((s, d) => s + d.revenue, 0)
+  const pageRoas = pageSpend > 0 && pageConversions > 0
+    ? (hasPurchase ? pageRevenue / pageSpend : pageConversions / pageSpend * 100) : 0
+  const pageCpa = pageConversions > 0 ? pageSpend / pageConversions : 0
+  const pageCtr = pageImpressions > 0 ? pageClicks / pageImpressions * 100 : 0
+  const pageCpm = pageImpressions > 0 ? pageSpend / pageImpressions * 1000 : 0
+  const pageFrequency = pageReach > 0 ? pageImpressions / pageReach : 0
 
   // Look up post message from Firestore fbPosts for each creative with a storyId.
   // Searches under both pageId and storyIdPrefix paths since page IDs may differ.
