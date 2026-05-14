@@ -25,13 +25,18 @@ export async function GET(req: NextRequest) {
   const pageId = req.nextUrl.searchParams.get('pageId')
   if (!pageId) return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
 
-  const uid = await verifyAdmin(idToken, pageId)
-  if (!uid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const decoded = await adminAuth.verifyIdToken(idToken).catch(() => null)
+  const uid = decoded ? await verifyAdmin(idToken, pageId) : null
+  if (!uid || !decoded) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const [membersSnap, pendingSnap] = await Promise.all([
+  const [membersSnap, pendingSnap, tokensSnap] = await Promise.all([
     adminDb.collection('pages').doc(pageId).collection('members').get(),
     adminDb.collection('pages').doc(pageId).collection('pendingInvites').get(),
+    adminDb.collection('users').doc(decoded.uid).collection('metaTokens').get(),
   ])
+
+  const pageDoc = tokensSnap.docs.find(d => d.id === pageId) ?? tokensSnap.docs.find(d => d.id === 'page')
+  const pageName: string = pageDoc?.data()?.pageName ?? ''
 
   const accepted = membersSnap.docs
     .filter(d => d.id !== uid)
@@ -59,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json({ members: [...pending, ...accepted] })
+  return NextResponse.json({ pageName, members: [...pending, ...accepted] })
 }
 
 export async function PATCH(req: NextRequest) {

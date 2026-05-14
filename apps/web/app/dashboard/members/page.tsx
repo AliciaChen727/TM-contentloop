@@ -28,6 +28,7 @@ export default function MembersPage() {
   const [pageId, setPageId] = useState('')
   const [idToken, setIdToken] = useState('')
   const [members, setMembers] = useState<Member[]>([])
+  const [pageName, setPageName] = useState('')
   const [loading, setLoading] = useState(true)
   const [inviteEmail, setInviteEmail] = useState('')
   const [newPerms, setNewPerms] = useState<Permissions>({ ...DEFAULT_PERMS })
@@ -36,7 +37,7 @@ export default function MembersPage() {
 
   const loadMembers = useCallback(async (token: string, pid: string) => {
     const res = await fetch(`/api/auth/members?pageId=${pid}`, { headers: { Authorization: `Bearer ${token}` } })
-    if (res.ok) { const d = await res.json(); setMembers(d.members ?? []) }
+    if (res.ok) { const d = await res.json(); setMembers(d.members ?? []); setPageName(d.pageName ?? '') }
   }, [])
 
   useEffect(() => {
@@ -99,7 +100,10 @@ export default function MembersPage() {
       <header className="border-b bg-white px-8 py-4">
         <div className="mx-auto flex max-w-2xl items-center gap-4">
           <button onClick={() => router.back()} className="text-sm text-gray-400 hover:text-gray-600">← 返回</button>
-          <h1 className="text-base font-bold text-gray-900">成員管理</h1>
+          <div>
+            <h1 className="text-base font-bold text-gray-900">成員管理</h1>
+            {pageName && <p className="text-xs text-gray-400 mt-0.5">{pageName}</p>}
+          </div>
         </div>
       </header>
 
