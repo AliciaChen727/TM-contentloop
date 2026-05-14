@@ -159,15 +159,21 @@ export default function MembersPage() {
                       {m.displayName && (
                         <div className="text-sm font-medium text-gray-800">{m.displayName}</div>
                       )}
-                      <div className={`text-xs ${m.displayName ? 'text-gray-400' : 'text-sm font-medium text-gray-700'}`}>{m.email}</div>
+                      <div className={`${m.displayName ? 'text-xs text-gray-400' : 'text-sm font-medium text-gray-700'}`}>{m.email}</div>
+                      {m.status === 'accepted' && (
+                        <span className="text-xs text-gray-400 mt-0.5 block">Viewer</span>
+                      )}
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      m.status === 'accepted'
-                        ? 'bg-green-50 text-green-700'
-                        : 'bg-yellow-50 text-yellow-700'
-                    }`}>
-                      {m.status === 'accepted' ? '✓ 已回應（已登入）' : '已送出邀請'}
-                    </span>
+                    {m.status === 'accepted' ? (
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-green-700">
+                        <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                        已加入
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-50 text-yellow-700">
+                        待接受
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-5 flex-wrap">
                     {PERM_LABELS.map(({ key, label }) => (
