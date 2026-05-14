@@ -453,7 +453,7 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     syncedAt: Timestamp.now(),
     dateRange: { from: mergedDaily[0]?.date ?? '', to: mergedDaily[mergedDaily.length - 1]?.date ?? '' },
     conversionType: deduped[0]?.conversionType ?? 'link_click',
-    contributorAccounts: deduped.map(s => ({ adAccountId: s.adAccountId, contributorUid: s.uid, spend: s.summary?.spend ?? 0 })),
+    contributorAccounts: deduped.map(s => ({ adAccountId: s.adAccountId, contributorUid: s.contributorUid || '', spend: s.summary?.spend ?? 0 })),
     summary: mergedSummary,
     daily: mergedDaily,
     hourly: mergeHourlyArrays(deduped as { hourly?: HourRow[] }[]),
