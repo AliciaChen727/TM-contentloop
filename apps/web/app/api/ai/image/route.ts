@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       imageData: b64,
       mimeType: mime,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
   }
 }

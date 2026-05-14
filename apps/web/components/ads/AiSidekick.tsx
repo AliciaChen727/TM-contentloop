@@ -469,6 +469,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                         )}
                         {msg.imageUrl && (
                           <div style={{ marginTop: 8 }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={msg.imageUrl} alt="生成的廣告素材" style={{ width: '100%', borderRadius: 8 }} />
                             <textarea value={editedPrompts[msg.id] ?? (msg.response?.imagePrompt ?? '')}
                               onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
