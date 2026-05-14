@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   // Fetch summary + daily from accounts[0] (aggregate stats).
   // Fetch per-ad insights (date-range + all-time) and ads list across ALL accounts —
   // ads created by other admins may live in a different ad account.
-  const [[summaryRes, dailyRes], adsListResArray, adLevelResArray, allTimeResArray] = await Promise.all([
+  const [[summaryRes, dailyRes], adsListResArray, adLevelResArray, allTimeResArray, dailyAdLevelResArray] = await Promise.all([
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     })),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/insights`)
-      url.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,ctr,actions,action_values,effective_object_story_id')
+      url.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,clicks,ctr,actions,action_values,effective_object_story_id')
       Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
@@ -112,6 +112,16 @@ export async function POST(req: NextRequest) {
       url.searchParams.set('date_preset', 'maximum')
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
+      url.searchParams.set('access_token', userAccessToken)
+      return fetch(url)
+    })),
+    Promise.all(accounts.map(account => {
+      const url = new URL(`${BASE}/${account.id}/insights`)
+      url.searchParams.set('fields', 'ad_id,spend,reach,impressions,clicks,actions,action_values')
+      Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
+      url.searchParams.set('time_increment', '1')
+      url.searchParams.set('level', 'ad')
+      url.searchParams.set('limit', '1000')
       url.searchParams.set('access_token', userAccessToken)
       return fetch(url)
     })),
@@ -130,6 +140,9 @@ export async function POST(req: NextRequest) {
   const adLevelAllTimeData = { data: allTimeArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[]) }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allTimeErrors = allTimeArrays.filter((d: any) => d.error).map((d: any) => d.error?.message)
+  const dailyAdLevelArrays = await Promise.all(dailyAdLevelResArray.map(r => r.json()))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dailyAdLevelData: Record<string, unknown>[] = dailyAdLevelArrays.flatMap((d: any) => (d.data ?? []) as Record<string, unknown>[])
 
   if (!summaryRes.ok || summaryData.error) {
     return NextResponse.json({ error: summaryData.error?.message ?? 'Failed to get insights' }, { status: 500 })
@@ -141,9 +154,6 @@ export async function POST(req: NextRequest) {
   const reach = parseInt(s.reach ?? '0')
   const impressions = parseInt(s.impressions ?? '0')
   const clicks = parseInt(s.clicks ?? '0')
-  const ctr = parseFloat(s.ctr ?? '0')
-  const cpm = parseFloat(s.cpm ?? '0')
-  const frequency = parseFloat(s.frequency ?? '0')
 
   const sActions: MetaAction[] = s.actions ?? []
   const sActionValues: MetaAction[] = s.action_values ?? []
@@ -264,8 +274,9 @@ export async function POST(req: NextRequest) {
   const filteredDateRangeAds = (adLevelData.data as Record<string, unknown>[]).filter(
     c => filteredAdIds.has(c.ad_id as string)
   )
-  let pageSpend = spend, pageReach = reach, pageImpressions = impressions, pageClicks = clicks
-  let pageConversions = conversions, pageRevenue = revenue
+  const pageFilterApplied = pageIdPrefixes.size > 0 || !!igUserId || igMediaIdSet.size > 0
+  let pageSpend = 0, pageReach = 0, pageImpressions = 0, pageClicks = 0
+  let pageConversions = 0, pageRevenue = 0
   if (filteredDateRangeAds.length > 0) {
     pageSpend = filteredDateRangeAds.reduce((s, c) => s + parseFloat((c.spend as string) ?? '0'), 0)
     pageImpressions = filteredDateRangeAds.reduce((s, c) => s + parseInt((c.impressions as string) ?? '0'), 0)
@@ -275,13 +286,45 @@ export async function POST(req: NextRequest) {
     const fActionValues: MetaAction[] = filteredDateRangeAds.flatMap(c => (c.action_values as MetaAction[]) ?? [])
     pageConversions = fActions.filter(a => a.action_type === conversionType).reduce((s, a) => s + parseFloat(a.value), 0)
     pageRevenue = fActionValues.filter(a => a.action_type === 'purchase').reduce((s, a) => s + parseFloat(a.value), 0)
+  } else if (!pageFilterApplied) {
+    // No page filter — use account-level totals as fallback
+    pageSpend = spend; pageReach = reach; pageImpressions = impressions; pageClicks = clicks
+    pageConversions = conversions; pageRevenue = revenue
   }
+  // If pageFilterApplied but no matching ads in date range → all zeros (this page didn't spend)
   const pageRoas = pageSpend > 0 && pageConversions > 0
     ? (hasPurchase ? pageRevenue / pageSpend : pageConversions / pageSpend * 100) : 0
   const pageCpa = pageConversions > 0 ? pageSpend / pageConversions : 0
-  const pageCtr = pageImpressions > 0 ? pageClicks / pageImpressions * 100 : ctr
-  const pageCpm = pageImpressions > 0 ? pageSpend / pageImpressions * 1000 : cpm
-  const pageFrequency = pageReach > 0 ? pageImpressions / pageReach : frequency
+  const pageCtr = pageImpressions > 0 ? pageClicks / pageImpressions * 100 : 0
+  const pageCpm = pageImpressions > 0 ? pageSpend / pageImpressions * 1000 : 0
+  const pageFrequency = pageReach > 0 ? pageImpressions / pageReach : 0
+
+  // Page-filtered daily: aggregate per-ad daily data by date for the filtered ads only
+  const filteredDailyAds = dailyAdLevelData.filter(c => filteredAdIds.has(c.ad_id as string))
+  const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
+  for (const c of filteredDailyAds) {
+    const date = c.date_start as string
+    if (!date) continue
+    const d = dailyByDate.get(date) ?? { spend: 0, reach: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 }
+    d.spend += parseFloat((c.spend as string) ?? '0')
+    d.reach += parseInt((c.reach as string) ?? '0')
+    d.impressions += parseInt((c.impressions as string) ?? '0')
+    d.clicks += parseInt((c.clicks as string) ?? '0')
+    const cDayActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
+    const cDayActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
+    d.conversions += parseActions(cDayActions, conversionType)
+    d.revenue += parseActions(cDayActionValues, 'purchase')
+    dailyByDate.set(date, d)
+  }
+  const pageFilteredDaily = filteredDailyAds.length > 0
+    ? Array.from(dailyByDate.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, d]) => {
+          const dayRoas = d.spend > 0 && d.conversions > 0
+            ? (hasPurchase ? d.revenue / d.spend : d.conversions / d.spend * 100) : 0
+          return { date, spend: d.spend, reach: d.reach, impressions: d.impressions, clicks: d.clicks, ctr: d.impressions > 0 ? d.clicks / d.impressions * 100 : 0, roas: dayRoas, conversions: d.conversions, revenue: d.revenue }
+        })
+    : pageFilterApplied ? [] : daily
 
   // Look up post message from Firestore fbPosts for each creative with a storyId.
   // Searches under both pageId and storyIdPrefix paths since page IDs may differ.
@@ -421,7 +464,7 @@ export async function POST(req: NextRequest) {
     adAccountId,
     conversionType,
     summary: { spend: pageSpend, reach: pageReach, impressions: pageImpressions, clicks: pageClicks, ctr: pageCtr, cpm: pageCpm, frequency: pageFrequency, conversions: pageConversions, revenue: pageRevenue, roas: pageRoas, cpa: pageCpa },
-    daily,
+    daily: pageFilteredDaily,
     adCreatives: adCreativesWithTitle,
     adPostIds,
     adPostMetrics,
