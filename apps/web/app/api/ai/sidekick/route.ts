@@ -8,6 +8,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 interface MetricsContext {
+  // Posts metrics
   totalPosts?: number
   totalReach?: number
   totalLikes?: number
@@ -17,16 +18,29 @@ interface MetricsContext {
   reelsCount?: number
   dateRange?: string
   topPosts?: { title: string; reach: number; likes: number; engRate: number; platform: string }[]
+  // Ads metrics
   spend?: number
   roas?: number
-  cpa?: number
+  cpa?: number          // Cost per conversion (link click as proxy for registration)
   ctr?: number
   cpm?: number
   impressions?: number
   frequency?: number
-  conversions?: number
+  conversions?: number  // Link clicks treated as conversion proxy
   revenue?: number
   topCreatives?: { name: string; roas: number; spend: number; ctr: number; cpa: number }[]
+  // GA metrics (reserved — not yet connected, will be populated when GA is integrated)
+  ga?: {
+    sessions?: number           // Total sessions from GA
+    formPageViews?: number      // Views of registration/form page
+    formClicks?: number         // Clicks on form submit (Goal completions)
+    bounceRate?: number         // Bounce rate %
+    avgSessionDuration?: number // Avg session duration in seconds
+    organicSessions?: number    // Sessions from organic search
+    paidSessions?: number       // Sessions from paid ads (utm_medium=paid)
+    topLandingPages?: { page: string; sessions: number; bounceRate: number }[]
+    connected: boolean          // Whether GA is actually connected
+  }
 }
 
 function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string): string {
@@ -37,7 +51,7 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
     ? '你是一位廣告專家，擅長分析廣告素材表現與提供廣告建議。只有當用戶明確要求「生成」「做一張」「製作」新廣告素材時，才生成圖片。其他情況一律回傳 type: "analysis" 或 "recommendation"。'
     : isPostsContext
       ? '你是一位專精 Facebook 和 Instagram 社群經營的內容顧問，核心任務是協助分析貼文成效、找出高互動規律，並給出具體可執行的內容優化建議。'
-      : '你是一位專精 Meta 廣告投放的資深廣告顧問，核心任務是分析廣告帳戶數據（ROAS、CPA、CTR、觸及、頻率等），診斷成效問題，並給出具體可執行的優化行動。'
+      : '你是一位專精 Meta 廣告投放的資深廣告顧問。負責分析廣告帳戶數據並給出具體可執行的優化建議。\n\n《重要背景》：本帳戶是 Toastmasters International District 67 的公益社團廣告帳戶。主要目標是透過臉書/IG 廣告吸引民眾點擊「報名連結」（Google Form）來參加活動。由於是公益組織、沒有金流，所以：\n- **ROAS 對此帳戶沒有意義**（沒有收益），請對 ROAS = 0.00x 不要疑惑，這是正常的\n- **核心 KPI 是 CPL（每次報名點擊成本）**：花費 ÷ 點擊報名連結的人數（以 link_click 數代替轉換數）\n- 最高優先度的優化方向：提升 CTR（讓更多人點進連結）與降低 CPL（降低每次點擊成本）\n- 目前 Google Form 無法紀錄填表完成率，若用戶詢問具體報名率，應說明此限制並建議將連結加上 UTM 參數後再透過 GA 監控'
 
   const memoryBlock = memory
     ? `\n## 過去分析記憶（請優先建立在這些結論上）\n${memory}\n`

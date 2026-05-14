@@ -398,7 +398,23 @@ export async function POST(req: NextRequest) {
     adPostMetrics,
     igPostIds,
     igPostMetrics,
-  })
+    // GA integration placeholder — reserved for future Google Analytics 4 connection.
+    // Fields will be populated by /api/analytics/ga/sync route once GA is set up.
+    // Do NOT display these fields in the frontend until ga.connected === true.
+    ga: {
+      connected: false,          // Set to true when GA4 property is linked
+      propertyId: null,          // GA4 Property ID (e.g. "G-XXXXXXXXXX")
+      sessions: null,            // Total sessions from GA
+      formPageViews: null,       // Views of registration/Google Form landing page
+      formClicks: null,          // Form submission completions (Goal completions)
+      bounceRate: null,          // Bounce rate %
+      avgSessionDuration: null,  // Avg session duration in seconds
+      organicSessions: null,     // Sessions from organic search
+      paidSessions: null,        // Sessions attributed to paid ads (utm_medium=paid)
+      topLandingPages: null,     // Top landing pages with sessions + bounce rate
+      lastSyncedAt: null,        // Timestamp of last successful GA sync
+    },
+  }, { merge: true })
 
   // If this sync found creatives, write them to the shared page-level path so other
   // page admins (who may not have access to this ad account) can read them.
