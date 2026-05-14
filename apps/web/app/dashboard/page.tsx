@@ -73,10 +73,6 @@ export default function DashboardPage() {
   const [addPageError, setAddPageError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [userName, setUserName] = useState('')
-  const [inviting, setInviting] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteStatus, setInviteStatus] = useState<'idle' | 'ok' | 'error'>('idle')
-  const [inviteError, setInviteError] = useState('')
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
@@ -252,28 +248,6 @@ export default function DashboardPage() {
     setAddPageInput('')
   }
 
-  async function handleInvite() {
-    if (!inviteEmail.trim() || !selectedPageId) return
-    setInviteStatus('idle')
-    setInviteError('')
-    const u = auth.currentUser
-    if (!u) return
-    const idToken = await u.getIdToken()
-    const res = await fetch('/api/auth/invite', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail.trim(), pageId: selectedPageId }),
-    })
-    if (res.ok) {
-      setInviteStatus('ok')
-      setInviteEmail('')
-      setTimeout(() => { setInviting(false); setInviteStatus('idle') }, 2000)
-    } else {
-      const d = await res.json()
-      setInviteStatus('error')
-      setInviteError(d.error ?? '邀請失敗')
-    }
-  }
 
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
 
