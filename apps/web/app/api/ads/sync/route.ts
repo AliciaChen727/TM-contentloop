@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/insights`)
       url.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
-      url.searchParams.set('date_preset', 'last_90d')
+      url.searchParams.set('date_preset', 'lifetime')
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
       url.searchParams.set('access_token', userAccessToken)
@@ -203,15 +203,17 @@ export async function POST(req: NextRequest) {
     ? adsList.map(ad => {
         const dateRangeItem = insightsByAdId.get(ad.id)
         const allTimeItem = allTimeByAdId.get(ad.id)
-        // Prefer date-range only if it has real spend; otherwise fall back to 90d all-time
-        if (dateRangeItem && parseFloat(dateRangeItem.spend as string ?? '0') > 0) return dateRangeItem
-        if (allTimeItem) return allTimeItem
-        if (dateRangeItem) return dateRangeItem  // date-range exists but spend=0 (e.g. just launched)
-        // No insights at all: bare stub with storyId for post title lookup
-        const storyId = ad.effective_object_story_id
-          ?? ad.creative?.effective_object_story_id
-          ?? ad.creative?.object_story_id
-        return { ad_id: ad.id, ad_name: ad.name, ...(storyId ? { effective_object_story_id: storyId } : {}), spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
+        // Prefer date-range only if it has real spend; otherwise fall back to all-time
+        let item = (dateRangeItem && parseFloat(dateRangeItem.spend as string ?? '0') > 0) ? dateRangeItem
+          : allTimeItem ? allTimeItem
+          : dateRangeItem ? dateRangeItem  // date-range exists but spend=0
+          : { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
+        
+        const storyId = adIdToStoryId.get(ad.id)
+        if (storyId && !item.effective_object_story_id) {
+          item = { ...item, effective_object_story_id: storyId }
+        }
+        return item
       })
     : (adLevelData.data ?? [])
 
