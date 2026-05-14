@@ -23,7 +23,21 @@ function CallbackHandler() {
       return
     }
 
+    let resolved = false
     const unsub = onAuthStateChanged(auth, async (user) => {
+      if (resolved) return
+      // Firebase auth初始化時可能先fire null，等第一個非null或超時
+      if (user === null && !auth.currentUser) {
+        // 可能還在初始化，給一次機會等真正的user
+        setTimeout(() => {
+          if (!resolved) {
+            unsub()
+            router.replace('/auth/login')
+          }
+        }, 2000)
+        return
+      }
+      resolved = true
       unsub()
 
       if (!user) {
@@ -46,7 +60,8 @@ function CallbackHandler() {
         if (!res.ok) {
           const data = await res.json()
           console.error('Token exchange failed:', data.error)
-          router.replace('/auth/connect?error=token')
+          const msg = encodeURIComponent(data.error ?? 'token exchange failed')
+          router.replace(`/auth/connect?error=token&msg=${msg}`)
           return
         }
 

@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
+import { Suspense } from 'react'
 
 const SCOPES = [
   'pages_show_list',
@@ -15,9 +16,13 @@ const SCOPES = [
   'ads_read',
 ].join(',')
 
-export default function ConnectPage() {
+function ConnectContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [checking, setChecking] = useState(true)
+
+  const errorType = searchParams.get('error')
+  const errorMsg = searchParams.get('msg')
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -48,6 +53,21 @@ export default function ConnectPage() {
           授權 ContentLoop 讀取你的 FB 粉專與 IG 成效資料。
         </p>
 
+        {errorType === 'denied' && (
+          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4">
+            <p className="text-xs font-semibold text-red-700">授權被取消，請重新連接。</p>
+          </div>
+        )}
+
+        {errorType === 'token' && (
+          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4">
+            <p className="mb-1 text-xs font-semibold text-red-700">連接失敗，請重試。</p>
+            {errorMsg && (
+              <p className="break-all text-xs text-red-500">{decodeURIComponent(errorMsg)}</p>
+            )}
+          </div>
+        )}
+
         <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
           <p className="mb-2 text-xs font-semibold text-blue-700">⚠️ 授權時的重要提示</p>
           <ol className="list-decimal space-y-2 pl-4 text-xs text-blue-600">
@@ -68,5 +88,13 @@ export default function ConnectPage() {
         </button>
       </div>
     </main>
+  )
+}
+
+export default function ConnectPage() {
+  return (
+    <Suspense>
+      <ConnectContent />
+    </Suspense>
   )
 }
