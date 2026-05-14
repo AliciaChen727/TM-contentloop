@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/insights`)
       url.searchParams.set('fields', 'ad_id,ad_name,spend,impressions,ctr,actions,action_values')
-      url.searchParams.set('date_preset', 'lifetime')
+      url.searchParams.set('date_preset', 'maximum')
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
       url.searchParams.set('access_token', userAccessToken)
@@ -193,12 +193,14 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string } }[] = (adsListData.data ?? []) as any
   const adIdToStoryId = new Map<string, string>()
+  const adIdToIgStoryId = new Map<string, string>()
   for (const ad of adsList) {
     const sid = ad.effective_object_story_id
       ?? ad.creative?.effective_object_story_id
       ?? ad.creative?.object_story_id
       ?? ad.creative?.effective_instagram_story_id
     if (ad.id && sid) adIdToStoryId.set(ad.id, sid)
+    if (ad.id && ad.creative?.effective_instagram_story_id) adIdToIgStoryId.set(ad.id, ad.creative.effective_instagram_story_id)
   }
   const allAdCreatives: Record<string, unknown>[] = adsList.length > 0
     ? adsList.map(ad => {
@@ -303,10 +305,13 @@ export async function POST(req: NextRequest) {
   for (const c of adLevelAllTime) {
     const storyId = adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
+    const igStoryId = adIdToIgStoryId.get(c.ad_id as string)
     const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
     const isCurrentIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
-    const treatAsIg = isCurrentIgPost || igMediaIdSet.has(postId)
-    if (!treatAsIg && pageIdPrefixes.size > 0 && !matchesPage(storyId)) continue
+    const treatAsIg = isCurrentIgPost || igMediaIdSet.has(postId) || (igStoryId ? igMediaIdSet.has(igStoryId) : false)
+    const finalIgPostId = igStoryId && igMediaIdSet.has(igStoryId) ? igStoryId : postId
+    const isFb = pageIdPrefixes.size > 0 && matchesPage(storyId)
+    if (!treatAsIg && !isFb) continue
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -322,12 +327,12 @@ export async function POST(req: NextRequest) {
     const cCtr = parseFloat(c.ctr as string ?? '0')
     const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
     if (treatAsIg) {
-      if (!igPostIds.includes(postId)) igPostIds.push(postId)
-      const existing = igPostMetrics[postId]
-      if (!existing || cSpend > existing.spend) igPostMetrics[postId] = metricsVal
-    } else {
+      if (!igPostIds.includes(finalIgPostId)) igPostIds.push(finalIgPostId)
+      const existing = igPostMetrics[finalIgPostId]
+      if (!existing || cSpend > existing.spend) igPostMetrics[finalIgPostId] = metricsVal
+    }
+    if (isFb) {
       if (!adPostIds.includes(postId)) adPostIds.push(postId)
-      // Keep highest-spend metrics if same post appears multiple times (different ad sets)
       const existing = adPostMetrics[postId]
       if (!existing || cSpend > existing.spend) adPostMetrics[postId] = metricsVal
     }
@@ -338,10 +343,14 @@ export async function POST(req: NextRequest) {
     const storyId = (c.effective_object_story_id as string | undefined)
       ?? adIdToStoryId.get(c.ad_id as string)
     if (!storyId) continue
+    const igStoryId = adIdToIgStoryId.get(c.ad_id as string)
     const postIdKey = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
     const isCurrentIgPost = !!igUserId && storyId.startsWith(`${igUserId}_`)
-    const treatAsIg = isCurrentIgPost || igMediaIdSet.has(postIdKey)
-    if (treatAsIg ? igPostMetrics[postIdKey] : adPostMetrics[postIdKey]) continue
+    const treatAsIg = isCurrentIgPost || igMediaIdSet.has(postIdKey) || (igStoryId ? igMediaIdSet.has(igStoryId) : false)
+    const finalIgPostIdKey = igStoryId && igMediaIdSet.has(igStoryId) ? igStoryId : postIdKey
+    const isFb = pageIdPrefixes.size > 0 && matchesPage(storyId)
+    if (!treatAsIg && !isFb) continue
+    if (treatAsIg ? igPostMetrics[finalIgPostIdKey] : adPostMetrics[postIdKey]) continue
     const cSpend = parseFloat(c.spend as string ?? '0')
     const cActions: MetaAction[] = (c.actions as MetaAction[]) ?? []
     const cActionValues: MetaAction[] = (c.action_values as MetaAction[]) ?? []
@@ -357,9 +366,10 @@ export async function POST(req: NextRequest) {
     const cCtr = parseFloat(c.ctr as string ?? '0')
     const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
     if (treatAsIg) {
-      if (!igPostIds.includes(postIdKey)) igPostIds.push(postIdKey)
-      igPostMetrics[postIdKey] = metricsVal
-    } else {
+      if (!igPostIds.includes(finalIgPostIdKey)) igPostIds.push(finalIgPostIdKey)
+      igPostMetrics[finalIgPostIdKey] = metricsVal
+    }
+    if (isFb) {
       if (!adPostIds.includes(postIdKey)) adPostIds.push(postIdKey)
       adPostMetrics[postIdKey] = metricsVal
     }
