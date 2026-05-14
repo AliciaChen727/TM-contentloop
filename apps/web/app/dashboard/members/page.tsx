@@ -9,6 +9,7 @@ interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface Member {
   uid: string | null
   email: string
+  displayName: string | null
   permissions: Permissions
   status: 'pending' | 'accepted'
   addedAt: string | null
@@ -154,7 +155,12 @@ export default function MembersPage() {
               {members.map(m => (
                 <div key={m.email} className="border border-gray-100 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-700">{m.email}</span>
+                    <div>
+                      {m.displayName && (
+                        <div className="text-sm font-medium text-gray-800">{m.displayName}</div>
+                      )}
+                      <div className={`text-xs ${m.displayName ? 'text-gray-400' : 'text-sm font-medium text-gray-700'}`}>{m.email}</div>
+                    </div>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       m.status === 'accepted'
                         ? 'bg-green-50 text-green-700'

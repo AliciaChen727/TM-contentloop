@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       return {
         uid: d.id,
         email: data.email ?? '',
+        displayName: data.displayName ?? null,
         permissions: data.permissions ?? { ads: false, sidekick: false, syncAds: false },
         status: 'accepted' as const,
         addedAt: data.addedAt?.toDate?.()?.toISOString() ?? null,
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
     return {
       uid: null,
       email: d.id,
+      displayName: null,
       permissions: data.permissions ?? { ads: false, sidekick: false, syncAds: false },
       status: 'pending' as const,
       addedAt: data.createdAt?.toDate?.()?.toISOString() ?? null,

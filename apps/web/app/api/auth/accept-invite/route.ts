@@ -8,10 +8,12 @@ export async function POST(req: NextRequest) {
 
   let uid: string
   let email: string
+  let displayName: string
   try {
     const decoded = await adminAuth.verifyIdToken(idToken)
     uid = decoded.uid
     email = decoded.email ?? ''
+    displayName = decoded.name ?? ''
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
     batch.update(inviteDoc.ref, { status: 'accepted', acceptedAt: new Date(), acceptedBy: uid })
     batch.set(
       adminDb.collection('pages').doc(pageId).collection('members').doc(uid),
-      { role: 'viewer', email, permissions, addedAt: new Date() }
+      { role: 'viewer', email, displayName, permissions, addedAt: new Date() }
     )
     // Remove from pendingInvites
     batch.delete(adminDb.collection('pages').doc(pageId).collection('pendingInvites').doc(email.toLowerCase()))
