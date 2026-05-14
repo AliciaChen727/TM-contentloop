@@ -215,15 +215,35 @@ export async function POST(req: NextRequest) {
       })
     : (adLevelData.data ?? [])
 
-  // Filter creatives to only those belonging to the current page.
-  // Accept both pageId and storyIdPrefix — pages migrated to New Page Experience may have
-  // old posts (storyIdPrefix) and new posts (pageId) using different page IDs.
+  // Load known IG media IDs from Firestore early to catch cross-account and cross-format ads.
+  // Handles two cases: (A) fbPageId_igMediaId format (Meta Ads Manager cross-posts),
+  // (B) oldIgUserId_igMediaId format (boosts from a previously linked IG account).
+  let igMediaIdSet = new Set<string>()
+  if (pageId) {
+    try {
+      const igPostsSnap = await userRef.collection('pages').doc(pageId).collection('igPosts').get()
+      igMediaIdSet = new Set(igPostsSnap.docs.map(d => d.id))
+    } catch { /* non-critical */ }
+  }
+
+  // Filter creatives to only those belonging to the current page or IG account.
   const pageIdPrefixes = new Set([pageId, effectivePagePrefix].filter(Boolean) as string[])
   const matchesPage = (storyId: string | undefined) =>
     typeof storyId === 'string' && Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))
 
-  const adCreatives = pageIdPrefixes.size > 0
-    ? allAdCreatives.filter(c => matchesPage(c.effective_object_story_id as string | undefined))
+  const matchesIg = (storyId: string | undefined) => {
+    if (typeof storyId !== 'string') return false
+    if (igUserId && storyId.startsWith(`${igUserId}_`)) return true
+    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+    return igMediaIdSet.has(postId)
+  }
+
+  const adCreatives = pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
+    ? allAdCreatives.filter(c => {
+        const sid = c.effective_object_story_id as string | undefined
+        if (!sid) return false
+        return matchesPage(sid) || matchesIg(sid)
+      })
     : allAdCreatives
 
   // Look up post message from Firestore fbPosts for each creative with a storyId.
@@ -270,15 +290,7 @@ export async function POST(req: NextRequest) {
   })
 
   // Load known IG media IDs from Firestore to catch cross-account and cross-format ads.
-  // Handles two cases: (A) fbPageId_igMediaId format (Meta Ads Manager cross-posts),
-  // (B) oldIgUserId_igMediaId format (boosts from a previously linked IG account).
-  let igMediaIdSet = new Set<string>()
-  if (pageId) {
-    try {
-      const igPostsSnap = await userRef.collection('pages').doc(pageId).collection('igPosts').get()
-      igMediaIdSet = new Set(igPostsSnap.docs.map(d => d.id))
-    } catch { /* non-critical */ }
-  }
+  // (Moved to the top before filtering adCreatives)
 
   // Build adPostIds + adPostMetrics (FB) and igPostIds + igPostMetrics (IG) from 90d data
   const adPostIds: string[] = []

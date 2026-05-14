@@ -166,7 +166,7 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string,
 
 // ── Ads Sync ──────────────────────────────────────────────────────────────────
 
-async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string): Promise<{ adAccountId?: string; spend?: number; reach?: number; conversionType?: string; linkClicks?: number; videoViews?: number; pageAdsCount?: number; error?: string }> {
+async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string, igUserId?: string): Promise<{ adAccountId?: string; spend?: number; reach?: number; conversionType?: string; linkClicks?: number; videoViews?: number; pageAdsCount?: number; error?: string }> {
   const accountsUrl = new URL(`${BASE}/me/adaccounts`)
   accountsUrl.searchParams.set('fields', 'id,name')
   accountsUrl.searchParams.set('access_token', userAccessToken)
@@ -193,7 +193,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   dailyUrl.searchParams.set('access_token', userAccessToken)
 
   const adsUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsUrl.searchParams.set('fields', 'id,name,effective_status,creative{object_story_id}')
+  adsUrl.searchParams.set('fields', 'id,name,effective_status,creative{object_story_id,effective_instagram_story_id,instagram_actor_id}')
   adsUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
   adsUrl.searchParams.set('limit', '100')
   adsUrl.searchParams.set('access_token', userAccessToken)
@@ -220,9 +220,13 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
 
   // Filter ads to only those belonging to this pageId (object_story_id format: {pageId}_{postId})
   // Strict: never fall back to all-account ads — that would contaminate other pages' dashboards
-  const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string } }[] = adsData.data ?? []
-  const pageAdsList = rawAdsList.filter(ad => ad.creative?.object_story_id?.startsWith(pageId + '_'))
-  const adPostIds: string[] = pageAdsList.map(ad => ad.creative!.object_story_id!).filter(Boolean)
+  const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string; effective_instagram_story_id?: string; instagram_actor_id?: string } }[] = adsData.data ?? []
+  const pageAdsList = rawAdsList.filter(ad => {
+    if (ad.creative?.object_story_id?.startsWith(pageId + '_')) return true
+    if (igUserId && ad.creative?.instagram_actor_id === igUserId) return true
+    return false
+  })
+  const adPostIds: string[] = pageAdsList.map(ad => ad.creative?.object_story_id || ad.creative?.effective_instagram_story_id).filter(Boolean) as string[]
 
   const s = summaryData.data?.[0] ?? {}
   const spend = parseFloat(s.spend ?? '0')
@@ -476,7 +480,7 @@ export async function POST(req: NextRequest) {
 
     const [adsResult, igResult, fbResult] = await Promise.all([
       tokenData.userAccessToken && pageId
-        ? syncAdsForUser(uid, tokenData.userAccessToken, pageId)
+        ? syncAdsForUser(uid, tokenData.userAccessToken, pageId, tokenData.igUserId)
         : Promise.resolve({ error: 'no userAccessToken' }),
       tokenData.accessToken && tokenData.igUserId && pageId
         ? syncIgForUser(uid, tokenData.accessToken, tokenData.igUserId, pageId)
