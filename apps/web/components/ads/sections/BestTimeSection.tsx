@@ -19,7 +19,7 @@ export function BestTimeSection({ data }: { data: AdData }) {
   const bestDay = sorted[0]
   const worstDay = sorted[sorted.length - 1]
   const weeklyHint = bestDay && bestDay.roas > 0
-    ? `💡 ${bestDay.day} ROAS ${bestDay.roas.toFixed(2)}x 最佳${worstDay && worstDay.roas < bestDay.roas ? `，${worstDay.day} 表現偏低，建議調降預算` : ''}`
+    ? `💡 ${bestDay.day} 點擊效益 ${bestDay.roas.toFixed(2)}x 最佳${worstDay && worstDay.roas < bestDay.roas ? `，${worstDay.day} 表現偏低，建議調降預算` : ''}`
     : '💡 持續監控每日成效以找出最佳投放日'
 
   return (
@@ -27,17 +27,17 @@ export function BestTimeSection({ data }: { data: AdData }) {
       <div className="ads-section-header">
         <Icon name="clock" size={15} color="var(--ad-blue)" />
         <span className="ads-section-title">最佳投放時段分析</span>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ad-text3)' }}>過去 30 天平均 ROAS</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ad-text3)' }}>過去 30 天平均點擊效益</span>
       </div>
 
       <div className="ads-grid-2">
         <div className="ads-card ads-card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>24 小時 ROAS 熱力圖</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>24 小時點擊效益熱力圖</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {hourly.map(h => (
               <div
                 key={h.hour}
-                title={`${h.hour}:00 — ROAS ${h.roas}`}
+                title={`${h.hour}:00 — 點擊效益 ${h.roas}`}
                 style={{
                   width: 'calc(100%/8 - 4px)', height: 40,
                   background: getColor(h.roas), borderRadius: 5,
@@ -57,20 +57,20 @@ export function BestTimeSection({ data }: { data: AdData }) {
             {['#E8EFF9', '#C2D4F5', '#A3BEF0', '#6B9AE8', '#3B6FD4'].map((c, i) => (
               <div key={i} style={{ flex: 1, height: 7, borderRadius: 2, background: c }} />
             ))}
-            <span>高 ROAS</span>
+            <span>高點擊效益</span>
           </div>
           <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--ad-blue-light)', borderRadius: 7, fontSize: 12, color: 'var(--ad-blue)' }}>
             {hasRealHourly ? (() => {
               const topHours = [...hourly].filter(h => h.roas > 0).sort((a, b) => b.roas - a.roas).slice(0, 3)
               if (!topHours.length) return '💡 暫無小時維度數據'
               const hrs = topHours.map(h => `${h.hour}:00`).join('、')
-              return `💡 黃金時段：${hrs}，ROAS 最高 ${topHours[0].roas.toFixed(2)}x，建議提升出價`
-            })() : '💡 黃金時段：19:00–21:00 ROAS 4.8–5.0，建議提升出價 20%'}
+              return `💡 黃金時段：${hrs}，點擊效益最高 ${topHours[0].roas.toFixed(2)}x，建議提升出價`
+            })() : '💡 可參考 19:00–21:00 黃金時段，點擊效益最佳，建議提升出價 20%'}
           </div>
         </div>
 
         <div className="ads-card ads-card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>週間 ROAS 表現</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>週間點擊效益表現</div>
           <SvgBarChart data={weekly} dataKey="roas" labelKey="day" height={150} refLine={3.5} />
           <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--ad-green-light)', borderRadius: 7, fontSize: 12, color: 'var(--ad-green)' }}>
             {weeklyHint}

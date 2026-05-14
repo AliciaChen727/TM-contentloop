@@ -95,7 +95,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
             <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>花費</th>
-            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>ROAS</th>
+            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>CPL</th>
             <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>CTR</th>
             {onAskAI && <th style={{ width: 60 }} />}
           </tr>

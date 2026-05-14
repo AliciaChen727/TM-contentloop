@@ -15,7 +15,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
   const isClickBased = convType === 'link_click'
   const isVideoBased = convType === 'video_view'
   const budgetPct = (s.spend / data.budget.total) * 100
-  const roasLabel = isVideoBased ? '觀看效益' : isClickBased ? '效益指數' : 'ROAS'
+  const roasLabel = isVideoBased ? '觀看效益' : isClickBased ? '點擊效益' : 'CPL'
   const roasUnit = isVideoBased || isClickBased ? '次/百元' : 'x'
   const cpaLabel = isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'
   const cpaQ = isVideoBased ? 'CPV 如何進一步降低？' : isClickBased ? 'CPC 如何進一步降低？' : 'CPA 如何進一步降低？'
@@ -26,7 +26,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
   const reach = s.reach ?? 0
   const impressions = s.impressions ?? 0
   const kpis = [
-    { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : '這週 ROAS 為什麼下降？' },
+    { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPL 如何降低？' },
     { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
     { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
     { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
@@ -87,8 +87,8 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
           <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'revenue', label: '營收', color: '#3B6FD4', isCurr: true }, { key: 'spend', label: '花費', color: '#2E8B57', isCurr: true }]} />
         </div>
         <div className="ads-card ads-card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isVideoBased ? '每日觀看效益趨勢' : isClickBased ? '每日效益指數趨勢' : '每日 ROAS 趨勢'}</div>
-          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: 'ROAS', color: '#3B6FD4' }]} roasTarget={s.roasTarget} />
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isVideoBased ? '每日觀看效益趨勢' : isClickBased ? '每日點擊效益趨勢' : '每日 CPL 趨勢'}</div>
+          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: isClickBased ? '點擊效益' : 'CPL', color: '#3B6FD4' }]} roasTarget={s.roasTarget} />
         </div>
       </div>
 
@@ -103,7 +103,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
             { label: '最高觸及', value: String(topReach), sub: top3[0] ? `${top3[0].date} ${top3[0].type}` : '—', color: 'var(--ad-blue)' },
             { label: '平均觸及', value: String(avgReach), sub: '自然觸及', color: 'var(--ad-blue)' },
             { label: '平均互動率', value: reachPosts.length > 0 ? `${(reachPosts.reduce((acc, p) => acc + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length).toFixed(2)}%` : '—', sub: '(讚+留言+分享)/觸及', color: 'var(--ad-green)' },
-            { label: '有廣告加持', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最高 ROAS ${Math.max(...adPosts.map(p => p.adRoas ?? 0)).toFixed(1)}x` : '尚無廣告數據', color: 'var(--ad-orange)' },
+            { label: '有廣告加持', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最低 CPL $${Math.min(...adPosts.filter(p => (p.adCpa ?? 0) > 0).map(p => p.adCpa ?? 999)).toFixed(2)}` : '尚無廣告數據', color: 'var(--ad-orange)' },
           ].map(s => (
             <div key={s.label} className="ads-card ads-card-pad" style={{ borderTop: `3px solid ${s.color}` }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ad-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
@@ -127,7 +127,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ad-blue)', fontFamily: 'var(--font-dm-mono)' }}>{fmt(p.reach ?? 0)}</div>
                 <div style={{ fontSize: 10.5, color: 'var(--ad-text3)' }}>觸及</div>
               </div>
-              {p.hasAd && p.adRoas != null && p.adRoas > 0 && <span className="ads-posts-ad-badge">🎯 ROAS {p.adRoas}x</span>}
+              {p.hasAd && p.adCpa != null && p.adCpa > 0 && <span className="ads-posts-ad-badge">🎯 CPL ${p.adCpa}</span>}
             </div>
           ))}
         </div>

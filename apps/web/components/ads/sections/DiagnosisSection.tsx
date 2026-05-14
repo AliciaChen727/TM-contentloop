@@ -12,7 +12,7 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI: (q:
     good: ['var(--ad-green-light)', 'var(--ad-green)'],
   }
   const askQ: Record<string, string> = {
-    d1: '我的受眾是否疲乏了？', d2: '這週 ROAS 為什麼下降？',
+    d1: '我的受眾是否疲乏了？', d2: 'CPL 為什麼偏高？',
     d3: '預算怎麼分配最划算？', d4: '哪支素材表現最好？', d5: '哪個廣告組合應該增加預算？',
   }
   const criticalCount = data.diagnosis.filter(d => d.severity === 'critical').length

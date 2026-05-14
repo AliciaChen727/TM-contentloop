@@ -29,7 +29,7 @@ function buildPostPrompt(p: Post): string {
   const hasAdMetrics = p.hasAd && ((p.adSpend ?? 0) > 0 || (p.adRoas ?? 0) > 0)
   const adPart = p.hasAd
     ? hasAdMetrics
-      ? `\nROAS：${(p.adRoas ?? 0).toFixed(1)}x｜廣告花費：$${p.adSpend ?? 0}｜CPA：$${p.adCpa ?? 0}｜廣告 CTR：${Number(p.adCtr ?? 0).toFixed(2)}%`
+      ? `\nCPL：$${(p.adCpa ?? 0).toFixed(2)}｜廣告花費：$${p.adSpend ?? 0}｜廣告 CTR：${Number(p.adCtr ?? 0).toFixed(2)}%`
       : '\n此貼文有投放廣告，但廣告細項數據尚未同步（可重新同步後查看）'
     : ''
   return `請分析這篇貼文：\n日期：${p.date}｜平台：${p.platform}｜類型：${p.type === 'reels' ? 'Reels' : '貼文'}\n內容：${p.title.slice(0, 100)}\n觸及：${fmt(p.reach)}｜按讚：${p.likes}｜留言：${p.comments}｜收藏：${fmt(p.saves)}｜分享：${p.shares}｜播放：${fmt(p.plays)}\n互動率：${eng}%${adPart}\n\n請給出成效診斷和具體優化建議。`
@@ -98,7 +98,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend
           { label: '總觸及', value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach, sub: '所有貼文合計' },
           { label: '總按讚', value: totalLikes.toLocaleString(), sub: `留言 ${totalComments} · 分享 ${totalShares}` },
           { label: '平均互動率', value: `${avgEng.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
-          { label: '有投廣告', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最高 ROAS ${maxRoas.toFixed(1)}x` : '尚未串接廣告數據' },
+          { label: '有投廣告', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最低 CPL $${maxRoas.toFixed(2)}` : '尚未串接廣告數據' },
         ].map(s => (
           <div key={s.label} className="ads-posts-sum-card">
             <div className="ads-posts-sum-label">{s.label}</div>
@@ -242,7 +242,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4, marginBottom: 10 }}>{p.title}</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-                        {[['ROAS', (p.adRoas ?? 0).toFixed(1) + 'x', rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CPA', '$' + (p.adCpa ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
+                        {[['CPL', '$' + (p.adCpa ?? 0).toFixed(2), rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
                           <div key={label as string}>
                             <div className="ads-posts-ad-metric-label">{label}</div>
                             <div className="ads-posts-ad-metric-value" style={{ color: color as string | undefined }}>{value}</div>

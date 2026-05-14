@@ -80,7 +80,7 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
             style={{ fontSize: 12, padding: '5px 10px', border: '1px solid var(--ad-border)', borderRadius: 7, background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
             value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}
           >
-            <option value="roas">ROAS ↓</option>
+            <option value="roas">點擊效益 ↓</option>
             <option value="spend">花費 ↓</option>
             <option value="cpa">CPA ↑</option>
           </select>

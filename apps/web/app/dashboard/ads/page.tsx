@@ -197,8 +197,8 @@ function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof 
 
   if (items.length === 0) {
     items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '帳戶表現良好',
-      desc: `ROAS ${(s.roas ?? 0).toFixed(2)}x，高於目標 ${roasTarget}x，各項指標正常。`,
-      adset: '整體帳戶', metric: `ROAS ${(s.roas ?? 0).toFixed(2)}`, threshold: `目標 ${roasTarget}`, action: '持續監控，維持現況' })
+      desc: `CTR ${(s.ctr ?? 0).toFixed(2)}%，點擊效益正常，各項指標正常。`,
+      adset: '整體帳戶', metric: `CTR ${(s.ctr ?? 0).toFixed(2)}%`, threshold: '正常', action: '持續監控，維持現況' })
   }
 
   return items
@@ -574,7 +574,7 @@ export default function AdsPage() {
     row('指標', '數值')
     row('日期範圍', `${dateFrom} ~ ${dateTo}`)
     row('總花費', s.spend ?? 0)
-    row('ROAS', s.roas ?? 0)
+    row('CPL (點擊成本)', s.cpa ?? 0)
     row('CTR (%)', s.ctr ?? 0)
     row('CPA', s.cpa ?? 0)
     row('總觸及', s.reach ?? 0)
@@ -582,12 +582,12 @@ export default function AdsPage() {
     lines.push('')
 
     row('素材績效', '', '', '', '', '')
-    row('名稱', '花費', 'ROAS', 'CTR(%)', 'CPA', '狀態')
+    row('名稱', '花費', '點擊效益', 'CTR(%)', 'CPL', '狀態')
     adData.creatives.forEach(c => row(c.name, c.spend, c.roas, c.ctr, c.cpa, c.status))
     lines.push('')
 
     row('每日花費', '', '', '')
-    row('日期', '花費', '營收', 'ROAS')
+    row('日期', '花費', '點擊數', '點擊效益')
     adData.overview.dailySpend?.forEach(d => row(d.date, d.spend, d.revenue, d.roas))
     lines.push('')
 
@@ -597,7 +597,7 @@ export default function AdsPage() {
     lines.push('')
 
     row('內容表現', '', '', '', '', '', '', '', '', '', '', '', '')
-    row('日期', '平台', '類型', '標題', '觸及', '自然觸及', '付費觸及', '按讚', '留言', '收藏', '分享', '播放', '互動率(%)', '有廣告', '廣告花費', '廣告ROAS', '廣告CPA', '廣告CTR(%)')
+    row('日期', '平台', '類型', '標題', '觸及', '自然觸及', '付費觸及', '按讚', '留言', '收藏', '分享', '播放', '互動率(%)', '有廣告', '廣告花費', '廣告CPL', '廣告CTR(%)')
     ;(realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo).forEach(p => {
       const er = (p.reach && p.reach > 0)
         ? ((p.likes + p.comments + p.shares) / p.reach * 100).toFixed(2)
