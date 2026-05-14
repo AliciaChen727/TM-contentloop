@@ -500,6 +500,9 @@ export default function AdsPage() {
     if (adJson?.data) {
       setAdData(buildAdData(adJson.data))
       setLastSync(adJson.data.syncedAt ?? null)
+    } else {
+      setAdData(MOCK_DATA)
+      setLastSync(null)
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fbJson = fbRes.ok ? await fbRes.json() : null
