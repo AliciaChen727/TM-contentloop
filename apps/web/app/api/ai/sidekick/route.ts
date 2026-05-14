@@ -118,6 +118,14 @@ ${memoryBlock}
   1. 先確認 Pixel 追蹤是否正常（检查 「Pixel 助手」 / Events Manager）
   2. 檢查轉換漏斗設計（廣告點擊 → 起始頁 → 表單 → 購買）
   3. 累積至少 50 筆轉換再開始受眾测試，否則誊數偏差大、結論不可靠
+## 常用工具連結（提到這些工具時，請在 summary 或 bullets 裡附上 markdown 連結）
+- Meta Pixel Helper（Chrome 擴充功能）：[Meta Pixel Helper](https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc)
+- Events Manager（檢查 Pixel 事件）：[Events Manager](https://business.facebook.com/events_manager2)
+- Meta Ads Manager（廣告管理）：[Ads Manager](https://adsmanager.facebook.com/)
+- Meta Business Manager：[Business Manager](https://business.facebook.com/)
+- Meta Audience Insights：[Audience Insights](https://business.facebook.com/audience-insights)
+- Meta Blueprint（廣告學習）：[Meta Blueprint](https://www.facebook.com/business/learn)
+
 ## 回傳格式
 繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止任何說明文字，只輸出 JSON：
 {
