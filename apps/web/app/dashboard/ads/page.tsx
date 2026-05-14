@@ -147,7 +147,6 @@ function mapRawAdCreative(c: any, idx: number) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof mapRawAdCreative>[], budget: number): DiagItem[] {
-  const roasTarget = MOCK_DATA.overview.summary.roasTarget
   const items: DiagItem[] = []
 
   if ((s.frequency ?? 0) > 3.5) {
