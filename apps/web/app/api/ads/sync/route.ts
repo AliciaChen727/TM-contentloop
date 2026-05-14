@@ -148,12 +148,16 @@ export async function POST(req: NextRequest) {
   const sActions: MetaAction[] = s.actions ?? []
   const sActionValues: MetaAction[] = s.action_values ?? []
 
-  // Determine conversion type: prefer purchase, fallback to video_view
+  // Determine conversion type: purchase > link_click > video_view
   const hasPurchase = sActions.some(a => a.action_type === 'purchase')
-  const conversionType = hasPurchase ? 'purchase' : 'video_view'
+  const hasLinkClick = sActions.some(a => a.action_type === 'link_click')
+  const conversionType = hasPurchase ? 'purchase' : hasLinkClick ? 'link_click' : 'video_view'
   const conversions = parseActions(sActions, conversionType)
   const revenue = parseActions(sActionValues, 'purchase')
-  const roas = spend > 0 && revenue > 0 ? revenue / spend : 0
+  // For non-revenue accounts: roas = click efficiency score (conversions / spend * 100)
+  const roas = spend > 0 && conversions > 0
+    ? (hasPurchase ? revenue / spend : conversions / spend * 100)
+    : 0
   const cpa = conversions > 0 ? spend / conversions : 0
 
   // Parse daily
@@ -164,6 +168,10 @@ export async function POST(req: NextRequest) {
     const dayActionValues: MetaAction[] = (d.action_values as MetaAction[]) ?? []
     const dayConversions = parseActions(dayActions, conversionType)
     const dayRevenue = parseActions(dayActionValues, 'purchase')
+    // Same roas formula as summary: click efficiency for non-purchase accounts
+    const dayRoas = daySpend > 0 && dayConversions > 0
+      ? (hasPurchase ? dayRevenue / daySpend : dayConversions / daySpend * 100)
+      : 0
     return {
       date: d.date_start as string,
       spend: daySpend,
@@ -171,7 +179,7 @@ export async function POST(req: NextRequest) {
       impressions: parseInt((d.impressions as string) ?? '0'),
       clicks: parseInt((d.clicks as string) ?? '0'),
       ctr: parseFloat((d.ctr as string) ?? '0'),
-      roas: daySpend > 0 && dayRevenue > 0 ? dayRevenue / daySpend : 0,
+      roas: dayRoas,
       conversions: dayConversions,
       revenue: dayRevenue,
     }
