@@ -360,12 +360,16 @@ function mergeSummaries(snapshots: { summary?: Record<string, number> }[]): Reco
     conversions += m.conversions ?? 0
     revenue     += m.revenue     ?? 0
   }
+  const hasPurchaseInSnapshots = snapshots.some(s => (s.summary as Record<string, number> | undefined)?.revenue === (s.summary as Record<string, number> | undefined)?.spend)
   return {
     spend, reach, impressions, clicks, conversions, revenue,
     ctr:       impressions > 0 ? clicks / impressions : 0,
     cpm:       impressions > 0 ? (spend / impressions) * 1000 : 0,
     cpa:       conversions > 0 ? spend / conversions : 0,
-    roas:      spend > 0 && revenue > 0 ? revenue / spend : 0,
+    // For non-purchase accounts: use conversions (link_clicks) / spend * 100 as click efficiency
+    roas:      spend > 0 && conversions > 0
+      ? (revenue !== conversions ? revenue / spend : conversions / spend * 100)
+      : 0,
     frequency: reach > 0 ? impressions / reach : 0,
   }
 }
@@ -410,7 +414,10 @@ function mergeDailyArrays(snapshots: { daily?: DayRow[] }[]): DayRow[] {
       spend: e.spend, reach: e.reach, impressions: e.impressions, clicks: e.clicks,
       conversions: e.conversions, revenue: e.revenue,
       ctr:  e.impressions > 0 ? e.clicks / e.impressions : 0,
-      roas: e.spend > 0 && e.revenue > 0 ? e.revenue / e.spend : 0,
+      // For non-purchase accounts: use conversions / spend * 100 as click efficiency
+      roas: e.spend > 0 && e.conversions > 0
+        ? (e.revenue !== e.conversions ? e.revenue / e.spend : e.conversions / e.spend * 100)
+        : 0,
     }))
 }
 
@@ -464,43 +471,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const tokenSnaps = await adminDb.collectionGroup('metaTokens').get()
-  const results: Record<string, unknown>[] = []
+  try {
+    const tokenSnaps = await adminDb.collectionGroup('metaTokens').get()
+    const results: Record<string, unknown>[] = []
 
-  for (const doc of tokenSnaps.docs) {
-    // Skip user-level token and legacy 'page' doc (now handled by per-page docs)
-    if (doc.id === 'userToken') continue
-    const uid = doc.ref.parent.parent?.id
-    if (!uid) continue
-    const tokenData = doc.data() as { userAccessToken?: string; accessToken?: string; igUserId?: string; pageId?: string }
+    for (const doc of tokenSnaps.docs) {
+      if (doc.id === 'userToken') continue
+      const uid = doc.ref.parent.parent?.id
+      if (!uid) continue
+      const tokenData = doc.data() as { userAccessToken?: string; accessToken?: string; igUserId?: string; pageId?: string }
+      const pageId = doc.id === 'page' ? (tokenData.pageId ?? '') : doc.id
 
-    // For new-style docs: doc.id is the pageId
-    // For legacy 'page' doc: use tokenData.pageId
-    const pageId = doc.id === 'page' ? (tokenData.pageId ?? '') : doc.id
+      const [adsResult, igResult, fbResult] = await Promise.all([
+        tokenData.userAccessToken && pageId
+          ? syncAdsForUser(uid, tokenData.userAccessToken, pageId, tokenData.igUserId)
+          : Promise.resolve({ error: 'no userAccessToken' }),
+        tokenData.accessToken && tokenData.igUserId && pageId
+          ? syncIgForUser(uid, tokenData.accessToken, tokenData.igUserId, pageId)
+          : Promise.resolve({ synced: 0, error: 'no accessToken or igUserId' }),
+        tokenData.accessToken && pageId
+          ? syncFbForUser(uid, tokenData.accessToken, pageId)
+          : Promise.resolve({ synced: 0, error: 'no accessToken or pageId' }),
+      ])
 
-    const [adsResult, igResult, fbResult] = await Promise.all([
-      tokenData.userAccessToken && pageId
-        ? syncAdsForUser(uid, tokenData.userAccessToken, pageId, tokenData.igUserId)
-        : Promise.resolve({ error: 'no userAccessToken' }),
-      tokenData.accessToken && tokenData.igUserId && pageId
-        ? syncIgForUser(uid, tokenData.accessToken, tokenData.igUserId, pageId)
-        : Promise.resolve({ synced: 0, error: 'no accessToken or igUserId' }),
-      tokenData.accessToken && pageId
-        ? syncFbForUser(uid, tokenData.accessToken, pageId)
-        : Promise.resolve({ synced: 0, error: 'no accessToken or pageId' }),
-    ])
+      results.push({ uid, pageId, ads: adsResult, ig: igResult, fb: fbResult })
+      console.log(`[cron/sync] uid=${uid} pageId=${pageId} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult)
+    }
 
-    results.push({ uid, pageId, ads: adsResult, ig: igResult, fb: fbResult })
-    console.log(`[cron/sync] uid=${uid} pageId=${pageId} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult)
+    const pageIdsToMerge = new Set<string>()
+    for (const r of results) {
+      const ads = r.ads as { adAccountId?: string; error?: string }
+      if (r.pageId && ads.adAccountId) pageIdsToMerge.add(r.pageId as string)
+    }
+
+    await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
+
+    return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge) })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[cron/sync] FATAL ERROR:', msg, err)
+    return NextResponse.json({ error: 'Internal server error', detail: msg }, { status: 500 })
   }
-
-  // After all per-user syncs, merge ad insights for each page that had a successful ad sync
-  const pageIdsToMerge = new Set<string>()
-  for (const r of results) {
-    const ads = r.ads as { adAccountId?: string; error?: string }
-    if (r.pageId && ads.adAccountId) pageIdsToMerge.add(r.pageId as string)
-  }
-  await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
-
-  return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge) })
 }
