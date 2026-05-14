@@ -13,7 +13,6 @@ const SCOPES = [
   'instagram_basic',
   'instagram_manage_insights',
   'ads_read',
-  'business_management',
 ].join(',')
 
 export default function ConnectPage() {
@@ -45,12 +44,19 @@ export default function ConnectPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">連接 Facebook</h1>
-        <p className="mb-2 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-gray-500">
           授權 ContentLoop 讀取你的 FB 粉專與 IG 成效資料。
         </p>
-        <p className="mb-8 text-xs text-gray-400">
-          所需權限：pages_show_list、read_insights、instagram_manage_insights
-        </p>
+
+        <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <p className="mb-2 text-xs font-semibold text-blue-700">⚠️ 授權時的重要提示</p>
+          <ol className="list-decimal space-y-2 pl-4 text-xs text-blue-600">
+            <li>出現「選擇商家」畫面時，請選擇<strong>「選擇只能使用目前的商家」</strong>，然後只勾選 <strong>D67</strong> 相關商家即可。</li>
+            <li>出現「選擇粉絲專頁」時，只勾選 <strong>D67 的粉絲專頁</strong>，其他不需勾選。</li>
+            <li>若看到其他與本帳戶無關的商家或粉專，<strong>直接跳過不勾選</strong>，點「下一步」繼續即可。</li>
+          </ol>
+        </div>
+
         <button
           onClick={handleConnect}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1877F2] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#166FE5]"
