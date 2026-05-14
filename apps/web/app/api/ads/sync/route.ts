@@ -367,7 +367,8 @@ export async function POST(req: NextRequest) {
       : 0
     const cCpa = cPrimaryMetric > 0 ? cSpend / cPrimaryMetric : 0
     const cCtr = parseFloat(c.ctr as string ?? '0')
-    const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr }
+    const cReach = parseInt(c.reach as string ?? '0')
+    const metricsVal = { spend: cSpend, roas: parseFloat(cRoas.toFixed(2)), cpa: parseFloat(cCpa.toFixed(2)), ctr: cCtr, reach: cReach }
     if (treatAsIg) {
       if (!igPostIds.includes(finalIgPostIdKey)) igPostIds.push(finalIgPostIdKey)
       const existing = igPostMetrics[finalIgPostIdKey]

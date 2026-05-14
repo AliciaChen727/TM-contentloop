@@ -30,7 +30,7 @@ const NAV_LABELS: Record<NavId, string> = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number }>): Post {
+function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>): Post {
   const hasAd = adPostIds.has(p.id) || (p.insights?.paidReach ?? 0) > 0
   const metrics = adPostMetrics?.[p.id]
   return {
@@ -57,7 +57,7 @@ function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number }>): Post {
+function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>): Post {
   const isVideo = p.mediaType === 'REELS' || p.mediaType === 'VIDEO'
   const hasAd = igPostIds?.has(p.id) ?? false
   const metrics = igPostMetrics?.[p.id]
@@ -75,6 +75,7 @@ function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<strin
     type: isVideo ? 'reels' : 'post',
     url: p.permalink || '#',
     hasAd,
+    paidReach: metrics?.reach ?? 0,
     adRoas: metrics?.roas,
     adSpend: metrics?.spend,
     adCpa: metrics?.cpa,
@@ -303,7 +304,7 @@ export default function AdsPage() {
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
 
-  type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number }>
+  type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: AdMetricsMap; igPostIds: Set<string>; igPostMetrics: AdMetricsMap }> {
     const pid = pageId ?? selectedPageId
     const qs = pid ? `?pageId=${pid}` : ''
@@ -352,9 +353,9 @@ export default function AdsPage() {
 
         const adJson = adRes.ok ? await adRes.json() : null
         const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
-        const initialAdPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.adPostMetrics ?? {}
+        const initialAdPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }> = adJson?.data?.adPostMetrics ?? {}
         const initialIgPostIds = new Set<string>(adJson?.data?.igPostIds ?? [])
-        const initialIgPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.igPostMetrics ?? {}
+        const initialIgPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }> = adJson?.data?.igPostMetrics ?? {}
         if (adJson?.data) {
           setAdData(buildAdData(adJson.data))
           setLastSync(adJson.data.syncedAt ?? null)
@@ -441,6 +442,7 @@ export default function AdsPage() {
             adSpend: m?.spend ?? p.adSpend,
             adCpa: m?.cpa ?? p.adCpa,
             adCtr: m?.ctr ?? p.adCtr,
+            paidReach: m?.reach ?? p.paidReach,
           }
         }
         return p
