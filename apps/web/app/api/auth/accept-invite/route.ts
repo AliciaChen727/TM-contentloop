@@ -27,19 +27,21 @@ export async function POST(req: NextRequest) {
 
   if (pendingSnap.empty) return NextResponse.json({ hasInvites: false })
 
-  interface ViewerPage { pageId: string; pageName: string; igUserId: string | null; permissions: { home: boolean; ads: boolean; sidekick: boolean; syncAds: boolean } }
+  interface ViewerPage { pageId: string; pageName: string; igUserId: string | null; permissions: { ads: boolean; sidekick: boolean; syncAds: boolean } }
   const batch = adminDb.batch()
   const viewerPages: ViewerPage[] = []
 
   for (const inviteDoc of pendingSnap.docs) {
     const data = inviteDoc.data()
     const pageId = inviteDoc.id
-    const permissions = data.permissions ?? { home: true, ads: true, sidekick: true, syncAds: false }
+    const permissions = data.permissions ?? { ads: false, sidekick: false, syncAds: false }
     batch.update(inviteDoc.ref, { status: 'accepted', acceptedAt: new Date(), acceptedBy: uid })
     batch.set(
       adminDb.collection('pages').doc(pageId).collection('members').doc(uid),
       { role: 'viewer', email, permissions, addedAt: new Date() }
     )
+    // Remove from pendingInvites
+    batch.delete(adminDb.collection('pages').doc(pageId).collection('pendingInvites').doc(email.toLowerCase()))
     viewerPages.push({ pageId, pageName: data.pageName ?? '', igUserId: data.igUserId ?? null, permissions })
   }
 

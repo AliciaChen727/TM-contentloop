@@ -267,7 +267,6 @@ export default function DashboardPage() {
             <ProfileMenu
               userName={userName}
               role={isAdmin ? 'admin' : 'viewer'}
-              pageId={selectedPageId}
               onSignOut={handleSignOut}
             />
             <div className="flex items-center gap-2">

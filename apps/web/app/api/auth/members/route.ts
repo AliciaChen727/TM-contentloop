@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 
-interface Permissions { home: boolean; ads: boolean; sidekick: boolean; syncAds: boolean }
+interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 
 async function verifyAdmin(idToken: string, pageId: string): Promise<string | null> {
   try {
@@ -28,20 +28,36 @@ export async function GET(req: NextRequest) {
   const uid = await verifyAdmin(idToken, pageId)
   if (!uid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const snap = await adminDb.collection('pages').doc(pageId).collection('members').get()
-  const members = snap.docs
+  const [membersSnap, pendingSnap] = await Promise.all([
+    adminDb.collection('pages').doc(pageId).collection('members').get(),
+    adminDb.collection('pages').doc(pageId).collection('pendingInvites').get(),
+  ])
+
+  const accepted = membersSnap.docs
     .filter(d => d.id !== uid)
     .map(d => {
       const data = d.data()
       return {
         uid: d.id,
         email: data.email ?? '',
-        permissions: data.permissions ?? { home: true, ads: true, sidekick: true, syncAds: false },
+        permissions: data.permissions ?? { ads: false, sidekick: false, syncAds: false },
+        status: 'accepted' as const,
         addedAt: data.addedAt?.toDate?.()?.toISOString() ?? null,
       }
     })
 
-  return NextResponse.json({ members })
+  const pending = pendingSnap.docs.map(d => {
+    const data = d.data()
+    return {
+      uid: null,
+      email: d.id,
+      permissions: data.permissions ?? { ads: false, sidekick: false, syncAds: false },
+      status: 'pending' as const,
+      addedAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
+    }
+  })
+
+  return NextResponse.json({ members: [...pending, ...accepted] })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -49,24 +65,29 @@ export async function PATCH(req: NextRequest) {
   if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const pageId = req.nextUrl.searchParams.get('pageId')
-  const targetUid = req.nextUrl.searchParams.get('uid')
-  if (!pageId || !targetUid) return NextResponse.json({ error: 'Missing pageId or uid' }, { status: 400 })
+  const targetUid = req.nextUrl.searchParams.get('uid')  // null for pending members
+  const targetEmail = req.nextUrl.searchParams.get('email')
+  if (!pageId || (!targetUid && !targetEmail)) return NextResponse.json({ error: 'Missing pageId and uid/email' }, { status: 400 })
 
   const adminUid = await verifyAdmin(idToken, pageId)
   if (!adminUid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { permissions }: { permissions: Permissions } = await req.json()
 
-  // Update pages/{pageId}/members/{uid}
-  await adminDb.collection('pages').doc(pageId).collection('members').doc(targetUid).update({ permissions })
-
-  // Update users/{uid}/viewerAccess/pages — update permissions for this specific page
-  const viewerRef = adminDb.collection('users').doc(targetUid).collection('viewerAccess').doc('pages')
-  const viewerSnap = await viewerRef.get()
-  if (viewerSnap.exists) {
-    const pages: { pageId: string; permissions?: Permissions }[] = viewerSnap.data()?.pages ?? []
-    const updated = pages.map(p => p.pageId === pageId ? { ...p, permissions } : p)
-    await viewerRef.update({ pages: updated })
+  if (targetUid) {
+    // Accepted member: update members doc + viewerAccess
+    await adminDb.collection('pages').doc(pageId).collection('members').doc(targetUid).update({ permissions })
+    const viewerRef = adminDb.collection('users').doc(targetUid).collection('viewerAccess').doc('pages')
+    const viewerSnap = await viewerRef.get()
+    if (viewerSnap.exists) {
+      const pages: { pageId: string; permissions?: Permissions }[] = viewerSnap.data()?.pages ?? []
+      await viewerRef.update({ pages: pages.map(p => p.pageId === pageId ? { ...p, permissions } : p) })
+    }
+  } else if (targetEmail) {
+    // Pending member: update pendingInvites + invite doc
+    const email = targetEmail.toLowerCase()
+    await adminDb.collection('pages').doc(pageId).collection('pendingInvites').doc(email).update({ permissions })
+    await adminDb.collection('invites').doc(email).collection('pages').doc(pageId).update({ permissions })
   }
 
   return NextResponse.json({ success: true })
