@@ -479,7 +479,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    success: true, adAccountId, spend, conversions, conversionType,
+    success: true, adAccountId, spend, conversions: pageConversions, conversionType,
     adCreativesCount: adCreativesWithTitle.length,
     _debug: {
       adsListCount: adsList.length,
