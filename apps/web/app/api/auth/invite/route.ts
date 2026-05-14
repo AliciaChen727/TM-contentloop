@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       invitedBy: uid,
       pageName: pageData.pageName ?? '',
       igUserId: pageData.igUserId ?? null,
+      permissions: { home: true, ads: true, sidekick: true, syncAds: false },
       createdAt: new Date(),
       status: 'pending',
     })

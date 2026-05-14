@@ -27,23 +27,25 @@ export async function POST(req: NextRequest) {
 
   if (pendingSnap.empty) return NextResponse.json({ hasInvites: false })
 
+  interface ViewerPage { pageId: string; pageName: string; igUserId: string | null; permissions: { home: boolean; ads: boolean; sidekick: boolean; syncAds: boolean } }
   const batch = adminDb.batch()
-  const viewerPages: { pageId: string; pageName: string; igUserId: string | null }[] = []
+  const viewerPages: ViewerPage[] = []
 
   for (const inviteDoc of pendingSnap.docs) {
     const data = inviteDoc.data()
     const pageId = inviteDoc.id
+    const permissions = data.permissions ?? { home: true, ads: true, sidekick: true, syncAds: false }
     batch.update(inviteDoc.ref, { status: 'accepted', acceptedAt: new Date(), acceptedBy: uid })
     batch.set(
       adminDb.collection('pages').doc(pageId).collection('members').doc(uid),
-      { role: 'viewer', email, addedAt: new Date() }
+      { role: 'viewer', email, permissions, addedAt: new Date() }
     )
-    viewerPages.push({ pageId, pageName: data.pageName ?? '', igUserId: data.igUserId ?? null })
+    viewerPages.push({ pageId, pageName: data.pageName ?? '', igUserId: data.igUserId ?? null, permissions })
   }
 
   const viewerAccessRef = adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages')
   const existingSnap = await viewerAccessRef.get()
-  const existing: typeof viewerPages = existingSnap.exists ? (existingSnap.data()?.pages ?? []) : []
+  const existing: ViewerPage[] = existingSnap.exists ? (existingSnap.data()?.pages ?? []) : []
   const merged = [...existing]
   for (const vp of viewerPages) {
     if (!merged.find(p => p.pageId === vp.pageId)) merged.push(vp)

@@ -14,6 +14,7 @@ import { ContentChart } from '@/components/dashboard/ContentChart'
 import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
+import { ProfileMenu } from '@/components/ProfileMenu'
 
 interface PageInfo { pageId: string; pageName: string; igUserId: string | null }
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
@@ -71,6 +72,7 @@ export default function DashboardPage() {
   const [addPageInput, setAddPageInput] = useState('')
   const [addPageError, setAddPageError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [userName, setUserName] = useState('')
   const [inviting, setInviting] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'ok' | 'error'>('idle')
@@ -125,6 +127,7 @@ export default function DashboardPage() {
       const { getDocs: getDocsClient, collection: collectionClient } = await import('firebase/firestore')
       const tokensSnap = await getDocsClient(collectionClient(db, 'users', u.uid, 'metaTokens'))
       setIsAdmin(tokensSnap.docs.some(d => d.id !== 'userToken'))
+      setUserName(u.displayName ?? u.email ?? '')
 
       await fetchPosts(idToken, activePageId)
       setLoading(false)
@@ -286,21 +289,26 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-8 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">ContentLoop</h1>
-            <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-3">
+            <ProfileMenu
+              userName={userName}
+              role={isAdmin ? 'admin' : 'viewer'}
+              pageId={selectedPageId}
+              onSignOut={handleSignOut}
+            />
+            <div className="flex items-center gap-2">
               {pages.length > 1 ? (
                 <select
                   value={selectedPageId}
                   onChange={e => handlePageChange(e.target.value)}
-                  className="text-xs text-gray-400 border-0 bg-transparent cursor-pointer outline-none"
+                  className="text-xs text-gray-500 font-medium border-0 bg-transparent cursor-pointer outline-none"
                 >
                   {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
                 </select>
               ) : (
-                pageData && <p className="text-xs text-gray-400">{pageData.pageName}</p>
+                pageData && <p className="text-xs text-gray-500 font-medium">{pageData.pageName}</p>
               )}
-              {addingPage ? (
+              {isAdmin && (addingPage ? (
                 <div className="flex items-center gap-1">
                   <input
                     autoFocus
@@ -316,39 +324,16 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <button onClick={() => setAddingPage(true)} className="text-xs text-gray-300 hover:text-blue-500" title="新增粉絲頁">＋</button>
-              )}
+              ))}
             </div>
           </div>
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
               📊 廣告儀表板
             </button>
-            {isAdmin && (
-              inviting ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    autoFocus
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleInvite(); if (e.key === 'Escape') { setInviting(false); setInviteStatus('idle') } }}
-                    placeholder="輸入 Gmail 邀請成員"
-                    className="text-xs border border-gray-200 rounded px-2 py-1 outline-none w-44"
-                  />
-                  <button onClick={handleInvite} className="text-xs text-blue-500 hover:text-blue-700">送出</button>
-                  <button onClick={() => { setInviting(false); setInviteStatus('idle') }} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
-                  {inviteStatus === 'ok' && <span className="text-xs text-green-500">已邀請 ✓</span>}
-                  {inviteStatus === 'error' && <span className="text-xs text-red-500">{inviteError}</span>}
-                </div>
-              ) : (
-                <button onClick={() => setInviting(true)} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors">
-                  👥 邀請成員
-                </button>
-              )
-            )}
             <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
               ✨ AI Sidekick
             </button>
-            <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-gray-600">登出</button>
           </div>
         </div>
       </header>
