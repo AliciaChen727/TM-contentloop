@@ -31,8 +31,9 @@ const NAV_LABELS: Record<NavId, string> = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>): Post {
-  const hasAd = adPostIds.has(p.id) || (p.insights?.paidReach ?? 0) > 0
-  const metrics = adPostMetrics?.[p.id]
+  const shortId = p.id.includes('_') ? p.id.split('_').slice(1).join('_') : p.id
+  const hasAd = adPostIds.has(shortId) || adPostIds.has(p.id) || (p.insights?.paidReach ?? 0) > 0
+  const metrics = adPostMetrics?.[shortId] ?? adPostMetrics?.[p.id]
   return {
     id: p.id,
     date: p.createdTime?.slice(0, 10) ?? '',
@@ -423,10 +424,11 @@ export default function AdsPage() {
       const { adPostIds: newIds, adPostMetrics: newMetrics, igPostIds: newIgIds, igPostMetrics: newIgMetrics } = await fetchAdData(idToken, selectedPageId)
       setRealPosts(prev => prev ? prev.map(p => {
         if (p.platform === 'FB') {
-          const m = newMetrics[p.id]
+          const shortId = p.id.includes('_') ? p.id.split('_').slice(1).join('_') : p.id
+          const m = newMetrics[shortId] ?? newMetrics[p.id]
           return {
             ...p,
-            hasAd: p.hasAd || newIds.has(p.id),
+            hasAd: p.hasAd || newIds.has(shortId) || newIds.has(p.id),
             adRoas: m?.roas ?? p.adRoas,
             adSpend: m?.spend ?? p.adSpend,
             adCpa: m?.cpa ?? p.adCpa,
