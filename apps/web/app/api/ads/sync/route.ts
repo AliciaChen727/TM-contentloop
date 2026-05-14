@@ -154,11 +154,6 @@ export async function POST(req: NextRequest) {
   const conversionType = hasPurchase ? 'purchase' : hasLinkClick ? 'link_click' : 'video_view'
   const conversions = parseActions(sActions, conversionType)
   const revenue = parseActions(sActionValues, 'purchase')
-  // For non-revenue accounts: roas = click efficiency score (conversions / spend * 100)
-  const roas = spend > 0 && conversions > 0
-    ? (hasPurchase ? revenue / spend : conversions / spend * 100)
-    : 0
-  const cpa = conversions > 0 ? spend / conversions : 0
 
   // Parse daily
   const rawDaily: Record<string, unknown>[] = dailyData.data ?? []
