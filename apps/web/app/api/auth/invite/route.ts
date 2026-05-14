@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 
@@ -62,10 +62,19 @@ export async function POST(req: NextRequest) {
   ].filter(Boolean)
   const permText = permLabels.length > 0 ? permLabels.join('、') : '貼文成效首頁'
 
-  if (process.env.RESEND_API_KEY) {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: 'ContentLoop <onboarding@resend.dev>',
+  if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN) {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: process.env.GMAIL_USER,
+        clientId: process.env.GMAIL_CLIENT_ID,
+        clientSecret: process.env.GMAIL_CLIENT_SECRET,
+        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+      },
+    })
+    await transporter.sendMail({
+      from: `ContentLoop <${process.env.GMAIL_USER}>`,
       to: email,
       subject: `${inviterName} 邀請你加入 ContentLoop`,
       html: `
