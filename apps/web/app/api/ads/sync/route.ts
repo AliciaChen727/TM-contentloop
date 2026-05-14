@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
       url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
-      url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS","DELETED"]')
+      url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
       return fetch(url)
