@@ -131,7 +131,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, fontSize: 11.5, color: 'var(--ad-text3)', gap: 6, alignItems: 'center' }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ad-green)', display: 'inline-block' }} />
-        每日凌晨 3 點自動更新 · 最後同步 2026-05-05 03:00
+        每日凌晨 3 點自動更新
       </div>
 
       {view === 'raw' && (
