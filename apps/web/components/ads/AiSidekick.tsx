@@ -72,6 +72,7 @@ interface Message {
   videoLoading?: boolean
   videoDuration?: number
   filePreview?: { name: string; type: string }
+  noApiKey?: boolean
 }
 
 function renderWithLinks(text: string): React.ReactNode {
@@ -220,10 +221,10 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       })
       const submitData = await submitRes.json()
       if (!submitRes.ok || !submitData.operationName) {
-        const noKey = submitData.error === 'NO_API_KEY'
         setMessages(p => p.map(m => m.id === msgId ? {
           ...m, videoLoading: false,
-          text: noKey ? '⚠️ 請先到「設定」頁面輸入你的 Gemini API Key 才能生成影片。\n[前往設定](/dashboard/settings)' : '',
+          noApiKey: submitData.error === 'NO_API_KEY' || undefined,
+          text: submitData.error === 'NO_API_KEY' ? '' : (submitData.error ?? '影片生成失敗'),
         } : m))
         return
       }
@@ -281,10 +282,12 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       })
       const data = await res.json()
       if (!res.ok) {
-        const errText = data.error === 'NO_API_KEY'
-          ? '⚠️ 請先到「設定」頁面輸入你的 Claude API Key 才能使用 AI Sidekick。\n[前往設定](/dashboard/settings)'
-          : data.error ?? `伺服器錯誤 (${res.status})`
-        setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: errText, time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
+        const now = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+        if (data.error === 'NO_API_KEY') {
+          setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '', time: now, noApiKey: true }])
+        } else {
+          setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: data.error ?? `伺服器錯誤 (${res.status})`, time: now }])
+        }
         return
       }
       const raw = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
@@ -323,6 +326,24 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       setTimeout(() => textareaRef.current?.focus(), 350)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Check API key on open — show prompt immediately if not set
+  useEffect(() => {
+    if (!open) return
+    auth.currentUser?.getIdToken().then(async idToken => {
+      const res = await fetch('/api/user/api-keys', { headers: { Authorization: `Bearer ${idToken}` } })
+      if (!res.ok) return
+      const data = await res.json()
+      if (!data.anthropic) {
+        const now = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+        setMessages(prev => {
+          const alreadyHasPrompt = prev.some(m => m.noApiKey)
+          if (alreadyHasPrompt) return prev
+          return [...prev, { id: 'no-key', role: 'ai', text: '', time: now, noApiKey: true }]
+        })
+      }
+    }).catch(() => {})
   }, [open])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
@@ -468,7 +489,18 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                             📎 {msg.filePreview.name}
                           </div>
                         )}
-                        {msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
+                        {msg.noApiKey && (
+                          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                            <p style={{ marginBottom: 8 }}>⚠️ 請先設定你的 Claude API Key 才能使用 AI Sidekick。</p>
+                            <a
+                              href="/dashboard/settings"
+                              style={{ display: 'inline-block', padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
+                            >
+                              前往設定 →
+                            </a>
+                          </div>
+                        )}
+                        {!msg.noApiKey && msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
                         {msg.response && <AiMessageBody r={msg.response} onSend={send} />}
                         {msg.imageLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎨 生成圖片中⋯</div>}
                         {msg.imageError && (
