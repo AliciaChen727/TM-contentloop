@@ -29,14 +29,36 @@ export async function GET(req: NextRequest) {
   const uid = decoded ? await verifyAdmin(idToken, pageId) : null
   if (!uid || !decoded) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const [membersSnap, pendingSnap, tokensSnap] = await Promise.all([
+  const [membersSnap, pendingSnap, tokensSnap, adminsSnap] = await Promise.all([
     adminDb.collection('pages').doc(pageId).collection('members').get(),
     adminDb.collection('pages').doc(pageId).collection('pendingInvites').get(),
     adminDb.collection('users').doc(decoded.uid).collection('metaTokens').get(),
+    adminDb.collection('pages').doc(pageId).collection('admins').get(),
   ])
 
   const pageDoc = tokensSnap.docs.find(d => d.id === pageId) ?? tokensSnap.docs.find(d => d.id === 'page')
   const pageName: string = pageDoc?.data()?.pageName ?? ''
+
+  // Fetch Firebase Auth profiles for all admins in parallel
+  const adminUsers = await Promise.all(
+    adminsSnap.docs.map(async d => {
+      try {
+        const user = await adminAuth.getUser(d.id)
+        return {
+          uid: d.id,
+          email: user.email ?? '',
+          displayName: user.displayName ?? null,
+          isOwner: d.data().isOwner ?? false,
+          role: 'admin' as const,
+          status: 'accepted' as const,
+          addedAt: d.data().addedAt?.toDate?.()?.toISOString() ?? null,
+        }
+      } catch {
+        return null
+      }
+    })
+  )
+  const admins = adminUsers.filter(Boolean) as NonNullable<typeof adminUsers[number]>[]
 
   const accepted = membersSnap.docs
     .filter(d => d.id !== uid)
@@ -47,6 +69,7 @@ export async function GET(req: NextRequest) {
         email: data.email ?? '',
         displayName: data.displayName ?? null,
         permissions: data.permissions ?? { ads: false, sidekick: false, syncAds: false },
+        role: 'viewer' as const,
         status: 'accepted' as const,
         addedAt: data.addedAt?.toDate?.()?.toISOString() ?? null,
       }
@@ -59,12 +82,13 @@ export async function GET(req: NextRequest) {
       email: d.id,
       displayName: null,
       permissions: data.permissions ?? { ads: false, sidekick: false, syncAds: false },
+      role: 'viewer' as const,
       status: 'pending' as const,
       addedAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
     }
   })
 
-  return NextResponse.json({ pageName, members: [...pending, ...accepted] })
+  return NextResponse.json({ pageName, members: [...admins, ...pending, ...accepted] })
 }
 
 export async function PATCH(req: NextRequest) {

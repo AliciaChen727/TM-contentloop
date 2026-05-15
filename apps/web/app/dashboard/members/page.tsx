@@ -10,7 +10,9 @@ interface Member {
   uid: string | null
   email: string
   displayName: string | null
-  permissions: Permissions
+  permissions?: Permissions
+  role: 'admin' | 'viewer'
+  isOwner?: boolean
   status: 'pending' | 'accepted'
   addedAt: string | null
 }
@@ -96,6 +98,7 @@ export default function MembersPage() {
   }
 
   async function handleToggle(member: Member, key: keyof Permissions) {
+    if (member.role === 'admin' || !member.permissions) return
     const updated = { ...member.permissions, [key]: !member.permissions[key] }
     setMembers(prev => prev.map(m => m.email === member.email ? { ...m, permissions: updated } : m))
     const params = new URLSearchParams({ pageId })
@@ -183,9 +186,16 @@ export default function MembersPage() {
                         <div className="text-sm font-medium text-gray-800">{m.displayName}</div>
                       )}
                       <div className={`${m.displayName ? 'text-xs text-gray-400' : 'text-sm font-medium text-gray-700'}`}>{m.email}</div>
-                      {m.status === 'accepted' && (
-                        <span className="text-xs text-gray-400 mt-0.5 block">Viewer</span>
-                      )}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {m.role === 'admin' ? (
+                          <>
+                            <span className="text-xs font-semibold text-indigo-600">Admin</span>
+                            {m.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-500 font-medium">Owner</span>}
+                          </>
+                        ) : (
+                          m.status === 'accepted' && <span className="text-xs text-gray-400">Viewer</span>
+                        )}
+                      </div>
                     </div>
                     {m.status === 'accepted' ? (
                       <span className="flex items-center gap-1.5 text-xs font-medium text-green-700">
@@ -198,35 +208,39 @@ export default function MembersPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-5 flex-wrap mb-3">
-                    {PERM_LABELS.map(({ key, label }) => (
-                      <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={m.permissions?.[key] ?? false}
-                          onChange={() => handleToggle(m, key)}
-                          className="cursor-pointer accent-blue-600"
-                        />
-                        <span className="text-xs text-gray-500">{label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex gap-3">
-                    {m.status === 'pending' && (
+                  {m.role === 'viewer' && (
+                    <div className="flex gap-5 flex-wrap mb-3">
+                      {PERM_LABELS.map(({ key, label }) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={m.permissions?.[key] ?? false}
+                            onChange={() => handleToggle(m, key)}
+                            className="cursor-pointer accent-blue-600"
+                          />
+                          <span className="text-xs text-gray-500">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {m.role === 'viewer' && (
+                    <div className="flex gap-3">
+                      {m.status === 'pending' && (
+                        <button
+                          onClick={() => handleResend(m)}
+                          className="text-xs text-blue-500 hover:text-blue-700"
+                        >
+                          重新寄信
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleResend(m)}
-                        className="text-xs text-blue-500 hover:text-blue-700"
+                        onClick={() => handleDelete(m)}
+                        className="text-xs text-red-400 hover:text-red-600"
                       >
-                        重新寄信
+                        移除
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(m)}
-                      className="text-xs text-red-400 hover:text-red-600"
-                    >
-                      移除
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
