@@ -9,7 +9,7 @@ const fmt = (n: number, d = 0) => n == null ? '–' : Number(n).toLocaleString('
 const fmtK = (n: number) => n >= 10000 ? `$${fmt(Math.round(n / 1000))}K` : `$${fmt(n)}`
 const fmtCount = (n: number) => n >= 10000 ? `${(n / 10000).toFixed(1)}萬` : n >= 1000 ? `${(n / 1000).toFixed(1)}千` : `${fmt(n)}`
 
-export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskAI: (q: string) => void; posts?: Post[] | null }) {
+export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskAI?: (q: string) => void; posts?: Post[] | null }) {
   const s = data.overview.summary
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const convType = (data as any).conversionType as string | undefined
@@ -57,7 +57,7 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
       <div className="ads-kpi-grid">
         {kpis.map(k => (
           <div key={k.label} className={`ads-kpi-card ${k.color}`}>
-            <button className="ads-kpi-ask-btn" onClick={() => onAskAI(k.q)}>?</button>
+            {onAskAI && <button className="ads-kpi-ask-btn" onClick={() => onAskAI(k.q)}>?</button>}
             <div className="ads-kpi-label">{k.label}</div>
             <div className="ads-kpi-value">{k.value}</div>
             <div className="ads-kpi-meta">

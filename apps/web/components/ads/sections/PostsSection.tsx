@@ -35,7 +35,7 @@ function buildPostPrompt(p: Post): string {
   return `請分析這篇貼文：\n日期：${p.date}｜平台：${p.platform}｜類型：${p.type === 'reels' ? 'Reels' : '貼文'}\n內容：${p.title.slice(0, 100)}\n觸及：${fmt(p.reach)}｜按讚：${p.likes}｜留言：${p.comments}｜收藏：${fmt(p.saves)}｜分享：${p.shares}｜播放：${fmt(p.plays)}\n互動率：${eng}%${adPart}\n\n請給出成效診斷和具體優化建議。`
 }
 
-export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend?: boolean) => void; posts: Post[] | null }) {
+export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSend?: boolean) => void; posts: Post[] | null }) {
   const [platform, setPlatform] = useState<Platform>('all')
   const [view, setView] = useState<View>('raw')
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -126,7 +126,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend
           <button className={`ads-posts-view-btn ${view === 'raw' ? 'active' : ''}`} onClick={() => setView('raw')}>📋 原始數據</button>
           <button className={`ads-posts-view-btn ${view === 'ads' ? 'active' : ''}`} onClick={() => setView('ads')}>📊 廣告指標</button>
         </div>
-        <button className="ads-diag-ask-btn" style={{ borderRadius: 7, flexShrink: 0 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析</button>
+        {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7, flexShrink: 0 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析</button>}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, fontSize: 11.5, color: 'var(--ad-text3)', gap: 6, alignItems: 'center' }}>
@@ -197,13 +197,13 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend
                           </div>
                         ) : <span style={{ color: 'var(--ad-text3)', fontSize: 12 }}>—</span>}
                       </td>
-                      <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
+                      {onAskAI && <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
                         <button
                           title="用 AI 分析此貼文"
                           onClick={() => onAskAI(buildPostPrompt(p), true)}
                           style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
                         >✨ 分析</button>
-                      </td>
+                      </td>}
                     </tr>
                   )
                 })}
@@ -231,11 +231,11 @@ export function PostsSection({ onAskAI, posts }: { onAskAI: (q: string, autoSend
                   const rc = roasColor(p.adRoas ?? 0)
                   return (
                     <div key={p.id} className="ads-posts-ad-card" style={{ position: 'relative' }}>
-                      <button
+                      {onAskAI && <button
                         title="用 AI 分析此貼文"
                         onClick={() => onAskAI(buildPostPrompt(p), true)}
                         style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
-                      >✨ 分析</button>
+                      >✨ 分析</button>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                         <span style={{ fontSize: 10.5, fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)' }}>{p.date}</span>
                         <PlatBadge p={p.platform} />

@@ -53,7 +53,7 @@ function renderAdName(name: string) {
   )
 }
 
-export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: string, autoSend?: boolean) => void }) {
+export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI?: (q: string, autoSend?: boolean) => void }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
 
@@ -72,7 +72,7 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
         <Icon name="creative" size={15} color="var(--ad-blue)" />
         <span className="ads-section-title">素材庫 &amp; 績效排行</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="ads-diag-ask-btn" style={{ borderRadius: 7 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析素材</button>
+          {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析素材</button>}
           <div className="ads-tabs">
             {TYPES.map(t => <button key={t} className={`ads-tab ${filter === t ? 'active' : ''}`} onClick={() => setFilter(t)}>{t}</button>)}
           </div>
@@ -95,11 +95,11 @@ export function CreativeSection({ data, onAskAI }: { data: AdData; onAskAI: (q: 
       <div className="ads-creative-grid">
         {sorted.map((c, i) => (
           <div key={c.id} className="ads-creative-card" style={{ position: 'relative' }}>
-            <button
+            {onAskAI && <button
               title="用 AI 分析此素材"
               onClick={() => onAskAI(buildCreativePrompt(c), true)}
               style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
-            >✨ 分析</button>
+            >✨ 分析</button>}
             <div className={`ads-creative-thumb ${c.thumb}`}>
               <div className={`ads-creative-rank ${c.status === 'top' ? 'top' : c.status === 'bad' ? 'bad' : ''}`}>{i + 1}</div>
               <div className={`ads-creative-status ${c.status}`}>{STATUS_LABEL[c.status]}</div>

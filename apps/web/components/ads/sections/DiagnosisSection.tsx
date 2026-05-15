@@ -3,7 +3,7 @@
 import { Icon } from '../Icon'
 import type { AdData } from '../types'
 
-export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI: (q: string) => void }) {
+export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI?: (q: string) => void }) {
   const icons: Record<string, string> = { critical: '🚨', warning: '⚠️', good: '✅' }
   const labels: Record<string, string> = { critical: '嚴重', warning: '警告', good: '優化機會' }
   const lc: Record<string, [string, string]> = {
@@ -47,9 +47,9 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI: (q:
           <div className="ads-ai-label">AI 投手建議</div>
           <div className="ads-ai-text">{aiSummary}</div>
         </div>
-        <button className="ads-diag-ask-btn" style={{ alignSelf: 'flex-start', flexShrink: 0 }} onClick={() => onAskAI('建議我本週的操作清單')}>
+        {onAskAI && <button className="ads-diag-ask-btn" style={{ alignSelf: 'flex-start', flexShrink: 0 }} onClick={() => onAskAI('建議我本週的操作清單')}>
           問 AI ›
-        </button>
+        </button>}
       </div>
 
       <div className="ads-diag-list">
@@ -68,9 +68,9 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI: (q:
                 <span className="ads-diag-chip metric">{d.metric}</span>
                 <span className="ads-diag-chip metric">門檻 {d.threshold}</span>
                 <span className="ads-diag-chip action">建議：{d.action}</span>
-                <button className="ads-diag-ask-btn" onClick={() => onAskAI(askQ[d.id] ?? '建議我本週的操作清單')}>
+                {onAskAI && <button className="ads-diag-ask-btn" onClick={() => onAskAI(askQ[d.id] ?? '建議我本週的操作清單')}>
                   ✨ 問 AI
-                </button>
+                </button>}
               </div>
             </div>
           </div>

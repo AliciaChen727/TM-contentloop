@@ -319,6 +319,7 @@ export default function AdsPage() {
   const [selectedPageId, setSelectedPageId] = useState('')
   const [selectedPageName, setSelectedPageName] = useState('')
   const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
+  const [canSidekick, setCanSidekick] = useState(false)
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
 
@@ -358,7 +359,7 @@ export default function AdsPage() {
         const pagesRes = await fetch('/api/pages', { headers })
         if (pagesRes.ok) {
           const pagesJson = await pagesRes.json()
-          const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean } | null }> = pagesJson.pages ?? []
+          const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean } | null }> = pagesJson.pages ?? []
           setPages(allPages)
           // Pages from metaTokens (admin pages) have no permissions field; viewer pages have permissions object
           const isAdminUser = allPages.some(p => p.permissions === undefined || p.permissions === null)
@@ -368,6 +369,9 @@ export default function AdsPage() {
               router.replace('/dashboard')
               return
             }
+            setCanSidekick(!!activePage?.permissions?.sidekick)
+          } else {
+            setCanSidekick(true)
           }
         }
         setAuthed(true)
@@ -695,14 +699,18 @@ export default function AdsPage() {
               {l}
             </div>
           ))}
-          <div className="ads-nav-section" style={{ marginTop: 8 }}>AI 助手</div>
-          <div className="ads-nav-sk-btn" onClick={() => openSidekick()}>
-            <span style={{ fontSize: 18 }}>✨</span>
-            <div>
-              <div className="sk-label">AI Sidekick</div>
-              <div className="sk-sub">問我任何廣告問題</div>
-            </div>
-          </div>
+          {canSidekick && (
+            <>
+              <div className="ads-nav-section" style={{ marginTop: 8 }}>AI 助手</div>
+              <div className="ads-nav-sk-btn" onClick={() => openSidekick()}>
+                <span style={{ fontSize: 18 }}>✨</span>
+                <div>
+                  <div className="sk-label">AI Sidekick</div>
+                  <div className="sk-sub">問我任何廣告問題</div>
+                </div>
+              </div>
+            </>
+          )}
           <div className="ads-nav-section" style={{ marginTop: 8 }}>導覽</div>
           <div className="ads-nav-item" onClick={() => router.push('/dashboard')}>
             <Icon name="ads" size={15} color="var(--ad-text3)" />
@@ -764,9 +772,11 @@ export default function AdsPage() {
               </>
             )}
           </div>
-          <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
-            ✨ AI Sidekick
-          </button>
+          {canSidekick && (
+            <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
+              ✨ AI Sidekick
+            </button>
+          )}
           <button className="ads-btn" onClick={() => handleSync()} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
             {syncing ? '同步中⋯' : syncError ? `⚠ ${syncError}` : '↻ 同步廣告資料'}
           </button>
@@ -793,10 +803,10 @@ export default function AdsPage() {
             </div>
           ) : (
             <>
-              {active === 'overview' && <OverviewSection data={adData} onAskAI={openSidekick} posts={realPosts} />}
-              {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={openSidekick} />}
-              {active === 'creative' && <CreativeSection data={adData} onAskAI={openSidekick} />}
-              {active === 'posts' && <PostsSection onAskAI={openSidekick} posts={realPosts} />}
+              {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
+              {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
+              {active === 'creative' && <CreativeSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
+              {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} />}
             </>
@@ -805,10 +815,10 @@ export default function AdsPage() {
       </div>
 
       {/* FAB */}
-      <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
+      {canSidekick && <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>}
 
       {/* AI Sidekick Drawer */}
-      <AiSidekick
+      {canSidekick && <AiSidekick
         open={skOpen}
         onClose={() => setSkOpen(false)}
         contextPage={active}
@@ -829,7 +839,7 @@ export default function AdsPage() {
             name: c.name, roas: c.roas, spend: c.spend, ctr: Number(c.ctr), cpa: c.cpa,
           })),
         }}
-      />
+      />}
     </div>
   )
 }
