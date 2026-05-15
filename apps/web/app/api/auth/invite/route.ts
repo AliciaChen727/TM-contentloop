@@ -63,18 +63,15 @@ export async function POST(req: NextRequest) {
   const permText = permLabels.length > 0 ? permLabels.join('、') : '貼文成效首頁'
 
   let emailError: string | null = null
-  if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN) {
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
     try {
       const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 465,
         secure: true,
         auth: {
-          type: 'OAuth2',
           user: process.env.GMAIL_USER,
-          clientId: process.env.GMAIL_CLIENT_ID,
-          clientSecret: process.env.GMAIL_CLIENT_SECRET,
-          refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+          pass: process.env.GMAIL_APP_PASSWORD,
         },
       })
       await transporter.sendMail({
