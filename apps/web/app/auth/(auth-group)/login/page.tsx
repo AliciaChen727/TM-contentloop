@@ -35,7 +35,7 @@ export default function LoginPage() {
         const { authorized } = authRes.ok ? await authRes.json() : { authorized: false }
         if (!authorized) {
           await signOut(auth)
-          setError('你不是此粉絲頁的授權管理員，請聯絡管理員取得存取權限。')
+          setError('你沒有取得此粉絲頁的授權，請聯絡管理員取得存取權限。')
           return
         }
         router.push('/dashboard')
