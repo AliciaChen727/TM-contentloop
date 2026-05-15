@@ -43,9 +43,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data })
     }
 
-    // Fallback: shared merged insights (populated by other admins or Cloud Functions)
+    // Fallback: shared merged insights — check admins collection first, then viewerAccess
     const memberSnap = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
     if (memberSnap.exists) {
+      const sharedSnap = await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
+      if (sharedSnap.exists) return NextResponse.json({ data: serializeSnap(sharedSnap.data()!) })
+    }
+
+    // Viewer access: check viewerAccess doc for this pageId
+    const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+    const viewerPages: { pageId: string; permissions?: { ads: boolean } }[] = viewerSnap.data()?.pages ?? []
+    const viewerPage = viewerPages.find(p => p.pageId === pageId)
+    if (viewerPage?.permissions?.ads) {
       const sharedSnap = await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
       if (sharedSnap.exists) return NextResponse.json({ data: serializeSnap(sharedSnap.data()!) })
     }

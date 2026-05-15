@@ -197,13 +197,13 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                           </div>
                         ) : <span style={{ color: 'var(--ad-text3)', fontSize: 12 }}>—</span>}
                       </td>
-                      {onAskAI && <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
-                        <button
+                      <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
+                        {onAskAI && <button
                           title="用 AI 分析此貼文"
                           onClick={() => onAskAI(buildPostPrompt(p), true)}
                           style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
-                        >✨ 分析</button>
-                      </td>}
+                        >✨ 分析</button>}
+                      </td>
                     </tr>
                   )
                 })}
