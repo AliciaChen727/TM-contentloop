@@ -99,3 +99,36 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ success: true })
 }
+
+export async function DELETE(req: NextRequest) {
+  const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
+  if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const pageId = req.nextUrl.searchParams.get('pageId')
+  const targetUid = req.nextUrl.searchParams.get('uid')
+  const targetEmail = req.nextUrl.searchParams.get('email')
+  if (!pageId || (!targetUid && !targetEmail)) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
+
+  const adminUid = await verifyAdmin(idToken, pageId)
+  if (!adminUid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const batch = adminDb.batch()
+  if (targetUid) {
+    // Accepted member: remove from members + viewerAccess
+    batch.delete(adminDb.collection('pages').doc(pageId).collection('members').doc(targetUid))
+    const viewerRef = adminDb.collection('users').doc(targetUid).collection('viewerAccess').doc('pages')
+    const viewerSnap = await viewerRef.get()
+    if (viewerSnap.exists) {
+      const pages: { pageId: string }[] = viewerSnap.data()?.pages ?? []
+      batch.update(viewerRef, { pages: pages.filter(p => p.pageId !== pageId) })
+    }
+  } else if (targetEmail) {
+    // Pending member: remove from pendingInvites + invites
+    const email = targetEmail.toLowerCase()
+    batch.delete(adminDb.collection('pages').doc(pageId).collection('pendingInvites').doc(email))
+    batch.delete(adminDb.collection('invites').doc(email).collection('pages').doc(pageId))
+  }
+  await batch.commit()
+
+  return NextResponse.json({ success: true })
+}

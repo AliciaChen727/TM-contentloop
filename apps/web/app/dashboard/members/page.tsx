@@ -76,6 +76,25 @@ export default function MembersPage() {
     }
   }
 
+  async function handleDelete(member: Member) {
+    const params = new URLSearchParams({ pageId })
+    if (member.uid) params.set('uid', member.uid)
+    else params.set('email', member.email)
+    await fetch(`/api/auth/members?${params}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    await loadMembers(idToken, pageId)
+  }
+
+  async function handleResend(member: Member) {
+    await fetch('/api/auth/invite', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: member.email, pageId, permissions: member.permissions }),
+    })
+  }
+
   async function handleToggle(member: Member, key: keyof Permissions) {
     const updated = { ...member.permissions, [key]: !member.permissions[key] }
     setMembers(prev => prev.map(m => m.email === member.email ? { ...m, permissions: updated } : m))
@@ -179,7 +198,7 @@ export default function MembersPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-5 flex-wrap">
+                  <div className="flex gap-5 flex-wrap mb-3">
                     {PERM_LABELS.map(({ key, label }) => (
                       <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
                         <input
@@ -191,6 +210,22 @@ export default function MembersPage() {
                         <span className="text-xs text-gray-500">{label}</span>
                       </label>
                     ))}
+                  </div>
+                  <div className="flex gap-3">
+                    {m.status === 'pending' && (
+                      <button
+                        onClick={() => handleResend(m)}
+                        className="text-xs text-blue-500 hover:text-blue-700"
+                      >
+                        重新寄信
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(m)}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >
+                      移除
+                    </button>
                   </div>
                 </div>
               ))}
