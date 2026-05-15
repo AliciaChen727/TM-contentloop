@@ -75,6 +75,7 @@ function ConnectContent() {
             <li>出現「選擇商家」畫面時，請選擇<strong>「選擇只能使用目前的商家」</strong>，然後只勾選 <strong>D67</strong> 相關商家即可。</li>
             <li>出現「選擇粉絲專頁」時，只勾選 <strong>D67 的粉絲專頁</strong>，其他不需勾選。</li>
             <li>若看到其他與本帳戶無關的商家或粉專，<strong>直接跳過不勾選</strong>，點「下一步」繼續即可。</li>
+            <li>後續若出現其他商家資產或廣告帳戶等畫面，<strong>不需要勾選任何項目</strong>，直接點「下一步」或「完成」完成授權即可。</li>
           </ol>
         </div>
 
