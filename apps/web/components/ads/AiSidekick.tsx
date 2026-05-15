@@ -196,7 +196,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const data = await res.json()
       if (!res.ok || !data.imageData) {
         setMessages(p => p.map(m => m.id === msgId
-          ? { ...m, imageLoading: false, imageError: data.error ?? '圖片生成失敗，請重試' }
+          ? { ...m, imageLoading: false, noApiKey: data.error === 'NO_API_KEY' || undefined, imageError: data.error === 'NO_API_KEY' ? undefined : (data.error ?? '圖片生成失敗，請重試') }
           : m))
         return
       }
