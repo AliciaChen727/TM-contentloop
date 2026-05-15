@@ -29,7 +29,7 @@ const KEY_BLOCKS: KeyBlock[] = [
     type: 'gemini',
     label: 'Gemini API Key',
     placeholder: 'AIza...',
-    hint: '用於影片生成功能（Veo）',
+    hint: '用於影片生成（Veo）與圖片生成（Imagen）功能',
     helpUrl: 'https://aistudio.google.com/app/apikey',
     helpLabel: 'Google AI Studio',
   },
