@@ -42,24 +42,36 @@ interface MetricsContext {
   }
 }
 
-function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string): string {
-  const isPostsContext = contextPage === 'posts' || contextPage === 'combined'
-  const isCreativePage = contextPage === 'creative'
-
-  const role = isCreativePage
-    ? '你是一位廣告專家，擅長分析廣告素材表現與提供廣告建議。只有當用戶明確要求「生成」「做一張」「製作」新廣告素材時，才生成圖片。其他情況一律回傳 type: "analysis" 或 "recommendation"。'
-    : isPostsContext
-      ? '你是一位專精 Facebook 和 Instagram 社群經營的內容顧問，核心任務是協助分析貼文成效、找出高互動規律，並給出具體可執行的內容優化建議。'
-      : '你是一位專精 Meta 廣告投放的資深廣告顧問。負責分析廣告帳戶數據並給出具體可執行的優化建議。\n\n《重要背景》：本帳戶是 Toastmasters International District 67 的公益社團廣告帳戶。主要目標是透過臉書/IG 廣告吸引民眾點擊「報名連結」（Google Form）來參加活動。由於是公益組織、沒有金流，所以：\n- **ROAS 對此帳戶沒有意義**（沒有收益），請對 ROAS = 0.00x 不要疑惑，這是正常的\n- **核心 KPI 是 CPL（每次報名點擊成本）**：花費 ÷ 點擊報名連結的人數（以 link_click 數代替轉換數）\n- 最高優先度的優化方向：提升 CTR（讓更多人點進連結）與降低 CPL（降低每次點擊成本）\n- 目前 Google Form 無法紀錄填表完成率，若用戶詢問具體報名率，應說明此限制並建議將連結加上 UTM 參數後再透過 GA 監控'
-
-  const memoryBlock = memory
-    ? `\n## 過去分析記憶（請優先建立在這些結論上）\n${memory}\n`
-    : ''
-
-  let metricsBlock = ''
-  if (metrics && Object.keys(metrics).length > 0) {
-    if (metrics.spend !== undefined || metrics.roas !== undefined || (metrics.topCreatives?.length ?? 0) > 0) {
-      metricsBlock = `
+function buildMetricsBlock(metrics: MetricsContext, lang: 'zh-TW' | 'en'): string {
+  const isAds = metrics.spend !== undefined || metrics.roas !== undefined || (metrics.topCreatives?.length ?? 0) > 0
+  if (lang === 'en') {
+    if (isAds) {
+      return `
+## Ad Account Data (${metrics.dateRange ?? 'Recent'})
+- Total Spend: $${metrics.spend?.toLocaleString() ?? 'N/A'}  Revenue: $${metrics.revenue?.toLocaleString() ?? 'N/A'}
+- Account ROAS: ${metrics.roas != null ? metrics.roas.toFixed(2) : 'N/A'}x (0.00x means no purchase conversion detected — normal for this account)
+- CPA: $${metrics.cpa != null ? metrics.cpa.toFixed(0) : 'N/A'}  CTR: ${metrics.ctr != null ? metrics.ctr.toFixed(2) : 'N/A'}%  CPM: $${metrics.cpm != null ? metrics.cpm.toFixed(0) : 'N/A'}
+- Impressions: ${metrics.impressions?.toLocaleString() ?? 'N/A'}  Conversions: ${metrics.conversions ?? 'N/A'}  Frequency: ${metrics.frequency?.toFixed(1) ?? 'N/A'}
+${metrics.topCreatives?.length ? `
+## Creative Performance (Top ${metrics.topCreatives.length})
+${metrics.topCreatives.map((c, i) => `${i + 1}. ${c.name.slice(0, 35)} | ROAS ${c.roas.toFixed(1)}x | Spend $${c.spend} | CTR ${c.ctr.toFixed(2)}% | CPA $${c.cpa.toFixed(0)}`).join('\n')}` : ''}`
+    } else {
+      return `
+## Current Post Data (${metrics.dateRange ?? 'Recent'})
+- Total Posts: ${metrics.totalPosts ?? 'N/A'} (Reels: ${metrics.reelsCount ?? 'N/A'})
+- Total Reach: ${metrics.totalReach?.toLocaleString() ?? 'N/A'}
+- Total Likes: ${metrics.totalLikes?.toLocaleString() ?? 'N/A'}
+- Comments: ${metrics.totalComments?.toLocaleString() ?? 'N/A'}
+- Shares: ${metrics.totalShares?.toLocaleString() ?? 'N/A'}
+- Avg Engagement Rate: ${metrics.avgEngRate?.toFixed(2) ?? 'N/A'}%
+${metrics.topPosts?.length ? `
+## Recent Post Performance
+${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 40)}... | Reach ${p.reach} | Likes ${p.likes} | Eng Rate ${p.engRate}%`).join('\n')}` : ''}`
+    }
+  }
+  // zh-TW
+  if (isAds) {
+    return `
 ## 廣告帳戶數據（${metrics.dateRange ?? '近期'}）
 - 總花費：$${metrics.spend?.toLocaleString('zh-TW') ?? 'N/A'}　收益：$${metrics.revenue?.toLocaleString('zh-TW') ?? 'N/A'}
 - 帳戶整高 ROAS：${metrics.roas != null ? metrics.roas.toFixed(2) : 'N/A'}x（若為 0.00x 表示未偵測到購買轉換、以影片觀看計算，請參考個別素材的 ROAS）
@@ -68,8 +80,8 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
 ${metrics.topCreatives?.length ? `
 ## 素材表現（前 ${metrics.topCreatives.length} 名）
 ${metrics.topCreatives.map((c, i) => `${i + 1}. ${c.name.slice(0, 35)} | ROAS ${c.roas.toFixed(1)}x | 花費 $${c.spend} | CTR ${c.ctr.toFixed(2)}% | CPA $${c.cpa.toFixed(0)}`).join('\n')}` : ''}`
-    } else {
-      metricsBlock = `
+  }
+  return `
 ## 用戶當前數據（${metrics.dateRange ?? '近期'}）
 - 總貼文數：${metrics.totalPosts ?? 'N/A'}（其中 Reels：${metrics.reelsCount ?? 'N/A'}）
 - 總觸擊：${metrics.totalReach?.toLocaleString('zh-TW') ?? 'N/A'}
@@ -80,8 +92,95 @@ ${metrics.topCreatives.map((c, i) => `${i + 1}. ${c.name.slice(0, 35)} | ROAS ${
 ${metrics.topPosts?.length ? `
 ## 近期貼文表現
 ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 40)}... | 觸擊 ${p.reach} | 按讚 ${p.likes} | 互動率 ${p.engRate}%`).join('\n')}` : ''}`
-    }
+}
+
+function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW'): string {
+  const isPostsContext = contextPage === 'posts' || contextPage === 'combined'
+  const isCreativePage = contextPage === 'creative'
+  const metricsBlock = metrics && Object.keys(metrics).length > 0 ? buildMetricsBlock(metrics, lang) : ''
+
+  if (lang === 'en') {
+    const role = isCreativePage
+      ? 'You are an advertising expert specializing in ad creative analysis and recommendations. Only generate images when the user explicitly requests to "create", "generate", or "make" a new ad creative. Otherwise always return type: "analysis" or "recommendation".'
+      : isPostsContext
+        ? 'You are a social media content consultant specializing in Facebook and Instagram. Your core mission is to analyze post performance, identify high-engagement patterns, and provide specific actionable content optimization advice.'
+        : 'You are a senior Meta advertising consultant. Analyze ad account data and provide specific actionable optimization recommendations.\n\n[Important Context]: This is a Toastmasters International District 67 non-profit ad account. The main goal is to drive clicks on a registration link (Google Form) for events. Since there is no revenue:\n- **ROAS is meaningless for this account** (no revenue), ROAS = 0.00x is normal\n- **Core KPI is CPL (cost per registration click)**: Spend ÷ link clicks\n- Top priority: improve CTR and lower CPL\n- Google Form cannot track form completion rate; suggest UTM parameters + GA for tracking'
+
+    const memoryBlock = memory ? `\n## Past Analysis Memory (build on these conclusions)\n${memory}\n` : ''
+
+    return `${role}
+
+${isCreativePage ? `## 🎯 Creative Library Mode
+Current page is the ad creative library. For performance analysis or diagnosis, provide professional insights (return type: "analysis" or "recommendation").
+**Only return type: "image_request" when the user explicitly requests generating a new image/creative.**
+
+` : ''}## ⚡ Highest Priority: Creative Generation Request (overrides all rules below)
+If the user message contains explicit generation verbs like "generate", "create", "make", "design" referring to images/creatives (not video):
+→ Immediately return type: "image_request"
+→ Write an English imagePrompt based on context. CRITICAL: To avoid distorted output, unless the user explicitly asks for text, always append "No text, no typography, no letters, clean background with empty space for text layout" at the end.
+→ Do NOT analyze or ask questions first — generate directly
+→ summary should explain the generation direction (include size recommendation like 1080x1350px)
+
+**Note**: If the user is asking to "analyze", "diagnose", or "improve" an existing creative, do NOT return type: "image_request" — return analysis instead.
+
+If the user message contains "video", "Reels", "motion creative", "generate video", "make a clip":
+→ Immediately return type: "video_request"
+→ Write an English videoPrompt, videoDuration defaults to 5
+→ Do NOT analyze or ask questions first — generate directly
+
+## Behavioral Guidelines
+[Honest]: Point out issues directly. Do not exaggerate or fabricate numbers. If data is insufficient, state "insufficient data, cannot determine."
+[Analyze then recommend]: Understand data context (trends, anomalies, comparisons) before giving advice.
+[Clarify proactively]: When the question is ambiguous, offer 2 options in bullets. Exception: (1) if user requests image/video generation, generate immediately; (2) if message mentions "this image" but no attachment, generate directly for the mentioned topic.
+[Clear positive/negative signals]: Distinguish good metrics (high engagement rate, ROAS on target) from bad (high CPA, frequency fatigue).
+[Specific actions]: Each action must have a specific target, e.g. "Increase audience A daily budget from $X to $Y", not "consider adjusting budget."
+${memoryBlock}
+## Audience Analysis Safeguard
+**Meta Graph API does not provide audience age/gender/interest breakdowns** (restricted by Meta privacy policy).
+- When users ask about audience demographics, explain this data is unavailable and suggest checking Meta Ads Manager's Audience Insights.
+- When conversions < 50 and users ask about "audience characteristics", "Lookalike", or "audience expansion": guide them to (1) verify Pixel tracking, (2) check conversion funnel, (3) accumulate at least 50 conversions before audience testing.
+
+## Useful Tool Links (include markdown links when these tools are mentioned)
+- Meta Pixel Helper: [Meta Pixel Helper](https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc)
+- Events Manager: [Events Manager](https://business.facebook.com/events_manager2)
+- Meta Ads Manager: [Ads Manager](https://adsmanager.facebook.com/)
+- Meta Business Manager: [Business Manager](https://business.facebook.com/)
+- Meta Audience Insights: [Audience Insights](https://business.facebook.com/audience-insights)
+- Meta Blueprint: [Meta Blueprint](https://www.facebook.com/business/learn)
+
+## Response Format
+Always respond in English. Output pure JSON directly — no markdown code block, no explanation text, only JSON:
+{
+  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request" | "video_request",
+  "summary": "One-sentence conclusion with the most critical metric numbers",
+  "bullets": ["Key point 1 (with data)", "Key point 2 (with judgment)", "Key point 3", "Key point 4"],
+  "stats": [{"label": "Metric name", "value": "Value (with unit)"}],
+  "actions": ["Specific action 1 (with target and number)", "Specific action 2", "Specific action 3"],
+  "imagePrompt": "(only when type is image_request) English image generation prompt",
+  "videoPrompt": "(only when type is video_request) English video generation prompt",
+  "videoDuration": 5
+}
+
+Rules:
+- summary must include specific numbers, not just "performance is good"
+- bullets max 4, each under 50 words, data-backed preferred
+- stats max 3, only the most critical metrics
+- actions max 4, each must specify who/what/target number
+- if all data is 0 or missing, use type "warning" and explain incomplete data in summary
+- For image generation: imagePrompt format: "Professional Facebook/Instagram ad for [topic], [style], vibrant colors, clean modern design, high quality. No text, no typography, no letters, clean background space for layout."
+- For video generation: videoPrompt format: "Vertical 9:16 short video for [topic], [visual description], cinematic lighting, smooth motion, professional quality"
+- videoDuration: recommended seconds (1–8 integer), 5 for short hooks, 8 for full scenes
+${metricsBlock}`
   }
+
+  // zh-TW (original)
+  const role = isCreativePage
+    ? '你是一位廣告專家，擅長分析廣告素材表現與提供廣告建議。只有當用戶明確要求「生成」「做一張」「製作」新廣告素材時，才生成圖片。其他情況一律回傳 type: "analysis" 或 "recommendation"。'
+    : isPostsContext
+      ? '你是一位專精 Facebook 和 Instagram 社群經營的內容顧問，核心任務是協助分析貼文成效、找出高互動規律，並給出具體可執行的內容優化建議。'
+      : '你是一位專精 Meta 廣告投放的資深廣告顧問。負責分析廣告帳戶數據並給出具體可執行的優化建議。\n\n《重要背景》：本帳戶是 Toastmasters International District 67 的公益社團廣告帳戶。主要目標是透過臉書/IG 廣告吸引民眾點擊「報名連結」（Google Form）來參加活動。由於是公益組織、沒有金流，所以：\n- **ROAS 對此帳戶沒有意義**（沒有收益），請對 ROAS = 0.00x 不要疑惑，這是正常的\n- **核心 KPI 是 CPL（每次報名點擊成本）**：花費 ÷ 點擊報名連結的人數（以 link_click 數代替轉換數）\n- 最高優先度的優化方向：提升 CTR（讓更多人點進連結）與降低 CPL（降低每次點擊成本）\n- 目前 Google Form 無法紀錄填表完成率，若用戶詢問具體報名率，應說明此限制並建議將連結加上 UTM 參數後再透過 GA 監控'
+
+  const memoryBlock = memory ? `\n## 過去分析記憶（請優先建立在這些結論上）\n${memory}\n` : ''
 
   return `${role}
 
@@ -201,7 +300,11 @@ export async function POST(req: NextRequest) {
   if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
-  const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined)
+  // Retrieve user language preference
+  const prefSnap = await adminDb.collection('users').doc(uid).collection('settings').doc('preferences').get()
+  const lang: 'zh-TW' | 'en' = prefSnap.data()?.language === 'en' ? 'en' : 'zh-TW'
+
+  const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined, lang)
 
   // Build user message content (text + optional file)
   const userContent: Anthropic.MessageParam['content'] = []

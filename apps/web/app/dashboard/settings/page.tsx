@@ -6,6 +6,7 @@ import { auth } from '@/lib/firebase/client'
 
 type KeyType = 'anthropic' | 'gemini'
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
+type Language = 'zh-TW' | 'en'
 
 interface KeyBlock {
   type: KeyType
@@ -39,6 +40,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const [idToken, setIdToken] = useState('')
   const [loading, setLoading] = useState(true)
+  const [language, setLanguage] = useState<Language>('zh-TW')
   const [keySet, setKeySet] = useState<Record<KeyType, boolean>>({ anthropic: false, gemini: false })
   const [inputs, setInputs] = useState<Record<KeyType, string>>({ anthropic: '', gemini: '' })
   const [saveState, setSaveState] = useState<Record<KeyType, SaveState>>({ anthropic: 'idle', gemini: 'idle' })
@@ -49,15 +51,31 @@ export default function SettingsPage() {
       if (!u) { router.replace('/auth/login'); return }
       const token = await u.getIdToken()
       setIdToken(token)
-      const res = await fetch('/api/user/api-keys', { headers: { Authorization: `Bearer ${token}` } })
-      if (res.ok) {
-        const data = await res.json()
+      const [keysRes, prefRes] = await Promise.all([
+        fetch('/api/user/api-keys', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/user/preferences', { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      if (keysRes.ok) {
+        const data = await keysRes.json()
         setKeySet({ anthropic: !!data.anthropic, gemini: !!data.gemini })
+      }
+      if (prefRes.ok) {
+        const data = await prefRes.json()
+        setLanguage(data.language ?? 'zh-TW')
       }
       setLoading(false)
     })
     return unsub
   }, [router])
+
+  async function handleLanguageChange(lang: Language) {
+    setLanguage(lang)
+    await fetch('/api/user/preferences', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: lang }),
+    })
+  }
 
   async function handleSave(type: KeyType) {
     const key = inputs[type].trim()
@@ -106,6 +124,29 @@ export default function SettingsPage() {
       </header>
 
       <div className="mx-auto max-w-2xl px-8 py-8 space-y-6">
+
+        {/* Language */}
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-1">語言 / Language</h2>
+          <p className="text-xs text-gray-400 mb-4">影響 AI Sidekick 的回應語言。其他 UI 全面翻譯將於後續版本推出。</p>
+          <div className="flex gap-4">
+            {([['zh-TW', '繁體中文'], ['en', 'English']] as [Language, string][]).map(([val, label]) => (
+              <label key={val} className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="language"
+                  value={val}
+                  checked={language === val}
+                  onChange={() => handleLanguageChange(val)}
+                  className="cursor-pointer accent-blue-600"
+                />
+                <span className="text-sm text-gray-700">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* API Keys */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
           <h2 className="text-sm font-bold text-gray-800 mb-1">API Keys</h2>
           <p className="text-xs text-gray-400 mb-6">Key 加密後儲存，不會以明文存放。每個人使用自己的 Key，不共用 owner 的額度。</p>
@@ -160,6 +201,7 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+
       </div>
     </main>
   )
