@@ -415,9 +415,15 @@ export default function DashboardPage() {
                   }} />
                 </div>
               )}
-              {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} onAskAI={(q, a) => openSidekick(q, a)} />}
-              {activeTab === 'fb' && <FbPostsTable posts={filteredFb} onAskAI={(q, a) => openSidekick(q, a)} />}
-              {activeTab === 'ig' && <IgPostsTable posts={filteredIg} onAskAI={(q, a) => openSidekick(q, a)} />}
+              {(() => {
+                const canSidekick = isAdmin || !!pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick
+                const askAI = canSidekick ? (q: string, a?: boolean) => openSidekick(q, a) : undefined
+                return (<>
+                  {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} onAskAI={askAI} />}
+                  {activeTab === 'fb' && <FbPostsTable posts={filteredFb} onAskAI={askAI} />}
+                  {activeTab === 'ig' && <IgPostsTable posts={filteredIg} onAskAI={askAI} />}
+                </>)
+              })()}
             </div>
           </>
         )}
