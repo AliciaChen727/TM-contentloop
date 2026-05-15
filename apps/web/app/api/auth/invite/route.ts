@@ -62,42 +62,48 @@ export async function POST(req: NextRequest) {
   ].filter(Boolean)
   const permText = permLabels.length > 0 ? permLabels.join('、') : '貼文成效首頁'
 
+  let emailError: string | null = null
   if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN) {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        type: 'OAuth2',
-        user: process.env.GMAIL_USER,
-        clientId: process.env.GMAIL_CLIENT_ID,
-        clientSecret: process.env.GMAIL_CLIENT_SECRET,
-        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-      },
-    })
-    await transporter.sendMail({
-      from: `ContentLoop <${process.env.GMAIL_USER}>`,
-      to: email,
-      subject: `${inviterName} 邀請你加入 ContentLoop`,
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#f9fafb;border-radius:12px">
-          <h2 style="margin:0 0 8px;font-size:20px;color:#111827">你收到一份邀請</h2>
-          <p style="color:#6B7280;font-size:14px;margin:0 0 20px">
-            <strong style="color:#111827">${inviterName}</strong> 邀請你加入 ContentLoop，
-            查看 <strong>${pageName}</strong> 的成效數據。
-          </p>
-          <div style="background:white;border-radius:8px;padding:16px;margin-bottom:24px;border:1px solid #E5E7EB">
-            <p style="font-size:12px;color:#6B7280;margin:0 0 8px;font-weight:600">開放權限</p>
-            <p style="font-size:14px;color:#374151;margin:0">${permText}</p>
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          type: 'OAuth2',
+          user: process.env.GMAIL_USER,
+          clientId: process.env.GMAIL_CLIENT_ID,
+          clientSecret: process.env.GMAIL_CLIENT_SECRET,
+          refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+        },
+      })
+      await transporter.sendMail({
+        from: `ContentLoop <${process.env.GMAIL_USER}>`,
+        to: email,
+        subject: `${inviterName} 邀請你加入 ContentLoop`,
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#f9fafb;border-radius:12px">
+            <h2 style="margin:0 0 8px;font-size:20px;color:#111827">你收到一份邀請</h2>
+            <p style="color:#6B7280;font-size:14px;margin:0 0 20px">
+              <strong style="color:#111827">${inviterName}</strong> 邀請你加入 ContentLoop，
+              查看 <strong>${pageName}</strong> 的成效數據。
+            </p>
+            <div style="background:white;border-radius:8px;padding:16px;margin-bottom:24px;border:1px solid #E5E7EB">
+              <p style="font-size:12px;color:#6B7280;margin:0 0 8px;font-weight:600">開放權限</p>
+              <p style="font-size:14px;color:#374151;margin:0">${permText}</p>
+            </div>
+            <a href="${loginUrl}" style="display:inline-block;background:#3B6FD4;color:white;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">
+              點擊登入 ContentLoop
+            </a>
+            <p style="font-size:11px;color:#9CA3AF;margin-top:24px">
+              使用你的 Google 帳號登入即可存取。
+            </p>
           </div>
-          <a href="${loginUrl}" style="display:inline-block;background:#3B6FD4;color:white;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">
-            點擊登入 ContentLoop
-          </a>
-          <p style="font-size:11px;color:#9CA3AF;margin-top:24px">
-            使用你的 Google 帳號登入即可存取。
-          </p>
-        </div>
-      `,
-    })
+        `,
+      })
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : String(err)
+      console.error('[invite] email send failed:', emailError)
+    }
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, emailError })
 }
