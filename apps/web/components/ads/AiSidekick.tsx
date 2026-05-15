@@ -490,14 +490,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           </div>
                         )}
                         {msg.noApiKey && (
-                          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                            <p style={{ marginBottom: 8 }}>⚠️ 請先設定你的 Claude API Key 才能使用 AI Sidekick。</p>
-                            <a
-                              href="/dashboard/settings"
-                              style={{ display: 'inline-block', padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
-                            >
-                              前往設定 →
-                            </a>
+                          <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+                            <p style={{ marginBottom: 6 }}>⚠️ 請先到「設定」頁面輸入你的 Claude API Key 才能使用 AI Sidekick。</p>
+                            <p style={{ color: 'var(--ad-text2)', fontSize: 12 }}>
+                              前往頭像 → 設定 → API Keys（
+                              <a href="https://tm-contentloop.vercel.app/dashboard/settings" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ad-blue)', textDecoration: 'underline' }}>
+                                https://tm-contentloop.vercel.app/dashboard/settings
+                              </a>
+                              ）
+                            </p>
                           </div>
                         )}
                         {!msg.noApiKey && msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
