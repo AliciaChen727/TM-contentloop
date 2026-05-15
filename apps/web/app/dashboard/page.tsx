@@ -422,7 +422,9 @@ export default function DashboardPage() {
           </>
         )}
       </div>
-      <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
+      {(isAdmin || pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick) && (
+        <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
+      )}
       <AiSidekick
         open={skOpen}
         onClose={() => setSkOpen(false)}

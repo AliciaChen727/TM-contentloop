@@ -15,7 +15,23 @@ export async function GET(req: NextRequest) {
   }
 
   const pageId = req.nextUrl.searchParams.get('pageId')
-  const userRef = adminDb.collection('users').doc(uid)
+
+  // Resolve data owner: admin queries own data; viewer needs page admin's UID
+  let dataOwnerUid = uid
+  if (pageId) {
+    const ownTokenSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
+    if (!ownTokenSnap.exists) {
+      const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+      const viewerPages: { pageId: string }[] = viewerSnap.data()?.pages ?? []
+      if (!viewerPages.some(p => p.pageId === pageId)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      const adminsSnap = await adminDb.collection('pages').doc(pageId).collection('admins').limit(1).get()
+      if (adminsSnap.empty) return NextResponse.json({ posts: [] })
+      dataOwnerUid = adminsSnap.docs[0].id
+    }
+  }
+  const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
   const snap = pageId
     ? await userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
