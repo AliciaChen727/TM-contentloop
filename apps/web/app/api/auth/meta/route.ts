@@ -83,10 +83,14 @@ export async function POST(req: NextRequest) {
     await batch.commit()
 
     // Register this uid as a verified admin for each page (enables cross-admin data sharing)
+    // First connector for a page becomes the owner; subsequent OAuth users are non-owners
     const memberBatch = adminDb.batch()
     for (const page of pages) {
+      const existingOwnerSnap = await adminDb.collection('pages').doc(page.pageId).collection('admins')
+        .where('isOwner', '==', true).limit(1).get()
+      const isOwner = existingOwnerSnap.empty
       const adminRef = adminDb.collection('pages').doc(page.pageId).collection('admins').doc(uid)
-      memberBatch.set(adminRef, { uid, addedAt: FieldValue.serverTimestamp(), verifiedViaOAuth: true }, { merge: true })
+      memberBatch.set(adminRef, { uid, addedAt: FieldValue.serverTimestamp(), verifiedViaOAuth: true, isOwner }, { merge: true })
     }
     await memberBatch.commit()
 

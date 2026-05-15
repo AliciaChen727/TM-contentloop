@@ -1,15 +1,18 @@
 'use client'
 
-import { signInWithPopup } from 'firebase/auth'
+import { signInWithPopup, signOut } from 'firebase/auth'
 import { collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { auth, googleProvider, db } from '@/lib/firebase/client'
 
 export default function LoginPage() {
   const router = useRouter()
+  const [error, setError] = useState('')
 
   async function handleGoogleLogin() {
     try {
+      setError('')
       const result = await signInWithPopup(auth, googleProvider)
       const user = result.user
       const idToken = await user.getIdToken()
@@ -25,6 +28,16 @@ export default function LoginPage() {
       const hasAdminPages = tokensSnap.docs.some(d => d.id !== 'userToken')
 
       if (hasAdminPages) {
+        // Verify the user is an authorized admin (not just anyone who did OAuth)
+        const authRes = await fetch('/api/auth/check-admin-auth', {
+          headers: { Authorization: `Bearer ${idToken}` },
+        })
+        const { authorized } = authRes.ok ? await authRes.json() : { authorized: false }
+        if (!authorized) {
+          await signOut(auth)
+          setError('你不是此粉絲頁的授權管理員，請聯絡管理員取得存取權限。')
+          return
+        }
         router.push('/dashboard')
       } else {
         // Check if accepted invites gave viewer access
@@ -45,6 +58,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">ContentLoop</h1>
         <p className="mb-8 text-sm text-gray-500">登入以管理你的內容成效</p>
+        {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
         <button
           onClick={handleGoogleLogin}
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
