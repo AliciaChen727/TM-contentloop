@@ -320,6 +320,7 @@ export default function AdsPage() {
   const [selectedPageName, setSelectedPageName] = useState('')
   const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
   const [canSidekick, setCanSidekick] = useState(false)
+  const [canSync, setCanSync] = useState(false)
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
 
@@ -359,7 +360,7 @@ export default function AdsPage() {
         const pagesRes = await fetch('/api/pages', { headers })
         if (pagesRes.ok) {
           const pagesJson = await pagesRes.json()
-          const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean } | null }> = pagesJson.pages ?? []
+          const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }> = pagesJson.pages ?? []
           setPages(allPages)
           // Pages from metaTokens (admin pages) have no permissions field; viewer pages have permissions object
           const isAdminUser = allPages.some(p => p.permissions === undefined || p.permissions === null)
@@ -370,8 +371,10 @@ export default function AdsPage() {
               return
             }
             setCanSidekick(!!activePage?.permissions?.sidekick)
+            setCanSync(!!activePage?.permissions?.syncAds)
           } else {
             setCanSidekick(true)
+            setCanSync(true)
           }
         }
         setAuthed(true)
@@ -777,9 +780,9 @@ export default function AdsPage() {
               ✨ AI Sidekick
             </button>
           )}
-          <button className="ads-btn" onClick={() => handleSync()} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
+          {canSync && <button className="ads-btn" onClick={() => handleSync()} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
             {syncing ? '同步中⋯' : syncError ? `⚠ ${syncError}` : '↻ 同步廣告資料'}
-          </button>
+          </button>}
           <div style={{ position: 'relative' }}>
             <button className="ads-btn primary" onClick={() => setShowExportMenu(p => !p)}>
               <Icon name="download" size={13} color="white" />匯出報告 ▾
