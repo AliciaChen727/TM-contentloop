@@ -6,6 +6,7 @@ import {
   exchangeForLongLived,
   getAllManagedPages,
   getPageToken,
+  type PageToken,
 } from '@/lib/meta/tokenExchange'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -32,14 +33,21 @@ export async function POST(req: NextRequest) {
     const shortLived = await exchangeCodeForShortLived(code)
     const longLived = await exchangeForLongLived(shortLived)
 
-    // Try /me/accounts first; fallback to env-var single-page approach
-    let pages = await getAllManagedPages(longLived).catch(() => [])
-    if (pages.length === 0 && process.env.META_PAGE_IDENTIFIER) {
-      console.log('[meta/route] /me/accounts returned no pages, falling back to META_PAGE_IDENTIFIER')
-      const single = await getPageToken(longLived)
-      pages = [single]
+    // If META_PAGE_IDENTIFIER is set, fetch that page directly to avoid interference
+    // from other pages the user manages (e.g. old company pages with restricted access).
+    // Fall back to /me/accounts for multi-page setups without a specific identifier.
+    let pages: PageToken[] = []
+    if (process.env.META_PAGE_IDENTIFIER) {
+      try {
+        const single = await getPageToken(longLived)
+        pages = [single]
+      } catch {
+        pages = await getAllManagedPages(longLived).catch(() => [])
+      }
+    } else {
+      pages = await getAllManagedPages(longLived).catch(() => [])
     }
-    if (pages.length === 0) throw new Error('No managed pages found. Check /me/accounts permission or META_PAGE_IDENTIFIER env var.')
+    if (pages.length === 0) throw new Error('No managed pages found. Check page admin role or META_PAGE_IDENTIFIER env var.')
 
     const userRef = adminDb.collection('users').doc(uid)
 
