@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
-import { auth } from '@/lib/firebase/client'
+import { collection, getDocs } from 'firebase/firestore'
+import { auth, db } from '@/lib/firebase/client'
 import { Suspense } from 'react'
 
 const SCOPES = [
@@ -23,11 +24,27 @@ function ConnectContent() {
 
   const errorType = searchParams.get('error')
   const errorMsg = searchParams.get('msg')
+  const [pageLabel, setPageLabel] = useState<string>('')
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (!user) router.replace('/auth/login')
-      else setChecking(false)
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.replace('/auth/login')
+        return
+      }
+      // Query existing page tokens to show the correct page name in instructions
+      try {
+        const tokensSnap = await getDocs(collection(db, 'users', user.uid, 'metaTokens'))
+        const names = Array.from(new Set(
+          tokensSnap.docs
+            .filter(d => d.id !== 'userToken' && d.data().pageName)
+            .map(d => d.data().pageName as string)
+        ))
+        setPageLabel(names.length > 0 ? names.join('、') : '')
+      } catch {
+        // silently ignore — will show generic fallback
+      }
+      setChecking(false)
     })
     return unsub
   }, [router])
@@ -69,14 +86,39 @@ function ConnectContent() {
           </div>
         )}
 
-        <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
-          <p className="mb-2 text-xs font-semibold text-blue-700">⚠️ 授權時的重要提示</p>
-          <ol className="list-decimal space-y-2 pl-4 text-xs text-blue-600">
-            <li>出現「選擇商家」畫面時，請選擇<strong>「選擇只能使用目前的商家」</strong>，然後只勾選 <strong>D67</strong> 相關商家即可。</li>
-            <li>出現「選擇粉絲專頁」時，只勾選 <strong>D67 的粉絲專頁</strong>，其他不需勾選。</li>
-            <li>若看到其他與本帳戶無關的商家或粉專，<strong>直接跳過不勾選</strong>，點「下一步」繼續即可。</li>
-            <li>後續若出現其他商家資產或廣告帳戶等畫面，<strong>不需要勾選任何項目</strong>，直接點「下一步」或「完成」完成授權即可。</li>
-          </ol>
+        <div className="mb-6 space-y-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">授權步驟說明</p>
+
+          {/* Step 1 */}
+          <div className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">1</span>
+            <div>
+              <p className="text-xs font-semibold text-gray-800">選擇商家</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                只勾選 <strong className="text-gray-700">{pageLabel || '你所在分會'}</strong> 相關商家，其餘商家<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
+              </p>
+            </div>
+          </div>
+
+          {/* Step 2 */}
+          <div className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">2</span>
+            <div>
+              <p className="text-xs font-semibold text-gray-800">選擇粉絲專頁</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                只勾選 <strong className="text-gray-700">{pageLabel ? `「${pageLabel}」` : '你所在分會的粉絲專頁'}</strong>，其他粉專<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
+              </p>
+            </div>
+          </div>
+
+          {/* Step 3 */}
+          <div className="flex gap-3 rounded-xl border border-amber-100 bg-amber-50 p-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400 text-[10px] font-bold text-white">!</span>
+            <div>
+              <p className="text-xs font-semibold text-amber-800">出現其他商家資產、廣告帳戶等畫面？</p>
+              <p className="mt-0.5 text-xs text-amber-700"><strong>不需要勾選任何項目</strong>，直接點「下一步」或「完成」即可完成授權。</p>
+            </div>
+          </div>
         </div>
 
         <button
