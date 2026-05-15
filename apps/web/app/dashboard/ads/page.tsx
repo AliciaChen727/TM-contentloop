@@ -345,7 +345,6 @@ export default function AdsPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async u => {
       if (!u) { router.replace('/auth/login'); return }
-      setAuthed(true)
 
       try {
         const idToken = await u.getIdToken()
@@ -355,12 +354,23 @@ export default function AdsPage() {
         setSelectedPageId(pageId)
         setSelectedPageName(pageName)
 
-        // Load all managed pages for the page switcher
+        // Load all managed pages and check permission
         const pagesRes = await fetch('/api/pages', { headers })
         if (pagesRes.ok) {
           const pagesJson = await pagesRes.json()
-          setPages(pagesJson.pages ?? [])
+          const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean } | null }> = pagesJson.pages ?? []
+          setPages(allPages)
+          // Pages from metaTokens (admin pages) have no permissions field; viewer pages have permissions object
+          const isAdminUser = allPages.some(p => p.permissions === undefined || p.permissions === null)
+          if (!isAdminUser) {
+            const activePage = allPages.find(p => p.pageId === pageId) ?? allPages[0]
+            if (!activePage?.permissions?.ads) {
+              router.replace('/dashboard')
+              return
+            }
+          }
         }
+        setAuthed(true)
 
         const qs = pageId ? `?pageId=${pageId}` : ''
         const [fbRes, igRes, adRes] = await Promise.all([

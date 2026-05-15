@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
+  interface PageEntry { pageId: string; pageName: string; igUserId: string | null; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }
   const snap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
-  const pages = snap.docs
+  const pages: PageEntry[] = snap.docs
     .filter(d => d.id !== 'userToken' && d.id !== 'page')
     .map(d => {
       const data = d.data()
@@ -34,10 +35,10 @@ export async function GET(req: NextRequest) {
   // Also include viewer pages granted via invite
   const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
   if (viewerSnap.exists) {
-    const viewerPages: { pageId: string; pageName: string; igUserId: string | null }[] = viewerSnap.data()?.pages ?? []
+    const viewerPages: { pageId: string; pageName: string; igUserId: string | null; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } }[] = viewerSnap.data()?.pages ?? []
     for (const vp of viewerPages) {
       if (!pages.find(p => p.pageId === vp.pageId)) {
-        pages.push({ pageId: vp.pageId, pageName: vp.pageName, igUserId: vp.igUserId ?? null })
+        pages.push({ pageId: vp.pageId, pageName: vp.pageName, igUserId: vp.igUserId ?? null, permissions: vp.permissions ?? null })
       }
     }
   }

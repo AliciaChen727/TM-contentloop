@@ -16,7 +16,8 @@ import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
 import { ProfileMenu } from '@/components/ProfileMenu'
 
-interface PageInfo { pageId: string; pageName: string; igUserId: string | null }
+interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
+interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null }
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
 
 interface FbPost {
@@ -301,12 +302,21 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
-              📊 廣告儀表板
-            </button>
-            <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
-              ✨ AI Sidekick
-            </button>
+            {(() => {
+              const activePerms = pages.find(p => p.pageId === selectedPageId)?.permissions ?? null
+              return (<>
+                {(isAdmin || activePerms?.ads) && (
+                  <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
+                    📊 廣告儀表板
+                  </button>
+                )}
+                {(isAdmin || activePerms?.sidekick) && (
+                  <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
+                    ✨ AI Sidekick
+                  </button>
+                )}
+              </>)
+            })()}
           </div>
         </div>
       </header>
