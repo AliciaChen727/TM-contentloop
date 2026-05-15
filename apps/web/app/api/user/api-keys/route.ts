@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { encrypt, decrypt } from '@/lib/encrypt'
+import { encrypt } from '@/lib/encrypt'
 
 type KeyType = 'anthropic' | 'gemini'
 
@@ -75,14 +75,3 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-// Helper exported for API routes to retrieve and decrypt a user's key
-export async function getUserApiKey(uid: string, type: KeyType): Promise<string | null> {
-  const snap = await adminDb.collection('users').doc(uid).collection('settings').doc('apiKeys').get()
-  const encrypted = snap.data()?.[type]
-  if (!encrypted) return null
-  try {
-    return decrypt(encrypted)
-  } catch {
-    return null
-  }
-}

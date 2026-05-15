@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import { decrypt } from '@/lib/encrypt'
+import { getUserApiKey } from '@/lib/userApiKeys'
 
 interface MetricsContext {
   // Posts metrics
@@ -197,17 +197,8 @@ export async function POST(req: NextRequest) {
   } catch { /* Firestore index missing or other error: non-critical, proceed without memory */ }
 
   // Retrieve user's own Claude API key (required — no fallback to owner key)
-  const keysSnap = await adminDb.collection('users').doc(uid).collection('settings').doc('apiKeys').get()
-  const encryptedKey = keysSnap.data()?.anthropic
-  if (!encryptedKey) {
-    return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
-  }
-  let anthropicKey: string
-  try {
-    anthropicKey = decrypt(encryptedKey)
-  } catch {
-    return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
-  }
+  const anthropicKey = await getUserApiKey(uid, 'anthropic')
+  if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
   const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined)

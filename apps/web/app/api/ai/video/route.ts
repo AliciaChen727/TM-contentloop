@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenAI } from '@google/genai'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { decrypt } from '@/lib/encrypt'
+import { adminAuth } from '@/lib/firebase/admin'
+import { getUserApiKey } from '@/lib/userApiKeys'
 
 async function verifyAuth(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -16,18 +16,11 @@ async function verifyAuth(req: NextRequest): Promise<string | null> {
   }
 }
 
-async function getUserGeminiKey(uid: string): Promise<string | null> {
-  const snap = await adminDb.collection('users').doc(uid).collection('settings').doc('apiKeys').get()
-  const encrypted = snap.data()?.gemini
-  if (!encrypted) return null
-  try { return decrypt(encrypted) } catch { return null }
-}
-
 export async function POST(req: NextRequest) {
   const uid = await verifyAuth(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const apiKey = await getUserGeminiKey(uid)
+  const apiKey = await getUserApiKey(uid, 'gemini')
   if (!apiKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'gemini' }, { status: 402 })
 
   const { prompt, durationSeconds } = await req.json() as { prompt: string; durationSeconds?: number }
@@ -64,7 +57,7 @@ export async function GET(req: NextRequest) {
   const opName = req.nextUrl.searchParams.get('op')
   if (!opName) return NextResponse.json({ error: 'Missing op parameter' }, { status: 400 })
 
-  const apiKey = await getUserGeminiKey(uid)
+  const apiKey = await getUserApiKey(uid, 'gemini')
   if (!apiKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'gemini' }, { status: 402 })
 
   try {
