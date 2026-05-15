@@ -107,7 +107,7 @@ export async function getPageToken(longLivedUserToken: string): Promise<PageToke
   console.log('[getPageToken] direct page response:', JSON.stringify(data))
 
   if (!res.ok || data.error) throw new Error(data.error?.message ?? 'get page token failed')
-  if (!data.access_token) throw new Error('Page access_token not returned. Check page admin role and permissions.')
+  if (!data.access_token) throw new Error('你沒有此粉絲頁的管理員（Admin）權限，無法取得存取憑證。請在 Facebook 粉絲頁設定確認角色為「管理員」後再試。')
 
   return {
     pageId: data.id,

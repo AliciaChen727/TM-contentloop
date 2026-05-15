@@ -65,6 +65,7 @@ function ConnectContent() {
             {errorMsg && (
               <p className="break-all text-xs text-red-500">{decodeURIComponent(errorMsg)}</p>
             )}
+            <p className="mt-2 text-xs text-red-400">提示：請確認在 Facebook 上已被加為此粉絲頁的「管理員（Admin）」角色，且授權時有勾選此粉絲頁。</p>
           </div>
         )}
 

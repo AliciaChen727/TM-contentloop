@@ -37,17 +37,19 @@ export async function POST(req: NextRequest) {
     // from other pages the user manages (e.g. old company pages with restricted access).
     // Fall back to /me/accounts for multi-page setups without a specific identifier.
     let pages: PageToken[] = []
+    let getPageTokenError: string | null = null
     if (process.env.META_PAGE_IDENTIFIER) {
       try {
         const single = await getPageToken(longLived)
         pages = [single]
-      } catch {
+      } catch (e) {
+        getPageTokenError = e instanceof Error ? e.message : null
         pages = await getAllManagedPages(longLived).catch(() => [])
       }
     } else {
       pages = await getAllManagedPages(longLived).catch(() => [])
     }
-    if (pages.length === 0) throw new Error('No managed pages found. Check page admin role or META_PAGE_IDENTIFIER env var.')
+    if (pages.length === 0) throw new Error(getPageTokenError ?? 'No managed pages found. Check page admin role or META_PAGE_IDENTIFIER env var.')
 
     const userRef = adminDb.collection('users').doc(uid)
 
