@@ -73,6 +73,23 @@ export function ProfileMenu({ userName, role, onSignOut }: {
             </div>
           )}
 
+          {/* Settings link (all roles) */}
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid #F3F4F6' }}>
+            <button
+              onClick={() => { setOpen(false); router.push('/dashboard/settings') }}
+              style={{
+                width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+                padding: '7px 8px', borderRadius: 6, fontSize: 13, color: '#374151',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              <span>設定</span>
+              <span style={{ color: '#9CA3AF', fontSize: 11 }}>→</span>
+            </button>
+          </div>
+
           {/* Sign out */}
           <div style={{ padding: '6px 8px' }}>
             <button

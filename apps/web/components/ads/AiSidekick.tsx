@@ -220,7 +220,11 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       })
       const submitData = await submitRes.json()
       if (!submitRes.ok || !submitData.operationName) {
-        setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
+        const noKey = submitData.error === 'NO_API_KEY'
+        setMessages(p => p.map(m => m.id === msgId ? {
+          ...m, videoLoading: false,
+          text: noKey ? '⚠️ 請先到「設定」頁面輸入你的 Gemini API Key 才能生成影片。\n[前往設定](/dashboard/settings)' : '',
+        } : m))
         return
       }
       const operationName: string = submitData.operationName
@@ -277,7 +281,10 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       })
       const data = await res.json()
       if (!res.ok) {
-        setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: data.error ?? `伺服器錯誤 (${res.status})`, time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
+        const errText = data.error === 'NO_API_KEY'
+          ? '⚠️ 請先到「設定」頁面輸入你的 Claude API Key 才能使用 AI Sidekick。\n[前往設定](/dashboard/settings)'
+          : data.error ?? `伺服器錯誤 (${res.status})`
+        setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: errText, time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
         return
       }
       const raw = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
