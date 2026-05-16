@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenAI } from '@google/genai'
 import { adminAuth } from '@/lib/firebase/admin'
-import { getUserApiKey } from '@/lib/userApiKeys'
+import { GoogleAuth } from 'google-auth-library'
 
 async function verifyAuth(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -16,75 +15,76 @@ async function verifyAuth(req: NextRequest): Promise<string | null> {
   }
 }
 
+function getAuthAndProject() {
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  if (!clientEmail || !privateKey) throw new Error('GCP Service Account not configured')
+  const projectId = clientEmail.split('@')[1].split('.')[0]
+  const auth = new GoogleAuth({
+    credentials: { client_email: clientEmail, private_key: privateKey },
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  })
+  return { auth, projectId }
+}
+
 export async function POST(req: NextRequest) {
-  const uid = await verifyAuth(req)
-  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const apiKey = await getUserApiKey(uid, 'gemini')
-  if (!apiKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'gemini' }, { status: 402 })
-
+  if (!(await verifyAuth(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { prompt, durationSeconds } = await req.json() as { prompt: string; durationSeconds?: number }
   if (!prompt?.trim()) return NextResponse.json({ error: 'Empty prompt' }, { status: 400 })
-
-  const duration = Math.min(Math.max(4, Math.round(durationSeconds ?? 5)), 8)
-
-  let ai: GoogleGenAI
-  try { ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1beta' } }) } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }) }
+  const duration = Math.min(Math.max(5, Math.round(durationSeconds ?? 5)), 8)
 
   try {
-    const operation = await ai.models.generateVideos({
-      model: 'veo-2.0-generate-001',
-      source: { prompt },
-      config: {
-        numberOfVideos: 1,
-        aspectRatio: '9:16',
-        resolution: '720p',
-        personGeneration: 'allow_adult',
-        durationSeconds: duration,
-      },
+    const { auth, projectId } = getAuthAndProject()
+    const token = await auth.getAccessToken()
+    const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/veo-2.0-generate-001:predictLongRunning`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instances: [{ prompt }],
+        parameters: {
+          aspectRatio: '9:16',
+          durationSeconds: duration,
+          sampleCount: 1,
+          personGeneration: 'allow_adult',
+        },
+      }),
     })
-    return NextResponse.json({ operationName: operation.name })
+    const data = await res.json()
+    if (!res.ok || data.error) {
+      return NextResponse.json({ error: data.error?.message ?? 'Veo request failed' }, { status: 500 })
+    }
+    return NextResponse.json({ operationName: data.name })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: 'Veo request failed: ' + msg }, { status: 500 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Internal error' }, { status: 500 })
   }
 }
 
 export async function GET(req: NextRequest) {
-  const uid = await verifyAuth(req)
-  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+  if (!(await verifyAuth(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const opName = req.nextUrl.searchParams.get('op')
   if (!opName) return NextResponse.json({ error: 'Missing op parameter' }, { status: 400 })
 
-  const apiKey = await getUserApiKey(uid, 'gemini')
-  if (!apiKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'gemini' }, { status: 402 })
-
   try {
-    // Poll via REST — SDK requires the full operation object which we can't reconstruct from name alone
-    const opRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${opName}?key=${apiKey}`)
-    const data = await opRes.json()
-
-    if (!opRes.ok || data.error) {
+    const { auth, projectId } = getAuthAndProject()
+    const token = await auth.getAccessToken()
+    const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/veo-2.0-generate-001:fetchPredictOperation`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operationName: opName }),
+    })
+    const data = await res.json()
+    if (!res.ok || data.error) {
       return NextResponse.json({ error: data.error?.message ?? 'Operation check failed' }, { status: 500 })
     }
-
     if (!data.done) return NextResponse.json({ done: false })
-
-    const videoUri: string | undefined = data.response?.generatedVideos?.[0]?.video?.uri
-    if (!videoUri) return NextResponse.json({ error: 'No video in response' }, { status: 500 })
-
-    // URI already contains query params — append key with &
-    const videoRes = await fetch(`${videoUri}&key=${apiKey}`)
-    if (!videoRes.ok) return NextResponse.json({ error: 'Failed to download video' }, { status: 500 })
-
-    const buf = await videoRes.arrayBuffer()
-    const videoData = Buffer.from(buf).toString('base64')
-    const mimeType = videoRes.headers.get('content-type') || 'video/mp4'
-
-    return NextResponse.json({ done: true, videoData, mimeType })
+    const video = data.response?.videos?.[0]
+    const b64 = video?.bytesBase64Encoded
+    const mime = video?.mimeType ?? 'video/mp4'
+    if (!b64) return NextResponse.json({ error: 'No video in response' }, { status: 500 })
+    return NextResponse.json({ done: true, videoData: b64, mimeType: mime })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: 'Operation check failed: ' + msg }, { status: 500 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Internal error' }, { status: 500 })
   }
 }
