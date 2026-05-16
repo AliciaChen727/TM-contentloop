@@ -94,7 +94,9 @@ ${metrics.topPosts?.length ? `
 ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 40)}... | 觸擊 ${p.reach} | 按讚 ${p.likes} | 互動率 ${p.engRate}%`).join('\n')}` : ''}`
 }
 
-function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW'): string {
+interface OrgCtx { name: string; type: string; coreKpi: string; extraContext: string }
+
+function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW', orgCtx?: OrgCtx | null): string {
   const isPostsContext = contextPage === 'posts' || contextPage === 'combined'
   const isCreativePage = contextPage === 'creative'
   const metricsBlock = metrics && Object.keys(metrics).length > 0 ? buildMetricsBlock(metrics, lang) : ''
@@ -104,7 +106,9 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
       ? 'You are an advertising expert specializing in ad creative analysis and recommendations. Only generate images when the user explicitly requests to "create", "generate", or "make" a new ad creative. Otherwise always return type: "analysis" or "recommendation".'
       : isPostsContext
         ? 'You are a social media content consultant specializing in Facebook and Instagram. Your core mission is to analyze post performance, identify high-engagement patterns, and provide specific actionable content optimization advice.'
-        : 'You are a senior Meta advertising consultant. Analyze ad account data and provide specific actionable optimization recommendations.\n\n[Important Context]: This is a Toastmasters International District 67 non-profit ad account. The main goal is to drive clicks on a registration link (Google Form) for events. Since there is no revenue:\n- **ROAS is meaningless for this account** (no revenue), ROAS = 0.00x is normal\n- **Core KPI is CPL (cost per registration click)**: Spend ÷ link clicks\n- Top priority: improve CTR and lower CPL\n- Google Form cannot track form completion rate; suggest UTM parameters + GA for tracking'
+        : orgCtx
+          ? `You are a senior Meta advertising consultant. Analyze ad account data and provide specific actionable optimization recommendations.\n\n[Important Context]: This is ${orgCtx.name} (${orgCtx.type}). Core KPI: ${orgCtx.coreKpi}.${orgCtx.extraContext ? '\n' + orgCtx.extraContext : ''}`
+          : 'You are a senior Meta advertising consultant. Analyze ad account data and provide specific actionable optimization recommendations.\n\n[Important Context]: This is a Toastmasters International District 67 non-profit ad account. The main goal is to drive clicks on a registration link (Google Form) for events. Since there is no revenue:\n- **ROAS is meaningless for this account** (no revenue), ROAS = 0.00x is normal\n- **Core KPI is CPL (cost per registration click)**: Spend ÷ link clicks\n- Top priority: improve CTR and lower CPL\n- Google Form cannot track form completion rate; suggest UTM parameters + GA for tracking'
 
     const memoryBlock = memory ? `\n## Past Analysis Memory (build on these conclusions)\n${memory}\n` : ''
 
@@ -138,8 +142,8 @@ If the user wants to generate but context is insufficient (no product, no audien
 **Force-generate override (overrides the "insufficient context" rule)**:
 If the user message contains "直接生成", "不需澄清", "不再澄清", "用預設", "就用現有資訊", "generate anyway", "force generate", "use defaults":
 → MUST generate immediately, do NOT ask for clarification again
-→ Use sensible defaults based on conversation history and current page context (e.g. Toastmasters District 67 ad account)
-→ Default scenario: Toastmasters non-profit recruitment / speech contest / public speaking training; visual style: professional, warm, encouraging, gold and deep blue
+→ Use sensible defaults based on conversation history and current page context${orgCtx ? ` (${orgCtx.name}, ${orgCtx.type}, KPI: ${orgCtx.coreKpi})` : ' (e.g. Toastmasters District 67 ad account)'}
+→ ${orgCtx ? `Default scenario: ${orgCtx.name} (${orgCtx.type}), core KPI: ${orgCtx.coreKpi}; use a visual style fitting the brand` : 'Default scenario: Toastmasters non-profit recruitment / speech contest / public speaking training; visual style: professional, warm, encouraging, gold and deep blue'}
 → Return type: "image_request" or "video_request" (infer from history whether the user wants image or video)
 
 **Note**: If the user is asking to "analyze", "diagnose", or "improve" an existing creative, do NOT return type: "image_request" — return analysis instead.
@@ -202,7 +206,9 @@ ${metricsBlock}`
     ? '你是一位廣告專家，擅長分析廣告素材表現與提供廣告建議。只有當用戶明確要求「生成」「做一張」「製作」新廣告素材時，才生成圖片。其他情況一律回傳 type: "analysis" 或 "recommendation"。'
     : isPostsContext
       ? '你是一位專精 Facebook 和 Instagram 社群經營的內容顧問，核心任務是協助分析貼文成效、找出高互動規律，並給出具體可執行的內容優化建議。'
-      : '你是一位專精 Meta 廣告投放的資深廣告顧問。負責分析廣告帳戶數據並給出具體可執行的優化建議。\n\n《重要背景》：本帳戶是 Toastmasters International District 67 的公益社團廣告帳戶。主要目標是透過臉書/IG 廣告吸引民眾點擊「報名連結」（Google Form）來參加活動。由於是公益組織、沒有金流，所以：\n- **ROAS 對此帳戶沒有意義**（沒有收益），請對 ROAS = 0.00x 不要疑惑，這是正常的\n- **核心 KPI 是 CPL（每次報名點擊成本）**：花費 ÷ 點擊報名連結的人數（以 link_click 數代替轉換數）\n- 最高優先度的優化方向：提升 CTR（讓更多人點進連結）與降低 CPL（降低每次點擊成本）\n- 目前 Google Form 無法紀錄填表完成率，若用戶詢問具體報名率，應說明此限制並建議將連結加上 UTM 參數後再透過 GA 監控'
+      : orgCtx
+        ? `你是一位專精 Meta 廣告投放的資深廣告顧問。負責分析廣告帳戶數據並給出具體可執行的優化建議。\n\n《重要背景》：本帳戶是「${orgCtx.name}」（${orgCtx.type}）。核心 KPI：${orgCtx.coreKpi}。${orgCtx.extraContext ? '\n' + orgCtx.extraContext : ''}`
+        : '你是一位專精 Meta 廣告投放的資深廣告顧問。負責分析廣告帳戶數據並給出具體可執行的優化建議。\n\n《重要背景》：本帳戶是 Toastmasters International District 67 的公益社團廣告帳戶。主要目標是透過臉書/IG 廣告吸引民眾點擊「報名連結」（Google Form）來參加活動。由於是公益組織、沒有金流，所以：\n- **ROAS 對此帳戶沒有意義**（沒有收益），請對 ROAS = 0.00x 不要疑惑，這是正常的\n- **核心 KPI 是 CPL（每次報名點擊成本）**：花費 ÷ 點擊報名連結的人數（以 link_click 數代替轉換數）\n- 最高優先度的優化方向：提升 CTR（讓更多人點進連結）與降低 CPL（降低每次點擊成本）\n- 目前 Google Form 無法紀錄填表完成率，若用戶詢問具體報名率，應說明此限制並建議將連結加上 UTM 參數後再透過 GA 監控'
 
   const memoryBlock = memory ? `\n## 過去分析記憶（請優先建立在這些結論上）\n${memory}\n` : ''
 
@@ -236,8 +242,8 @@ ${isCreativePage ? `## 🎯 素材庫模式
 **強制生成例外（覆蓋上述「資訊不足」規則）**：
 若用戶訊息含有「直接生成」「不需澄清」「不再澄清」「用預設」「就用現有資訊」等強制生成指示：
 → 必須立刻生成，**不得**再回澄清問題
-→ 依照對話歷史與當前頁面 context（例如 Toastmasters District 67 廣告帳戶）使用合理預設值
-→ 預設情境：Toastmasters 公益社團招生 / 演講比賽 / 新人說話訓練；視覺風格：專業正式、溫暖鼓勵、黃金色與深藍色調
+→ 依照對話歷史與當前頁面 context${orgCtx ? `（${orgCtx.name}，${orgCtx.type}，KPI：${orgCtx.coreKpi}）` : '（例如 Toastmasters District 67 廣告帳戶）'}使用合理預設值
+→ ${orgCtx ? `預設情境：${orgCtx.name}（${orgCtx.type}），核心 KPI：${orgCtx.coreKpi}；視覺風格配合品牌調性` : '預設情境：Toastmasters 公益社團招生 / 演講比賽 / 新人說話訓練；視覺風格：專業正式、溫暖鼓勵、黃金色與深藍色調'}
 → 回傳 type: "image_request" 或 "video_request"（看歷史對話判斷使用者要圖還是影片）
 
 **注意**：若用戶只是「詢問」「分析」「診斷」某個廣告素材，即使訊息中出現「廣告素材」「素材」等字眼，也**禁止**回傳 type: "image_request"，應回傳分析結果。
@@ -349,11 +355,13 @@ export async function POST(req: NextRequest) {
   if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
-  // Retrieve user language preference
+  // Retrieve user language preference and organization context
   const prefSnap = await adminDb.collection('users').doc(uid).collection('settings').doc('preferences').get()
-  const lang: 'zh-TW' | 'en' = prefSnap.data()?.language === 'en' ? 'en' : 'zh-TW'
+  const prefData = prefSnap.data()
+  const lang: 'zh-TW' | 'en' = prefData?.language === 'en' ? 'en' : 'zh-TW'
+  const orgCtx: OrgCtx | null = prefData?.organizationContext ?? null
 
-  const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined, lang)
+  const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx)
 
   // Build user message content (text + optional files)
   const userContent: Anthropic.MessageParam['content'] = []

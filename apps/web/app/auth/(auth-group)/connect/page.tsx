@@ -95,7 +95,7 @@ function ConnectContent() {
             <div>
               <p className="text-xs font-semibold text-gray-800">選擇商家</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                只勾選 <strong className="text-gray-700">{pageLabel || '你所在分會'}</strong> 相關商家，其餘商家<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
+                只勾選 <strong className="text-gray-700">{pageLabel || '你的品牌/組織'}</strong> 相關商家，其餘商家<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
               </p>
             </div>
           </div>
@@ -106,7 +106,7 @@ function ConnectContent() {
             <div>
               <p className="text-xs font-semibold text-gray-800">選擇粉絲專頁</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                只勾選 <strong className="text-gray-700">{pageLabel ? `「${pageLabel}」` : '你所在分會的粉絲專頁'}</strong>，其他粉專<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
+                只勾選 <strong className="text-gray-700">{pageLabel ? `「${pageLabel}」` : '你的品牌粉絲專頁'}</strong>，其他粉專<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
               </p>
             </div>
           </div>
