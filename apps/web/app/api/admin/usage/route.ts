@@ -28,12 +28,13 @@ export async function GET(req: NextRequest) {
 
   const month = req.nextUrl.searchParams.get('month') ?? new Date().toISOString().slice(0, 7)
 
-  const usersSnap = await adminDb.collection('users').get()
+  // Use collectionGroup so we find usage docs even when users/{uid} parent doc has no fields
+  const usageSnap = await adminDb.collectionGroup('usage').get()
+  const monthDocs = usageSnap.docs.filter(d => d.id === month)
 
   const results = await Promise.all(
-    usersSnap.docs.map(async (userDoc) => {
-      const userId = userDoc.id
-      const usageDoc = await adminDb.collection('users').doc(userId).collection('usage').doc(month).get()
+    monthDocs.map(async (usageDoc) => {
+      const userId = usageDoc.ref.parent.parent!.id
       const usage = usageDoc.data()
 
       const imageCount: number = usage?.imageCount ?? 0
