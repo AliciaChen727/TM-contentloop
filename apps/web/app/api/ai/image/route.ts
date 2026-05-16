@@ -2,12 +2,15 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { GoogleAuth } from 'google-auth-library'
+import { recordImageGeneration } from '@/lib/usage'
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let uid: string
   try {
-    await adminAuth.verifyIdToken(idToken)
+    const decoded = await adminAuth.verifyIdToken(idToken)
+    uid = decoded.uid
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
     const b64 = data.predictions?.[0]?.bytesBase64Encoded
     const mime = data.predictions?.[0]?.mimeType ?? 'image/jpeg'
     if (!b64) return NextResponse.json({ error: 'No image in response' }, { status: 500 })
+    await recordImageGeneration(uid)
     return NextResponse.json({ imageData: b64, mimeType: mime })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Internal server error' }, { status: 500 })

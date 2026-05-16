@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { GoogleAuth } from 'google-auth-library'
+import { recordVideoGeneration } from '@/lib/usage'
 
 async function verifyAuth(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -28,7 +29,8 @@ function getAuthAndProject() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await verifyAuth(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const uid = await verifyAuth(req)
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { prompt, durationSeconds } = await req.json() as { prompt: string; durationSeconds?: number }
   if (!prompt?.trim()) return NextResponse.json({ error: 'Empty prompt' }, { status: 400 })
   const duration = Math.min(Math.max(5, Math.round(durationSeconds ?? 5)), 8)
@@ -54,6 +56,7 @@ export async function POST(req: NextRequest) {
     if (!res.ok || data.error) {
       return NextResponse.json({ error: data.error?.message ?? 'Veo request failed' }, { status: 500 })
     }
+    await recordVideoGeneration(uid, duration)
     return NextResponse.json({ operationName: data.name })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Internal error' }, { status: 500 })
