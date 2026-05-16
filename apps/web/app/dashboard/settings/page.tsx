@@ -76,7 +76,7 @@ export default function SettingsPage() {
       ])
       if (keysRes.ok) {
         const data = await keysRes.json()
-        setKeySet({ anthropic: !!data.anthropic, gemini: !!data.gemini })
+        setKeySet({ anthropic: !!data.anthropic })
       }
       if (prefRes.ok) {
         const data = await prefRes.json()
