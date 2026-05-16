@@ -176,17 +176,27 @@ ${memoryBlock}
 - Meta Audience Insights: [Audience Insights](https://business.facebook.com/audience-insights)
 - Meta Blueprint: [Meta Blueprint](https://www.facebook.com/business/learn)
 
+## Copy A/B Test Request
+When the user pastes ad copy and asks for "A/B test versions", "optimize copy", "give me variants", or similar:
+→ Return type: "copy_variants" with non-empty copyVariants array and empty bullets/actions/stats
+→ copyVariants must contain exactly 3 items:
+  1. label: "Control (Original)" — copy field = original text unchanged
+  2. label: "Test A" — optimized for stronger CTA or emotional appeal
+  3. label: "Test B" — alternative angle: simpler, different target audience perspective
+→ rationale: one sentence explaining what changed and why
+
 ## Response Format
 Always respond in English. Output pure JSON directly — no markdown code block, no explanation text, only JSON:
 {
-  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request" | "video_request",
+  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request" | "video_request" | "copy_variants",
   "summary": "One-sentence conclusion with the most critical metric numbers",
   "bullets": ["Key point 1 (with data)", "Key point 2 (with judgment)", "Key point 3", "Key point 4"],
   "stats": [{"label": "Metric name", "value": "Value (with unit)"}],
   "actions": ["Specific action 1 (with target and number)", "Specific action 2", "Specific action 3"],
   "imagePrompt": "(only when type is image_request) English image generation prompt",
   "videoPrompt": "(only when type is video_request) English video generation prompt",
-  "videoDuration": 5
+  "videoDuration": 5,
+  "copyVariants": "(only when type is copy_variants) [{\"label\": \"...\", \"copy\": \"...\", \"rationale\": \"...\"}]"
 }
 
 Rules:
@@ -198,6 +208,7 @@ Rules:
 - For image generation: imagePrompt format: "Professional Facebook/Instagram ad for [topic], [style], vibrant colors, clean modern design, high quality. No text, no typography, no letters, clean background space for layout."
 - For video generation: videoPrompt format: "Vertical 9:16 short video for [topic], [visual description], cinematic lighting, smooth motion, professional quality"
 - videoDuration: recommended seconds (4–8 integer, minimum 4), 5 for short hooks, 8 for full scenes
+- For copy_variants: copyVariants must have exactly 3 items; bullets/actions/stats must be empty arrays
 ${metricsBlock}`
   }
 
@@ -278,17 +289,27 @@ ${memoryBlock}
 - Meta Audience Insights：[Audience Insights](https://business.facebook.com/audience-insights)
 - Meta Blueprint（廣告學習）：[Meta Blueprint](https://www.facebook.com/business/learn)
 
+## 文案 A/B 測試請求
+當用戶貼上廣告文案並說「A/B 測試」「給我幾個版本」「優化文案」「幫我優化出測試版本」等：
+→ 回傳 type: "copy_variants"，copyVariants 必填，bullets/actions/stats 均為空陣列
+→ copyVariants 必須包含 3 個項目：
+  1. label: "控制組（原版）" — copy 欄位保留原文不動
+  2. label: "測試版 A" — 優化方向：強化 CTA 或情緒訴求
+  3. label: "測試版 B" — 換一個角度：更簡潔或不同受眾視角
+→ rationale：一句話說明改了什麼、為什麼
+
 ## 回傳格式
 繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止任何說明文字，只輸出 JSON：
 {
-  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request" | "video_request",
+  "type": "analysis" | "recommendation" | "warning" | "actions" | "general" | "image_request" | "video_request" | "copy_variants",
   "summary": "一句話結論，包含最關鍵的指標數字",
   "bullets": ["重點1（含數據）", "重點2（含判斷）", "重點3", "重點4"],
   "stats": [{"label": "指標名", "value": "數值（含單位）"}],
   "actions": ["具體行動1（含對象與數字）", "具體行動2", "具體行動3"],
   "imagePrompt": "（僅在 type 為 image_request 時填入）英文圖像生成提示詞",
   "videoPrompt": "（僅在 type 為 video_request 時填入）英文影片生成提示詞",
-  "videoDuration": 5
+  "videoDuration": 5,
+  "copyVariants": "（僅在 type 為 copy_variants 時填入）[{\"label\": \"...\", \"copy\": \"...\", \"rationale\": \"...\"}]"
 }
 
 規則：
@@ -305,6 +326,7 @@ ${memoryBlock}
   - 回傳 type: "video_request"
   - videoPrompt：英文提示詞，格式：「Vertical 9:16 short video for [主題], [視覺描述], cinematic lighting, smooth motion, professional quality」
   - videoDuration：建議秒數（1–8 整數），短 hook 用 5，完整場景用 8；若用戶未指定預設 5
+- copy_variants 時：copyVariants 必須包含 3 個物件，bullets/actions/stats 必須為空陣列
 ${metricsBlock}`
 }
 
@@ -371,9 +393,9 @@ export async function POST(req: NextRequest) {
     } else if (att.type === 'pdf') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: att.content } } as any)
-    } else if (att.type === 'video' && att.videoUrl) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      userContent.push({ type: 'video', source: { type: 'url', url: att.videoUrl } } as any)
+    } else if (att.type === 'video') {
+      // Claude API does not support video content blocks — pass as text reference
+      userContent.push({ type: 'text', text: `使用者上傳了影片「${att.name}」${att.videoUrl ? `（${att.videoUrl}）` : ''}。Claude 目前無法直接分析影片畫面，請根據使用者的問題提供建議，若需要影片細節，請告知使用者以文字描述影片主題或畫面內容。` })
     } else if (att.type === 'text') {
       userContent.push({ type: 'text', text: `以下是上傳的檔案「${att.name}」內容：\n\`\`\`\n${att.content.slice(0, 8000)}\n\`\`\`` })
     }
@@ -424,9 +446,11 @@ export async function POST(req: NextRequest) {
     const p = parsed as Record<string, unknown>
     if (p.type !== 'image_request') delete p.imagePrompt
     if (p.type !== 'video_request') { delete p.videoPrompt; delete p.videoDuration }
-    if (p.type === 'image_request' || p.type === 'video_request') {
+    if (p.type !== 'copy_variants') delete p.copyVariants
+    if (p.type === 'image_request' || p.type === 'video_request' || p.type === 'copy_variants') {
       p.bullets = []
       p.actions = []
+      p.stats = []
     }
   }
 

@@ -5,6 +5,8 @@ import { auth } from '@/lib/firebase/client'
 import { uploadVideoForAnalysis } from '@/lib/firebase/storage'
 import { Icon } from './Icon'
 
+interface CopyVariant { label: string; copy: string; rationale: string }
+
 interface AiResponse {
   type: string
   summary: string
@@ -14,6 +16,7 @@ interface AiResponse {
   imagePrompt?: string
   videoPrompt?: string
   videoDuration?: number
+  copyVariants?: CopyVariant[]
 }
 
 export interface MetricsContext {
@@ -53,8 +56,8 @@ interface HistorySession { sessionId: string; date: string; contextPage: string;
 
 const SUGGESTIONS_BY_PAGE: Record<string, string[]> = {
   posts: ['這期間哪類貼文互動率最高？', '我的 Reels 和圖文貼文哪個表現更好？', '如何優化下一篇貼文的文案？', '分享數偏低的原因可能是什麼？'],
-  creative: ['幫我生成一張廣告素材', '根據表現最差的廣告建議新素材方向', '如何改善 CTR 偏低的廣告圖？', '哪種圖文風格最適合這個受眾？'],
-  default: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '我的受眾是否疲乏了？', '幫我生成一張廣告素材'],
+  creative: ['幫我生成一張廣告素材', '根據表現最差的廣告建議新素材方向', '貼上文案，幫我優化出 A/B 測試版本', '如何改善 CTR 偏低的廣告圖？'],
+  default: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '貼上文案，幫我優化出 A/B 測試版本', '幫我生成一張廣告素材'],
 }
 
 const CTX_LABELS: Record<string, string> = { overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', time: '最佳時段', budget: '預算模擬', posts: '內容表現' }
@@ -94,6 +97,35 @@ function renderWithLinks(text: string): React.ReactNode {
     }
   }
   return result
+}
+
+function CopyVariantCard({ v }: { v: CopyVariant }) {
+  const [copied, setCopied] = useState(false)
+  const isControl = v.label.includes('控制組') || v.label.toLowerCase().includes('control')
+  const isA = v.label.includes('A') || v.label.toLowerCase().includes('test a')
+  const badgeColor = isControl ? { bg: '#f1f5f9', color: '#64748b' } : isA ? { bg: '#dbeafe', color: '#1d4ed8' } : { bg: '#ffedd5', color: '#c2410c' }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(v.copy).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div style={{ borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', padding: '10px 12px', marginBottom: 8 }}>
+      <div style={{ marginBottom: 6 }}>
+        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: badgeColor.bg, color: badgeColor.color }}>{v.label}</span>
+      </div>
+      <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ad-text)', margin: '0 0 8px', whiteSpace: 'pre-wrap', userSelect: 'text' }}>{v.copy}</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 11, color: 'var(--ad-text3)', flex: 1 }}>{v.rationale}</span>
+        <button onClick={handleCopy} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: copied ? '#dcfce7' : 'var(--ad-bg)', color: copied ? '#16a34a' : 'var(--ad-text2)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', fontFamily: 'inherit' }}>
+          {copied ? '✓ 已複製' : '📋 複製'}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) => void }) {
@@ -141,7 +173,12 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
-      {r.summary && <p style={{ marginBottom: r.bullets.length ? 8 : 0 }}>{renderWithLinks(r.summary.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim())}</p>}
+      {r.summary && <p style={{ marginBottom: (r.copyVariants?.length || r.bullets.length) ? 8 : 0 }}>{renderWithLinks(r.summary.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim())}</p>}
+      {r.copyVariants && r.copyVariants.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          {r.copyVariants.map((v, i) => <CopyVariantCard key={i} v={v} />)}
+        </div>
+      )}
       {r.bullets.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
           {r.bullets.map((b, i) => <li key={i} style={{ display: 'flex', gap: 6 }}><span style={{ color: 'var(--ad-blue)' }}>▸</span><span>{renderWithLinks(b)}</span></li>)}

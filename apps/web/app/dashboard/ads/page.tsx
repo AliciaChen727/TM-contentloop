@@ -323,6 +323,8 @@ export default function AdsPage() {
   const [canSync, setCanSync] = useState(false)
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
+  const [creativeLabels, setCreativeLabels] = useState<Record<string, 'A' | 'B' | 'control'>>({})
+  const [idTokenRef, setIdTokenRef] = useState('')
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: AdMetricsMap; igPostIds: Set<string>; igPostMetrics: AdMetricsMap }> {
@@ -386,6 +388,8 @@ export default function AdsPage() {
           fetch(`/api/ads/data${qs}`, { headers }),
         ])
 
+        setIdTokenRef(idToken)
+
         const adJson = adRes.ok ? await adRes.json() : null
         const initialAdPostIds = new Set<string>(adJson?.data?.adPostIds ?? [])
         const initialAdPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }> = adJson?.data?.adPostMetrics ?? {}
@@ -394,6 +398,14 @@ export default function AdsPage() {
         if (adJson?.data) {
           setAdData(buildAdData(adJson.data))
           setLastSync(adJson.data.syncedAt ?? null)
+        }
+
+        if (pageId) {
+          const labelsRes = await fetch(`/api/ads/labels?pageId=${pageId}`, { headers })
+          if (labelsRes.ok) {
+            const labelsJson = await labelsRes.json()
+            setCreativeLabels(labelsJson.labels ?? {})
+          }
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -808,7 +820,13 @@ export default function AdsPage() {
             <>
               {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
-              {active === 'creative' && <CreativeSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
+              {active === 'creative' && <CreativeSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} creativeLabels={creativeLabels} onLabelChange={selectedPageId ? async (adId, variant) => {
+                setCreativeLabels(prev => {
+                  if (variant === null) { const n = { ...prev }; delete n[adId]; return n }
+                  return { ...prev, [adId]: variant }
+                })
+                await fetch('/api/ads/labels', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, adId, variant }) })
+              } : undefined} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} />}
