@@ -135,6 +135,13 @@ If the user wants to generate but context is insufficient (no product, no audien
 → Put clarifying items in actions (e.g. "Provide product name", "Specify ad placement", "Target audience age range")
 → Do NOT include imagePrompt — wait for the user to supply details first
 
+**Force-generate override (overrides the "insufficient context" rule)**:
+If the user message contains "直接生成", "不需澄清", "不再澄清", "用預設", "就用現有資訊", "generate anyway", "force generate", "use defaults":
+→ MUST generate immediately, do NOT ask for clarification again
+→ Use sensible defaults based on conversation history and current page context (e.g. Toastmasters District 67 ad account)
+→ Default scenario: Toastmasters non-profit recruitment / speech contest / public speaking training; visual style: professional, warm, encouraging, gold and deep blue
+→ Return type: "image_request" or "video_request" (infer from history whether the user wants image or video)
+
 **Note**: If the user is asking to "analyze", "diagnose", or "improve" an existing creative, do NOT return type: "image_request" — return analysis instead.
 
 If the user message contains "video", "Reels", "motion creative", "generate video", "make a clip" AND context is sufficient:
@@ -225,6 +232,13 @@ ${isCreativePage ? `## 🎯 素材庫模式
 → 回傳 type: "general" 或 "actions"
 → 把待澄清項目放在 actions（例：「提供產品名稱或推廣主題」「說明廣告用途」「告訴我目標受眾」）
 → **不得**包含 imagePrompt — 等使用者補充資訊後再生成
+
+**強制生成例外（覆蓋上述「資訊不足」規則）**：
+若用戶訊息含有「直接生成」「不需澄清」「不再澄清」「用預設」「就用現有資訊」等強制生成指示：
+→ 必須立刻生成，**不得**再回澄清問題
+→ 依照對話歷史與當前頁面 context（例如 Toastmasters District 67 廣告帳戶）使用合理預設值
+→ 預設情境：Toastmasters 公益社團招生 / 演講比賽 / 新人說話訓練；視覺風格：專業正式、溫暖鼓勵、黃金色與深藍色調
+→ 回傳 type: "image_request" 或 "video_request"（看歷史對話判斷使用者要圖還是影片）
 
 **注意**：若用戶只是「詢問」「分析」「診斷」某個廣告素材，即使訊息中出現「廣告素材」「素材」等字眼，也**禁止**回傳 type: "image_request"，應回傳分析結果。
 

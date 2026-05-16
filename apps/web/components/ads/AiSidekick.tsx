@@ -125,6 +125,12 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
     onSend(parts.join('\n'))
   }
 
+  function handleForceGenerate() {
+    if (submitted) return
+    setSubmitted(true)
+    onSend('直接生成（不需澄清，請依目前上下文使用合理預設值直接生成素材）')
+  }
+
   const submitCount = checked.size + (otherText.trim() ? 1 : 0)
 
   return (
@@ -169,12 +175,18 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSubmit() } }} placeholder="其他補充（選填）…"
                 onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
                 style={{ width: '100%', fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 6, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 10, color: 'var(--ad-text3)' }}>Enter 換行　Shift+Enter 送出</div>
-                <button onClick={handleSubmit} disabled={submitCount === 0}
-                  style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: submitCount === 0 ? 'default' : 'pointer', opacity: submitCount === 0 ? 0.4 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                  送出{submitCount > 0 ? ` (${submitCount} 項)` : ''}
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={handleForceGenerate}
+                    style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-surface)', color: 'var(--ad-text2)', border: '1px solid var(--ad-border)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    ⚡ 直接生成
+                  </button>
+                  <button onClick={handleSubmit} disabled={submitCount === 0}
+                    style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: submitCount === 0 ? 'default' : 'pointer', opacity: submitCount === 0 ? 0.4 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    送出{submitCount > 0 ? ` (${submitCount} 項)` : ''}
+                  </button>
+                </div>
               </div>
             </div>
           )}
