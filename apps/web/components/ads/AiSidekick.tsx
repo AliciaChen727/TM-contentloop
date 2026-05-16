@@ -132,9 +132,11 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
   }
 
   const submitCount = checked.size + (otherText.trim() ? 1 : 0)
-  const generationContext = /生成|素材|廣告圖|廣告素材|Reels|影片|廣告創意|生圖|做.*圖/i.test(
-    [r.summary ?? '', ...(r.bullets ?? []), ...(r.actions ?? [])].join(' ')
-  )
+  const contextText = [r.summary ?? '', ...(r.bullets ?? []), ...(r.actions ?? [])].join(' ')
+  const isVideoContext = /影片|Reels|動態素材|短片/i.test(contextText)
+  const isImageContext = /素材|廣告圖|廣告素材|圖片|廣告創意|生圖|做.*圖/i.test(contextText)
+  const generationContext = isImageContext || isVideoContext
+  const forceLabel = isVideoContext && !isImageContext ? '⚡ 直接生成影片' : '⚡ 直接生成圖片'
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
@@ -184,7 +186,7 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
                   {generationContext && (
                     <button onClick={handleForceGenerate}
                       style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-surface)', color: 'var(--ad-text2)', border: '1px solid var(--ad-border)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                      ⚡ 直接生成
+                      {forceLabel}
                     </button>
                   )}
                   <button onClick={handleSubmit} disabled={submitCount === 0}
