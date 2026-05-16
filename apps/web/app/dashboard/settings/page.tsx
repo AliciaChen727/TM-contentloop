@@ -24,7 +24,7 @@ const KEY_BLOCKS: KeyBlock[] = [
     label: 'Claude API Key',
     placeholder: 'sk-ant-api03-...',
     hint: '用於 AI Sidekick 問答功能',
-    cost: '參考成本：Claude Sonnet 4.5 約 $3/M input、$15/M output tokens，每次對話約 $0.01–0.03 美元',
+    cost: '參考成本：Claude Haiku 4.5 約 $0.80/M input、$4/M output tokens，每次對話約 $0.001–0.005 美元',
     helpUrl: 'https://console.anthropic.com/settings/keys',
     helpLabel: 'Anthropic Console',
   },
