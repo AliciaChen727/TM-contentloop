@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   try {
     const ai = new GoogleGenAI({ apiKey })
     const result = await ai.models.generateImages({
-      model: 'imagen-3.0-fast-generate-001',
+      model: 'imagen-3.0-generate-001',
       prompt,
       config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
     })

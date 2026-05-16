@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const { prompt, durationSeconds } = await req.json() as { prompt: string; durationSeconds?: number }
   if (!prompt?.trim()) return NextResponse.json({ error: 'Empty prompt' }, { status: 400 })
 
-  const duration = Math.min(Math.max(1, Math.round(durationSeconds ?? 5)), 8)
+  const duration = Math.min(Math.max(4, Math.round(durationSeconds ?? 5)), 8)
 
   let ai: GoogleGenAI
   try { ai = new GoogleGenAI({ apiKey }) } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }) }

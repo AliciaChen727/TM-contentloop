@@ -169,7 +169,7 @@ Rules:
 - if all data is 0 or missing, use type "warning" and explain incomplete data in summary
 - For image generation: imagePrompt format: "Professional Facebook/Instagram ad for [topic], [style], vibrant colors, clean modern design, high quality. No text, no typography, no letters, clean background space for layout."
 - For video generation: videoPrompt format: "Vertical 9:16 short video for [topic], [visual description], cinematic lighting, smooth motion, professional quality"
-- videoDuration: recommended seconds (1–8 integer), 5 for short hooks, 8 for full scenes
+- videoDuration: recommended seconds (4–8 integer, minimum 4), 5 for short hooks, 8 for full scenes
 ${metricsBlock}`
   }
 

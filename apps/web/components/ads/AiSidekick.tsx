@@ -597,7 +597,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                               <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 5)}
                                 onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
                                 style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
+                                {[4,5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
                               </select>
                               <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={() => {
                                 const prompt = editedVideoPrompts[msg.id] ?? msg.response?.videoPrompt ?? ''
