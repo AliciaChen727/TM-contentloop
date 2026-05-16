@@ -74,6 +74,7 @@ interface Message {
   imageError?: string
   videoUrl?: string
   videoLoading?: boolean
+  videoError?: string
   videoDuration?: number
   filePreviews?: { name: string; type: string }[]
   noApiKey?: boolean
@@ -256,7 +257,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const data = await res.json()
       if (!res.ok || !data.imageData) {
         setMessages(p => p.map(m => m.id === msgId
-          ? { ...m, imageLoading: false, noApiKey: data.error === 'NO_API_KEY' || undefined, imageError: data.error === 'NO_API_KEY' ? undefined : (data.error ?? '圖片生成失敗，請重試') }
+          ? { ...m, imageLoading: false, imageError: data.error ?? '圖片生成失敗，請重試' }
           : m))
         return
       }
@@ -283,8 +284,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       if (!submitRes.ok || !submitData.operationName) {
         setMessages(p => p.map(m => m.id === msgId ? {
           ...m, videoLoading: false,
-          noApiKey: submitData.error === 'NO_API_KEY' || undefined,
-          text: submitData.error === 'NO_API_KEY' ? '' : (submitData.error ?? '影片生成失敗'),
+          videoError: submitData.error ?? '影片生成失敗',
         } : m))
         return
       }
@@ -699,6 +699,11 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           )
                         })()}
                         {msg.videoLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎬 生成 Reels 中⋯ 預計需要 1–3 分鐘</div>}
+                        {msg.videoError && (
+                          <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>
+                            <div style={{ color: '#ef4444' }}>❌ {msg.videoError}</div>
+                          </div>
+                        )}
                         {msg.videoUrl && (() => {
                           const regenVideo = () => {
                             const prompt = editedVideoPrompts[msg.id] ?? msg.response?.videoPrompt ?? ''
