@@ -173,10 +173,10 @@ function ExperimentResultCard({ creatives, labels }: {
     return null
   })()
 
-  const rows: { label: string; stats: GroupStats; variant: Variant }[] = []
-  if (controlStats) rows.push({ label: '控制組（原版）', stats: controlStats, variant: 'control' })
-  if (aStats) rows.push({ label: 'A 版（AI 建議）', stats: aStats, variant: 'A' })
-  if (bStats) rows.push({ label: 'B 版（測試）', stats: bStats, variant: 'B' })
+  const rows: { stats: GroupStats; variant: Variant }[] = []
+  if (controlStats) rows.push({ stats: controlStats, variant: 'control' })
+  if (aStats) rows.push({ stats: aStats, variant: 'A' })
+  if (bStats) rows.push({ stats: bStats, variant: 'B' })
 
   return (
     <div style={{ marginBottom: 16, borderRadius: 12, border: '1.5px solid #bfdbfe', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', padding: '14px 16px' }}>
@@ -186,7 +186,7 @@ function ExperimentResultCard({ creatives, labels }: {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {rows.map(({ label, stats, variant }) => {
+        {rows.map(({ stats, variant }) => {
           const isBase = variant === 'control' || (!hasControl && variant === 'A')
           const style = VARIANT_STYLE[variant]
           return (
