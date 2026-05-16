@@ -43,5 +43,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ pages })
+  // Check if user is owner of any page
+  let isOwner = false
+  for (const page of pages) {
+    const adminDoc = await adminDb.collection('pages').doc(page.pageId).collection('admins').doc(uid).get()
+    if (adminDoc.data()?.isOwner === true) { isOwner = true; break }
+  }
+
+  return NextResponse.json({ pages, isOwner })
 }

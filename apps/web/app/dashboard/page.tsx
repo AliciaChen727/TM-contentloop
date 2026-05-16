@@ -73,6 +73,7 @@ export default function DashboardPage() {
   const [addPageInput, setAddPageInput] = useState('')
   const [addPageError, setAddPageError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
   const [userName, setUserName] = useState('')
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
@@ -99,6 +100,7 @@ export default function DashboardPage() {
         const d = await pagesRes.json()
         pageList = d.pages ?? []
         setPages(pageList)
+        setIsOwner(d.isOwner ?? false)
       }
 
       // Fallback: try legacy metaTokens/page doc for display name
@@ -268,6 +270,7 @@ export default function DashboardPage() {
             <ProfileMenu
               userName={userName}
               role={isAdmin ? 'admin' : 'viewer'}
+              isOwner={isOwner}
               onSignOut={handleSignOut}
             />
             <div className="flex items-center gap-2">

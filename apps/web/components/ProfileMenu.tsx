@@ -2,9 +2,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-export function ProfileMenu({ userName, role, onSignOut }: {
+export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
   userName: string
   role: 'admin' | 'viewer'
+  isOwner?: boolean
   onSignOut: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -68,6 +69,25 @@ export function ProfileMenu({ userName, role, onSignOut }: {
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
                 <span>成員管理</span>
+                <span style={{ color: '#9CA3AF', fontSize: 11 }}>→</span>
+              </button>
+            </div>
+          )}
+
+          {/* Usage report (owner only) */}
+          {isOwner && (
+            <div style={{ padding: '6px 8px', borderBottom: '1px solid #F3F4F6' }}>
+              <button
+                onClick={() => { setOpen(false); router.push('/dashboard/admin') }}
+                style={{
+                  width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '7px 8px', borderRadius: 6, fontSize: 13, color: '#374151',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >
+                <span>用量成本報表</span>
                 <span style={{ color: '#9CA3AF', fontSize: 11 }}>→</span>
               </button>
             </div>
