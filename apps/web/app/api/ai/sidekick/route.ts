@@ -267,11 +267,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { message, contextPage, metricsContext, fileAttachment } = body as {
+  const { message, contextPage, metricsContext, fileAttachment, history } = body as {
     message: string
     contextPage: string
     metricsContext?: MetricsContext
     fileAttachment?: { type: 'image' | 'pdf' | 'text'; mimeType: string; content: string; name: string }
+    history?: { role: 'user' | 'assistant'; text: string }[]
   }
 
   if (!message?.trim() && !fileAttachment) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
@@ -320,13 +321,22 @@ export async function POST(req: NextRequest) {
   }
   if (message?.trim()) userContent.push({ type: 'text', text: message })
 
+  // Build multi-turn message array with conversation history
+  const claudeMessages: Anthropic.MessageParam[] = []
+  if (history && history.length > 0) {
+    for (const h of history) {
+      claudeMessages.push({ role: h.role, content: h.text })
+    }
+  }
+  claudeMessages.push({ role: 'user', content: userContent })
+
   let claudeRes
   try {
     claudeRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
+      messages: claudeMessages,
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

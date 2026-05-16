@@ -264,6 +264,21 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     const att = attachment !== undefined ? attachment : fileAttachment
     if (!t.trim() && !att) return
     const now = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+
+    // Build conversation history for multi-turn context (exclude init/special messages, cap at 10)
+    const history = messages
+      .filter(m => m.id !== 'm0' && !m.noApiKey && !m.imageLoading && !m.videoLoading)
+      .slice(-10)
+      .map(m => {
+        if (m.role === 'user') return { role: 'user' as const, text: m.text }
+        if (m.response) {
+          const parts = [m.response.summary, ...m.response.bullets.slice(0, 2)].filter(Boolean)
+          return { role: 'assistant' as const, text: parts.join('\n') }
+        }
+        return m.text ? { role: 'assistant' as const, text: m.text } : null
+      })
+      .filter((m): m is { role: 'user' | 'assistant'; text: string } => m !== null && !!m.text)
+
     setMessages(p => [...p, {
       id: Date.now() + 'u', role: 'user', text: t, time: now,
       filePreview: att ? { name: att.name, type: att.type } : undefined,
@@ -278,7 +293,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/sidekick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachment: att ?? undefined }),
+        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachment: att ?? undefined, history }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -301,7 +316,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     } finally {
       setTyping(false)
     }
-  }, [input, fileAttachment, contextPage, metricsContext, generateImage, generateVideo])
+  }, [input, fileAttachment, contextPage, metricsContext, generateImage, generateVideo, messages])
 
   // Auto-send when creative pin triggers
   useEffect(() => {
