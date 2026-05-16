@@ -24,22 +24,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const ai = new GoogleGenAI({ apiKey })
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-preview-image-generation',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: { responseModalities: ['IMAGE', 'TEXT'] },
+    const result = await ai.models.generateImages({
+      model: 'imagen-3.0-generate-002',
+      prompt,
+      config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
     })
 
-    const parts = result.candidates?.[0]?.content?.parts ?? []
-    const imagePart = parts.find(p => p.inlineData?.data)
-    if (!imagePart?.inlineData?.data) {
-      return NextResponse.json({ error: 'No image in response' }, { status: 500 })
-    }
+    const b64 = result.generatedImages?.[0]?.image?.imageBytes
+    if (!b64) return NextResponse.json({ error: 'No image in response' }, { status: 500 })
 
-    return NextResponse.json({
-      imageData: imagePart.inlineData.data,
-      mimeType: imagePart.inlineData.mimeType ?? 'image/png',
-    })
+    return NextResponse.json({ imageData: b64, mimeType: 'image/jpeg' })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Image generation failed'
     return NextResponse.json({ error: msg }, { status: 500 })

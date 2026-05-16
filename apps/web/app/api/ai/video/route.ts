@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const operation = await ai.models.generateVideos({
-      model: 'veo-3.0-generate-preview',
+      model: 'veo-2.0-generate-001',
       source: { prompt },
       config: {
         numberOfVideos: 1,
