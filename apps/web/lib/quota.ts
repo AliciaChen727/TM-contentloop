@@ -15,7 +15,12 @@ export interface SubscriptionDoc {
   currentPeriodEnd?: FirebaseFirestore.Timestamp
 }
 
+const OWNER_UIDS = new Set(
+  (process.env.OWNER_UIDS ?? '').split(',').map(s => s.trim()).filter(Boolean)
+)
+
 export async function getTier(uid: string): Promise<Tier> {
+  if (OWNER_UIDS.has(uid)) return 'pro'
   const doc = await adminDb.collection('users').doc(uid).collection('subscription').doc('current').get()
   if (!doc.exists) return 'free'
   const data = doc.data() as SubscriptionDoc
