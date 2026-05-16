@@ -33,7 +33,7 @@ const KEY_BLOCKS: KeyBlock[] = [
     label: 'Gemini API Key',
     placeholder: 'AIza...',
     hint: '用於影片生成（Veo）與圖片生成（Imagen）功能',
-    cost: '參考成本：Imagen 3 Fast 約 $0.02 美元 / 張、Veo 2 約 $0.50 美元 / 秒（5 秒影片 ≈ $2.50 美元）。目前此功能由平台支付（Vertex AI），暫不需設定自己的 Key',
+    cost: '參考成本：Imagen 3 Fast 約 $0.02 美元 / 張、Veo 2 約 $0.50 美元 / 秒（5 秒影片 ≈ $2.50 美元）。',
     helpUrl: 'https://aistudio.google.com/app/apikey',
     helpLabel: 'Google AI Studio',
   },
