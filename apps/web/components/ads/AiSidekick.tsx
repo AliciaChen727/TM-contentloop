@@ -681,7 +681,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                 onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); regenImage() } }}
                                 style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                              <button className="ads-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={regenImage}>↻ 重新生成</button>
+                              <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                                <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenImage}>↻ 重新生成</button>
+                                <a href={msg.imageUrl} download="ad-creative.jpg"
+                                  style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', color: 'var(--ad-text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                  ⬇ 下載圖片
+                                </a>
+                              </div>
                             </div>
                           )
                         })()}
