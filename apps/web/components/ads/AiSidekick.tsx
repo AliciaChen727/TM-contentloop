@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { auth } from '@/lib/firebase/client'
+import { uploadVideoForAnalysis } from '@/lib/firebase/storage'
 import { Icon } from './Icon'
 
 interface AiResponse {
@@ -40,10 +41,11 @@ export interface MetricsContext {
 }
 
 interface FileAttachment {
-  type: 'image' | 'pdf' | 'text'
+  type: 'image' | 'pdf' | 'text' | 'video'
   mimeType: string
   content: string
   name: string
+  videoUrl?: string
 }
 
 interface HistoryTurn { question: string; summary: string }
@@ -57,7 +59,9 @@ const SUGGESTIONS_BY_PAGE: Record<string, string[]> = {
 
 const CTX_LABELS: Record<string, string> = { overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', time: '最佳時段', budget: '預算模擬', posts: '內容表現' }
 
-const SIZE_LIMITS: Record<string, number> = { image: 4 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1 * 1024 * 1024 }
+const SIZE_LIMITS: Record<string, number> = { image: 4 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1 * 1024 * 1024, video: 30 * 1024 * 1024 }
+const MAX_FILES = 5
+const FILE_EMOJI: Record<string, string> = { image: '🖼️', pdf: '📄', text: '📊', video: '🎬' }
 
 interface Message {
   id: string
@@ -71,7 +75,7 @@ interface Message {
   videoUrl?: string
   videoLoading?: boolean
   videoDuration?: number
-  filePreview?: { name: string; type: string }
+  filePreviews?: { name: string; type: string }[]
   noApiKey?: boolean
 }
 
@@ -174,7 +178,9 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const [editedVideoPrompts, setEditedVideoPrompts] = useState<Record<string, string>>({})
   const [editedDurations, setEditedDurations] = useState<Record<string, number>>({})
-  const [fileAttachment, setFileAttachment] = useState<FileAttachment | null>(null)
+  const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([])
+  const [videoUploading, setVideoUploading] = useState(false)
+  const [videoUploadPct, setVideoUploadPct] = useState(0)
   const [showHistory, setShowHistory] = useState(false)
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -259,10 +265,10 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     }
   }, [])
 
-  const send = useCallback(async (text?: string, attachment?: FileAttachment | null) => {
+  const send = useCallback(async (text?: string) => {
     const t = text ?? input
-    const att = attachment !== undefined ? attachment : fileAttachment
-    if (!t.trim() && !att) return
+    const atts = fileAttachments
+    if (!t.trim() && atts.length === 0) return
     const now = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
     // Build conversation history for multi-turn context (exclude init/special messages, cap at 10)
@@ -281,10 +287,10 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
 
     setMessages(p => [...p, {
       id: Date.now() + 'u', role: 'user', text: t, time: now,
-      filePreview: att ? { name: att.name, type: att.type } : undefined,
+      filePreviews: atts.length > 0 ? atts.map(a => ({ name: a.name, type: a.type })) : undefined,
     }])
     setInput('')
-    setFileAttachment(null)
+    setFileAttachments([])
     setTyping(true)
 
     try {
@@ -293,7 +299,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/sidekick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachment: att ?? undefined, history }),
+        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachments: atts.length > 0 ? atts : undefined, history }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -316,14 +322,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     } finally {
       setTyping(false)
     }
-  }, [input, fileAttachment, contextPage, metricsContext, generateImage, generateVideo, messages])
+  }, [input, fileAttachments, contextPage, metricsContext, generateImage, generateVideo, messages])
 
   // Auto-send when creative pin triggers
   useEffect(() => {
     if (open && autoSendPrompt && autoSendPrompt !== autoSentRef.current) {
       autoSentRef.current = autoSendPrompt
       setMessages([initMsg()])
-      setTimeout(() => send(autoSendPrompt, null), 300)
+      setFileAttachments([])
+      setTimeout(() => send(autoSendPrompt), 300)
     }
   }, [open, autoSendPrompt, send, initMsg])
 
@@ -384,39 +391,60 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     const file = imageItem.getAsFile()
     if (!file) return
     if (file.size > SIZE_LIMITS.image) { alert('圖片不能超過 4MB'); return }
+    if (fileAttachments.length >= MAX_FILES) { alert(`最多同時附加 ${MAX_FILES} 個檔案`); return }
     const reader = new FileReader()
     reader.onload = ev => {
       const dataUrl = ev.target?.result as string
-      setFileAttachment({ type: 'image', mimeType: file.type || 'image/png', content: dataUrl.split(',')[1], name: file.name || 'paste.png' })
+      setFileAttachments(prev => [...prev, { type: 'image', mimeType: file.type || 'image/png', content: dataUrl.split(',')[1], name: file.name || 'paste.png' }])
     }
     reader.readAsDataURL(file)
   }
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!file) return
+    if (files.length === 0) return
 
-    const isImage = file.type.startsWith('image/')
-    const isPdf = file.type === 'application/pdf'
-    const isText = file.type === 'text/csv' || file.type === 'application/json' || file.name.endsWith('.csv') || file.name.endsWith('.json')
+    const remaining = MAX_FILES - fileAttachments.length
+    if (remaining <= 0) { alert(`最多同時附加 ${MAX_FILES} 個檔案`); return }
+    const toProcess = files.slice(0, remaining)
+    if (files.length > remaining) alert(`已選 ${files.length} 個，只取前 ${remaining} 個（最多 ${MAX_FILES} 個）`)
 
-    if (!isImage && !isPdf && !isText) { alert('只支援 PNG/JPG/PDF/CSV/JSON 格式'); return }
+    for (const file of toProcess) {
+      const isImage = file.type.startsWith('image/')
+      const isPdf = file.type === 'application/pdf'
+      const isText = file.type === 'text/csv' || file.type === 'application/json' || file.name.endsWith('.csv') || file.name.endsWith('.json')
+      const isVideo = file.type.startsWith('video/') || file.name.endsWith('.mp4') || file.name.endsWith('.mov') || file.name.endsWith('.webm')
 
-    const attType: FileAttachment['type'] = isImage ? 'image' : isPdf ? 'pdf' : 'text'
-    const limit = SIZE_LIMITS[attType]
-    if (file.size > limit) { alert(`檔案過大（上限 ${limit / 1024 / 1024}MB）`); return }
+      if (!isImage && !isPdf && !isText && !isVideo) { alert(`「${file.name}」格式不支援，只接受 PNG/JPG/PDF/CSV/JSON/MP4/MOV/WEBM`); continue }
 
-    const reader = new FileReader()
-    if (isText) {
-      reader.readAsText(file)
-      reader.onload = () => setFileAttachment({ type: 'text', mimeType: file.type || 'text/plain', content: reader.result as string, name: file.name })
-    } else {
-      reader.readAsDataURL(file)
-      reader.onload = () => {
-        const dataUrl = reader.result as string
-        const base64 = dataUrl.split(',')[1]
-        setFileAttachment({ type: attType, mimeType: file.type, content: base64, name: file.name })
+      const attType: FileAttachment['type'] = isImage ? 'image' : isPdf ? 'pdf' : isText ? 'text' : 'video'
+      if (file.size > SIZE_LIMITS[attType]) { alert(`「${file.name}」過大（上限 ${SIZE_LIMITS[attType] / 1024 / 1024}MB）`); continue }
+
+      if (isVideo) {
+        const user = auth.currentUser
+        if (!user) { alert('請先登入'); continue }
+        setVideoUploading(true)
+        setVideoUploadPct(0)
+        try {
+          const url = await uploadVideoForAnalysis(user.uid, file, pct => setVideoUploadPct(Math.round(pct)))
+          setFileAttachments(prev => [...prev, { type: 'video', mimeType: file.type || 'video/mp4', content: '', name: file.name, videoUrl: url }])
+        } catch {
+          alert(`「${file.name}」上傳失敗，請重試`)
+        } finally {
+          setVideoUploading(false)
+        }
+      } else if (isText) {
+        const reader = new FileReader()
+        reader.readAsText(file)
+        reader.onload = () => setFileAttachments(prev => [...prev, { type: 'text', mimeType: file.type || 'text/plain', content: reader.result as string, name: file.name }])
+      } else {
+        const reader = new FileReader()
+        reader.readAsDataURL(file)
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1]
+          setFileAttachments(prev => [...prev, { type: attType, mimeType: file.type, content: base64, name: file.name }])
+        }
       }
     }
   }
@@ -454,7 +482,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               {!showHistory && (
                 <button
                   title="新對話"
-                  onClick={() => { setMessages([initMsg()]); setInput(''); setFileAttachment(null) }}
+                  onClick={() => { setMessages([initMsg()]); setInput(''); setFileAttachments([]) }}
                   style={{ background: 'none', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: 'var(--ad-text2)' }}
                 >+ 新對話</button>
               )}
@@ -499,9 +527,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                     <div className="ads-sk-msg-avatar">{msg.role === 'ai' ? '✨' : '我'}</div>
                     <div className="ads-sk-msg-bubble">
                       <div className="ads-sk-msg-text">
-                        {msg.filePreview && (
-                          <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            📎 {msg.filePreview.name}
+                        {msg.filePreviews && msg.filePreviews.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+                            {msg.filePreviews.map((fp, i) => (
+                              <div key={i} style={{ fontSize: 11, color: 'var(--ad-text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                {FILE_EMOJI[fp.type] ?? '📎'} {fp.name}
+                              </div>
+                            ))}
                           </div>
                         )}
                         {msg.noApiKey && (
@@ -602,15 +634,27 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
 
               {/* Input area */}
               <div className="ads-sk-input-area">
-                {fileAttachment && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '5px 10px', background: 'var(--ad-surface)', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12 }}>
-                    <span>{fileAttachment.type === 'image' ? '🖼️' : fileAttachment.type === 'pdf' ? '📄' : '📊'}</span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ad-text2)' }}>{fileAttachment.name}</span>
-                    <button onClick={() => setFileAttachment(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ad-text3)', fontSize: 14, lineHeight: 1 }}>×</button>
+                {videoUploading && (
+                  <div style={{ marginBottom: 6, padding: '5px 10px', background: 'var(--ad-surface)', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text2)' }}>
+                    🎬 上傳影片中⋯ {videoUploadPct}%
+                    <div style={{ marginTop: 4, height: 3, background: 'var(--ad-border)', borderRadius: 2 }}>
+                      <div style={{ height: '100%', width: `${videoUploadPct}%`, background: 'var(--ad-blue)', borderRadius: 2, transition: 'width 0.2s' }} />
+                    </div>
+                  </div>
+                )}
+                {fileAttachments.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                    {fileAttachments.map((att, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'var(--ad-surface)', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12 }}>
+                        <span>{FILE_EMOJI[att.type] ?? '📎'}</span>
+                        <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ad-text2)' }}>{att.name}</span>
+                        <button onClick={() => setFileAttachments(prev => prev.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ad-text3)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div className="ads-sk-input-box">
-                  <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.pdf,.csv,.json" style={{ display: 'none' }} onChange={handleFileSelect} />
+                  <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.pdf,.csv,.json,.mp4,.mov,.webm" multiple style={{ display: 'none' }} onChange={handleFileSelect} />
                   <button title="上傳檔案" onClick={() => fileInputRef.current?.click()}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 6px', color: 'var(--ad-text3)', fontSize: 16, flexShrink: 0 }}>📎</button>
                   <textarea ref={textareaRef} className="ads-sk-textarea" rows={1} placeholder="問我任何問題…"
@@ -618,7 +662,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                     onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); send() } }}
                     onPaste={handlePaste}
                     onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }} />
-                  <button className="ads-sk-send-btn" onClick={() => send()} disabled={(!input.trim() && !fileAttachment) || typing}>
+                  <button className="ads-sk-send-btn" onClick={() => send()} disabled={(!input.trim() && fileAttachments.length === 0) || typing || videoUploading}>
                     <Icon name="send" size={15} color="white" />
                   </button>
                 </div>

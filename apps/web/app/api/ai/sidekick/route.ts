@@ -267,15 +267,15 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { message, contextPage, metricsContext, fileAttachment, history } = body as {
+  const { message, contextPage, metricsContext, fileAttachments, history } = body as {
     message: string
     contextPage: string
     metricsContext?: MetricsContext
-    fileAttachment?: { type: 'image' | 'pdf' | 'text'; mimeType: string; content: string; name: string }
+    fileAttachments?: { type: 'image' | 'pdf' | 'text' | 'video'; mimeType: string; content: string; name: string; videoUrl?: string }[]
     history?: { role: 'user' | 'assistant'; text: string }[]
   }
 
-  if (!message?.trim() && !fileAttachment) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
+  if (!message?.trim() && (!fileAttachments || fileAttachments.length === 0)) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
 
   let memory = ''
   try {
@@ -307,16 +307,19 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined, lang)
 
-  // Build user message content (text + optional file)
+  // Build user message content (text + optional files)
   const userContent: Anthropic.MessageParam['content'] = []
-  if (fileAttachment) {
-    if (fileAttachment.type === 'image') {
-      userContent.push({ type: 'image', source: { type: 'base64', media_type: fileAttachment.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: fileAttachment.content } })
-    } else if (fileAttachment.type === 'pdf') {
+  for (const att of fileAttachments ?? []) {
+    if (att.type === 'image') {
+      userContent.push({ type: 'image', source: { type: 'base64', media_type: att.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: att.content } })
+    } else if (att.type === 'pdf') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileAttachment.content } } as any)
-    } else {
-      userContent.push({ type: 'text', text: `以下是上傳的檔案「${fileAttachment.name}」內容：\n\`\`\`\n${fileAttachment.content.slice(0, 8000)}\n\`\`\`` })
+      userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: att.content } } as any)
+    } else if (att.type === 'video' && att.videoUrl) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      userContent.push({ type: 'video', source: { type: 'url', url: att.videoUrl } } as any)
+    } else if (att.type === 'text') {
+      userContent.push({ type: 'text', text: `以下是上傳的檔案「${att.name}」內容：\n\`\`\`\n${att.content.slice(0, 8000)}\n\`\`\`` })
     }
   }
   if (message?.trim()) userContent.push({ type: 'text', text: message })
