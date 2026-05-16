@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import stripe from '@/lib/stripe'
 
 async function verifyAuth(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -18,15 +17,10 @@ export async function POST(req: NextRequest) {
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const subDoc = await adminDb.collection('users').doc(uid).collection('subscription').doc('current').get()
-  const customerId = subDoc.data()?.stripeCustomerId
-  if (!customerId) return NextResponse.json({ error: 'No Stripe customer found' }, { status: 404 })
+  const portalUrl: string | null = subDoc.data()?.customerPortalUrl ?? null
 
-  const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
+  // Fallback to LemonSqueezy general account page if portal URL not stored yet
+  const url = portalUrl ?? 'https://app.lemonsqueezy.com/my-orders'
 
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${origin}/dashboard/settings`,
-  })
-
-  return NextResponse.json({ url: session.url })
+  return NextResponse.json({ url })
 }

@@ -141,7 +141,7 @@ export default function SettingsPage() {
 
   async function handleUpgrade() {
     setCheckoutLoading(true)
-    const res = await fetch('/api/stripe/checkout', {
+    const res = await fetch('/api/lemonsqueezy/checkout', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}` },
     })
@@ -155,7 +155,7 @@ export default function SettingsPage() {
 
   async function handlePortal() {
     setPortalLoading(true)
-    const res = await fetch('/api/stripe/portal', {
+    const res = await fetch('/api/lemonsqueezy/portal', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}` },
     })
