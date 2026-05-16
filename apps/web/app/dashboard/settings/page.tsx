@@ -13,6 +13,7 @@ interface KeyBlock {
   label: string
   placeholder: string
   hint: string
+  cost: string
   helpUrl: string
   helpLabel: string
 }
@@ -23,6 +24,7 @@ const KEY_BLOCKS: KeyBlock[] = [
     label: 'Claude API Key',
     placeholder: 'sk-ant-api03-...',
     hint: '用於 AI Sidekick 問答功能',
+    cost: '參考成本：Claude Sonnet 4.5 約 $3/M input、$15/M output tokens，每次對話約 $0.01–0.03 美元',
     helpUrl: 'https://console.anthropic.com/settings/keys',
     helpLabel: 'Anthropic Console',
   },
@@ -31,6 +33,7 @@ const KEY_BLOCKS: KeyBlock[] = [
     label: 'Gemini API Key',
     placeholder: 'AIza...',
     hint: '用於影片生成（Veo）與圖片生成（Imagen）功能',
+    cost: '參考成本：Imagen 3 Fast 約 $0.02 美元 / 張、Veo 2 約 $0.50 美元 / 秒（5 秒影片 ≈ $2.50 美元）。目前此功能由平台支付（Vertex AI），暫不需設定自己的 Key',
     helpUrl: 'https://aistudio.google.com/app/apikey',
     helpLabel: 'Google AI Studio',
   },
@@ -165,10 +168,11 @@ export default function SettingsPage() {
                     <span className="text-xs text-gray-400">未設定</span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 mb-2">
+                <p className="text-xs text-gray-400 mb-1">
                   {block.hint}　·　取得 Key：
                   <a href={block.helpUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{block.helpLabel}</a>
                 </p>
+                <p className="text-xs text-gray-400 mb-2">💰 {block.cost}</p>
                 <div className="flex gap-2">
                   <input
                     type="password"
