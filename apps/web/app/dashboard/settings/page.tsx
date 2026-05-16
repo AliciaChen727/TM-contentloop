@@ -61,8 +61,6 @@ export default function SettingsPage() {
   const [saveState, setSaveState] = useState<Record<KeyType, SaveState>>({ anthropic: 'idle' })
   const [errors, setErrors] = useState<Record<KeyType, string>>({ anthropic: '' })
   const [usage, setUsage] = useState<UsageData | null>(null)
-  const [checkoutLoading, setCheckoutLoading] = useState(false)
-  const [portalLoading, setPortalLoading] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -130,33 +128,6 @@ export default function SettingsPage() {
     if (res.ok) setKeySet(k => ({ ...k, [type]: false }))
   }
 
-  async function handleUpgrade() {
-    setCheckoutLoading(true)
-    const res = await fetch('/api/lemonsqueezy/checkout', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${idToken}` },
-    })
-    if (res.ok) {
-      const { url } = await res.json()
-      window.location.href = url
-    } else {
-      setCheckoutLoading(false)
-    }
-  }
-
-  async function handlePortal() {
-    setPortalLoading(true)
-    const res = await fetch('/api/lemonsqueezy/portal', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${idToken}` },
-    })
-    if (res.ok) {
-      const { url } = await res.json()
-      window.location.href = url
-    } else {
-      setPortalLoading(false)
-    }
-  }
 
   if (loading) return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -213,37 +184,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Upgrade / manage — hidden pending business model decision */}
-            {false && (
-            <div className="mt-5 pt-4 border-t border-gray-100">
-              {usage.tier === 'free' ? (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700">升級 Pro 方案</p>
-                    <p className="text-xs text-gray-400">圖片 100 張 + 影片 30 秒 / 月　$9.9 美元 / 月</p>
-                  </div>
-                  <button
-                    onClick={handleUpgrade}
-                    disabled={checkoutLoading}
-                    className="px-4 py-2 bg-[#3B6FD4] text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
-                  >
-                    {checkoutLoading ? '跳轉中⋯' : '升級 Pro'}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-gray-500">管理訂閱、更改付款方式或取消</p>
-                  <button
-                    onClick={handlePortal}
-                    disabled={portalLoading}
-                    className="px-4 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 disabled:opacity-50 transition-colors shrink-0"
-                  >
-                    {portalLoading ? '跳轉中⋯' : '管理訂閱'}
-                  </button>
-                </div>
-              )}
-            </div>
-            )}
           </div>
         )}
 
