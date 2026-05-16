@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!prompt?.trim()) return NextResponse.json({ error: 'Empty prompt' }, { status: 400 })
 
   try {
-    const ai = new GoogleGenAI({ apiKey })
+    const ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1' } })
     const result = await ai.models.generateImages({
       model: 'imagen-3.0-generate-001',
       prompt,

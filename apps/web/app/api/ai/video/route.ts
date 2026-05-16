@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   const duration = Math.min(Math.max(4, Math.round(durationSeconds ?? 5)), 8)
 
   let ai: GoogleGenAI
-  try { ai = new GoogleGenAI({ apiKey }) } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }) }
+  try { ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1beta' } }) } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }) }
 
   try {
     const operation = await ai.models.generateVideos({
