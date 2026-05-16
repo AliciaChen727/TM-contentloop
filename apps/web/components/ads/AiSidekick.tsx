@@ -136,7 +136,7 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
   const isVideoContext = /影片|Reels|動態素材|短片/i.test(contextText)
   const isImageContext = /素材|廣告圖|廣告素材|圖片|廣告創意|生圖|做.*圖/i.test(contextText)
   const generationContext = isImageContext || isVideoContext
-  const forceLabel = isVideoContext && !isImageContext ? '⚡ 直接生成影片' : '⚡ 直接生成圖片'
+  const forceLabel = isVideoContext && !isImageContext ? '⚡ 生成影片' : '⚡ 生成圖片'
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
