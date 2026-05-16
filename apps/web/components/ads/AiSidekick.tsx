@@ -132,6 +132,9 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
   }
 
   const submitCount = checked.size + (otherText.trim() ? 1 : 0)
+  const generationContext = /生成|素材|廣告圖|廣告素材|Reels|影片|廣告創意|生圖|做.*圖/i.test(
+    [r.summary ?? '', ...(r.bullets ?? []), ...(r.actions ?? [])].join(' ')
+  )
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
@@ -178,10 +181,12 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 6, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 10, color: 'var(--ad-text3)' }}>Enter 換行　Shift+Enter 送出</div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={handleForceGenerate}
-                    style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-surface)', color: 'var(--ad-text2)', border: '1px solid var(--ad-border)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    ⚡ 直接生成
-                  </button>
+                  {generationContext && (
+                    <button onClick={handleForceGenerate}
+                      style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-surface)', color: 'var(--ad-text2)', border: '1px solid var(--ad-border)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      ⚡ 直接生成
+                    </button>
+                  )}
                   <button onClick={handleSubmit} disabled={submitCount === 0}
                     style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: submitCount === 0 ? 'default' : 'pointer', opacity: submitCount === 0 ? 0.4 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                     送出{submitCount > 0 ? ` (${submitCount} 項)` : ''}
