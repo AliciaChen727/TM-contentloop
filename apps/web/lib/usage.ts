@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 const IMAGE_UNIT_COST_USD = 0.02   // Imagen 3 Fast
 const VIDEO_PER_SECOND_USD = 0.50  // Veo 2
 
-function currentMonth(): string {
+export function currentMonth(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 

@@ -7,6 +7,7 @@ import { auth } from '@/lib/firebase/client'
 type KeyType = 'anthropic' | 'gemini'
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
+type Tier = 'free' | 'pro'
 
 interface KeyBlock {
   type: KeyType
@@ -16,6 +17,16 @@ interface KeyBlock {
   cost: string
   helpUrl: string
   helpLabel: string
+}
+
+interface UsageData {
+  tier: Tier
+  imageCount: number
+  imageLimit: number
+  videoSeconds: number
+  videoSecondsLimit: number
+  imageCostUsd: number
+  videoCostUsd: number
 }
 
 const KEY_BLOCKS: KeyBlock[] = [
@@ -39,6 +50,16 @@ const KEY_BLOCKS: KeyBlock[] = [
   },
 ]
 
+function ProgressBar({ used, limit }: { used: number; limit: number }) {
+  const pct = limit === 0 ? 0 : Math.min(100, (used / limit) * 100)
+  const color = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#3B6FD4'
+  return (
+    <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
+      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s' }} />
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const [idToken, setIdToken] = useState('')
@@ -48,15 +69,19 @@ export default function SettingsPage() {
   const [inputs, setInputs] = useState<Record<KeyType, string>>({ anthropic: '', gemini: '' })
   const [saveState, setSaveState] = useState<Record<KeyType, SaveState>>({ anthropic: 'idle', gemini: 'idle' })
   const [errors, setErrors] = useState<Record<KeyType, string>>({ anthropic: '', gemini: '' })
+  const [usage, setUsage] = useState<UsageData | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [portalLoading, setPortalLoading] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.replace('/auth/login'); return }
       const token = await u.getIdToken()
       setIdToken(token)
-      const [keysRes, prefRes] = await Promise.all([
+      const [keysRes, prefRes, usageRes] = await Promise.all([
         fetch('/api/user/api-keys', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/user/preferences', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/user/usage', { headers: { Authorization: `Bearer ${token}` } }),
       ])
       if (keysRes.ok) {
         const data = await keysRes.json()
@@ -65,6 +90,9 @@ export default function SettingsPage() {
       if (prefRes.ok) {
         const data = await prefRes.json()
         setLanguage(data.language ?? 'zh-TW')
+      }
+      if (usageRes.ok) {
+        setUsage(await usageRes.json())
       }
       setLoading(false)
     })
@@ -111,6 +139,34 @@ export default function SettingsPage() {
     if (res.ok) setKeySet(k => ({ ...k, [type]: false }))
   }
 
+  async function handleUpgrade() {
+    setCheckoutLoading(true)
+    const res = await fetch('/api/stripe/checkout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    if (res.ok) {
+      const { url } = await res.json()
+      window.location.href = url
+    } else {
+      setCheckoutLoading(false)
+    }
+  }
+
+  async function handlePortal() {
+    setPortalLoading(true)
+    const res = await fetch('/api/stripe/portal', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    if (res.ok) {
+      const { url } = await res.json()
+      window.location.href = url
+    } else {
+      setPortalLoading(false)
+    }
+  }
+
   if (loading) return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
       <p className="text-sm text-gray-400">載入中⋯⋯</p>
@@ -127,6 +183,76 @@ export default function SettingsPage() {
       </header>
 
       <div className="mx-auto max-w-2xl px-8 py-8 space-y-6">
+
+        {/* Usage & Plan */}
+        {usage && (
+          <div className="bg-white rounded-2xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-bold text-gray-800">本月用量</h2>
+                <p className="text-xs text-gray-400 mt-0.5">每月 1 日重置</p>
+              </div>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${usage.tier === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                {usage.tier === 'pro' ? 'Pro' : 'Free'}
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {/* Image usage */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-600 mb-1">
+                  <span>圖片生成</span>
+                  <span className="font-mono">{usage.imageCount} / {usage.imageLimit} 張</span>
+                </div>
+                <ProgressBar used={usage.imageCount} limit={usage.imageLimit} />
+              </div>
+
+              {/* Video usage */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-600 mb-1">
+                  <span>影片生成</span>
+                  {usage.videoSecondsLimit === 0
+                    ? <span className="text-gray-400">Free 方案不開放</span>
+                    : <span className="font-mono">{usage.videoSeconds} / {usage.videoSecondsLimit} 秒</span>
+                  }
+                </div>
+                {usage.videoSecondsLimit > 0 && (
+                  <ProgressBar used={usage.videoSeconds} limit={usage.videoSecondsLimit} />
+                )}
+              </div>
+            </div>
+
+            {/* Upgrade / manage */}
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              {usage.tier === 'free' ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700">升級 Pro 方案</p>
+                    <p className="text-xs text-gray-400">圖片 100 張 + 影片 30 秒 / 月　$9.9 美元 / 月</p>
+                  </div>
+                  <button
+                    onClick={handleUpgrade}
+                    disabled={checkoutLoading}
+                    className="px-4 py-2 bg-[#3B6FD4] text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    {checkoutLoading ? '跳轉中⋯' : '升級 Pro'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">管理訂閱、更改付款方式或取消</p>
+                  <button
+                    onClick={handlePortal}
+                    disabled={portalLoading}
+                    className="px-4 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:border-gray-400 disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    {portalLoading ? '跳轉中⋯' : '管理訂閱'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Language */}
         <div className="bg-white rounded-2xl shadow-sm p-6">

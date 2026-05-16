@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { GoogleAuth } from 'google-auth-library'
 import { recordImageGeneration } from '@/lib/usage'
+import { checkImageQuota } from '@/lib/quota'
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -13,6 +14,14 @@ export async function POST(req: NextRequest) {
     uid = decoded.uid
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+
+  const quota = await checkImageQuota(uid)
+  if (!quota.ok) {
+    return NextResponse.json(
+      { error: `本月圖片額度已用盡（${quota.used}/${quota.limit} 張）。升級 Pro 方案可獲得更多額度。` },
+      { status: 429 }
+    )
   }
 
   const { prompt } = await req.json() as { prompt: string }

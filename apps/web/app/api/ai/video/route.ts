@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { GoogleAuth } from 'google-auth-library'
 import { recordVideoGeneration } from '@/lib/usage'
+import { checkVideoQuota } from '@/lib/quota'
 
 async function verifyAuth(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -34,6 +35,14 @@ export async function POST(req: NextRequest) {
   const { prompt, durationSeconds } = await req.json() as { prompt: string; durationSeconds?: number }
   if (!prompt?.trim()) return NextResponse.json({ error: 'Empty prompt' }, { status: 400 })
   const duration = Math.min(Math.max(5, Math.round(durationSeconds ?? 5)), 8)
+
+  const quota = await checkVideoQuota(uid, duration)
+  if (!quota.ok) {
+    return NextResponse.json(
+      { error: `本月影片額度已用盡（已用 ${quota.usedSeconds}/${quota.limit} 秒）。升級 Pro 方案可獲得更多額度。` },
+      { status: 429 }
+    )
+  }
 
   try {
     const { auth, projectId } = getAuthAndProject()
