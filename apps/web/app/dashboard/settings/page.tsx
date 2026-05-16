@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 
-type KeyType = 'anthropic' | 'gemini'
+type KeyType = 'anthropic'
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
 type Tier = 'free' | 'pro'
@@ -39,15 +39,6 @@ const KEY_BLOCKS: KeyBlock[] = [
     helpUrl: 'https://console.anthropic.com/settings/keys',
     helpLabel: 'Anthropic Console',
   },
-  {
-    type: 'gemini',
-    label: 'Gemini API Key',
-    placeholder: 'AIza...',
-    hint: '用於影片生成（Veo）與圖片生成（Imagen）功能',
-    cost: '參考成本：Imagen 3 Fast 約 $0.02 美元 / 張、Veo 2 約 $0.50 美元 / 秒（5 秒影片 ≈ $2.50 美元）。',
-    helpUrl: 'https://aistudio.google.com/app/apikey',
-    helpLabel: 'Google AI Studio',
-  },
 ]
 
 function ProgressBar({ used, limit }: { used: number; limit: number }) {
@@ -65,10 +56,10 @@ export default function SettingsPage() {
   const [idToken, setIdToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [language, setLanguage] = useState<Language>('zh-TW')
-  const [keySet, setKeySet] = useState<Record<KeyType, boolean>>({ anthropic: false, gemini: false })
-  const [inputs, setInputs] = useState<Record<KeyType, string>>({ anthropic: '', gemini: '' })
-  const [saveState, setSaveState] = useState<Record<KeyType, SaveState>>({ anthropic: 'idle', gemini: 'idle' })
-  const [errors, setErrors] = useState<Record<KeyType, string>>({ anthropic: '', gemini: '' })
+  const [keySet, setKeySet] = useState<Record<KeyType, boolean>>({ anthropic: false })
+  const [inputs, setInputs] = useState<Record<KeyType, string>>({ anthropic: '' })
+  const [saveState, setSaveState] = useState<Record<KeyType, SaveState>>({ anthropic: 'idle' })
+  const [errors, setErrors] = useState<Record<KeyType, string>>({ anthropic: '' })
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -222,7 +213,8 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Upgrade / manage */}
+            {/* Upgrade / manage — hidden pending business model decision */}
+            {false && (
             <div className="mt-5 pt-4 border-t border-gray-100">
               {usage.tier === 'free' ? (
                 <div className="flex items-center justify-between">
@@ -251,6 +243,7 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 
