@@ -135,15 +135,18 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
             </button>
           ))}
           {sent === null && (
-            <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
-              <textarea rows={1} value={otherText} onChange={e => setOtherText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleOtherSubmit() } }} placeholder="其他問題…"
-                onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
-                style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
-              <button onClick={handleOtherSubmit} disabled={!otherText.trim()}
-                style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: otherText.trim() ? 'pointer' : 'default', opacity: otherText.trim() ? 1 : 0.4, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                送出
-              </button>
+            <div style={{ marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <textarea rows={1} value={otherText} onChange={e => setOtherText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleOtherSubmit() } }} placeholder="其他問題…"
+                  onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
+                  style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
+                <button onClick={handleOtherSubmit} disabled={!otherText.trim()}
+                  style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: otherText.trim() ? 'pointer' : 'default', opacity: otherText.trim() ? 1 : 0.4, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                  送出
+                </button>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 2 }}>Enter 換行　Shift+Enter 送出</div>
             </div>
           )}
         </div>
@@ -314,15 +317,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const raw = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
       const r: AiResponse = { ...raw, bullets: Array.isArray(raw.bullets) ? raw.bullets : [], stats: Array.isArray(raw.stats) ? raw.stats : [], actions: Array.isArray(raw.actions) ? raw.actions : [] }
       const aiMsgId = String(Date.now()) + 'a'
-      setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r, imageLoading: r.type === 'image_request', videoLoading: r.type === 'video_request', videoDuration: r.videoDuration }])
-      if (r.type === 'image_request' && r.imagePrompt) generateImage(aiMsgId, r.imagePrompt)
-      if (r.type === 'video_request' && r.videoPrompt) generateVideo(aiMsgId, r.videoPrompt, r.videoDuration ?? 5)
+      setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r, imageLoading: false, videoLoading: false, videoDuration: r.videoDuration }])
     } catch {
       setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '網路錯誤，請稍後再試。', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
     } finally {
       setTyping(false)
     }
-  }, [input, fileAttachments, contextPage, metricsContext, generateImage, generateVideo, messages])
+  }, [input, fileAttachments, contextPage, metricsContext, messages])
 
   // Auto-send when creative pin triggers
   useEffect(() => {
@@ -550,48 +551,111 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                         )}
                         {!msg.noApiKey && msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
                         {msg.response && <AiMessageBody r={msg.response} onSend={send} />}
+                        {msg.response?.imagePrompt && !msg.imageLoading && !msg.imageUrl && !msg.imageError && (() => {
+                          const fireImage = () => {
+                            const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
+                            if (!prompt) return
+                            setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageLoading: true } : m))
+                            generateImage(msg.id, prompt)
+                          }
+                          return (
+                            <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
+                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>🖼️ 待生成圖片 — 可編輯提示詞後再生成</div>
+                              <textarea value={editedPrompts[msg.id] ?? msg.response.imagePrompt}
+                                onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireImage() } }}
+                                style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }} />
+                              <button className="ads-btn" style={{ fontSize: 12 }} onClick={fireImage}>✨ 生成圖片</button>
+                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>Enter 換行　Shift+Enter 送出</div>
+                            </div>
+                          )
+                        })()}
+                        {msg.response?.videoPrompt && !msg.videoLoading && !msg.videoUrl && (() => {
+                          const fireVideo = () => {
+                            const prompt = editedVideoPrompts[msg.id] ?? msg.response?.videoPrompt ?? ''
+                            if (!prompt) return
+                            const dur = editedDurations[msg.id] ?? msg.videoDuration ?? 5
+                            setMessages(p => p.map(m => m.id === msg.id ? { ...m, videoLoading: true } : m))
+                            generateVideo(msg.id, prompt, dur)
+                          }
+                          return (
+                            <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
+                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>🎬 待生成 Reels — 可編輯提示詞與秒數後再生成</div>
+                              <textarea value={editedVideoPrompts[msg.id] ?? msg.response.videoPrompt}
+                                onChange={e => setEditedVideoPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireVideo() } }}
+                                style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }} />
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 5)}
+                                  onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
+                                  style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
+                                  {[5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
+                                </select>
+                                <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={fireVideo}>🎬 生成 Reels 影片</button>
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>Enter 換行　Shift+Enter 送出</div>
+                            </div>
+                          )
+                        })()}
                         {msg.imageLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎨 生成圖片中⋯</div>}
-                        {msg.imageError && (
-                          <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>
-                            <div style={{ color: '#ef4444', marginBottom: 6 }}>❌ {msg.imageError}</div>
-                            {msg.response?.imagePrompt && (
-                              <>
-                                <textarea
-                                  defaultValue={msg.response.imagePrompt}
-                                  style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }}
-                                  onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
-                                />
-                                <button className="ads-btn" style={{ fontSize: 12 }} onClick={() => {
-                                  const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
-                                  if (!prompt) return
-                                  setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageError: undefined, imageLoading: true } : m))
-                                  generateImage(msg.id, prompt)
-                                }}>↻ 重新生成</button>
-                              </>
-                            )}
-                          </div>
-                        )}
-                        {msg.imageUrl && (
-                          <div style={{ marginTop: 8 }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.imageUrl} alt="生成的廣告素材" style={{ width: '100%', borderRadius: 8 }} />
-                            <textarea value={editedPrompts[msg.id] ?? (msg.response?.imagePrompt ?? '')}
-                              onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
-                              style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                            <button className="ads-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => {
-                              const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
-                              if (!prompt) return
-                              setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageUrl: undefined, imageLoading: true } : m))
-                              generateImage(msg.id, prompt)
-                            }}>↻ 重新生成</button>
-                          </div>
-                        )}
+                        {msg.imageError && (() => {
+                          const retryImage = () => {
+                            const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
+                            if (!prompt) return
+                            setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageError: undefined, imageLoading: true } : m))
+                            generateImage(msg.id, prompt)
+                          }
+                          return (
+                            <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>
+                              <div style={{ color: '#ef4444', marginBottom: 6 }}>❌ {msg.imageError}</div>
+                              {msg.response?.imagePrompt && (
+                                <>
+                                  <textarea
+                                    defaultValue={msg.response.imagePrompt}
+                                    style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }}
+                                    onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); retryImage() } }}
+                                  />
+                                  <button className="ads-btn" style={{ fontSize: 12 }} onClick={retryImage}>↻ 重新生成</button>
+                                </>
+                              )}
+                            </div>
+                          )
+                        })()}
+                        {msg.imageUrl && (() => {
+                          const regenImage = () => {
+                            const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
+                            if (!prompt) return
+                            setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageUrl: undefined, imageLoading: true } : m))
+                            generateImage(msg.id, prompt)
+                          }
+                          return (
+                            <div style={{ marginTop: 8 }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={msg.imageUrl} alt="生成的廣告素材" style={{ width: '100%', borderRadius: 8 }} />
+                              <textarea value={editedPrompts[msg.id] ?? (msg.response?.imagePrompt ?? '')}
+                                onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); regenImage() } }}
+                                style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                              <button className="ads-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={regenImage}>↻ 重新生成</button>
+                            </div>
+                          )
+                        })()}
                         {msg.videoLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎬 生成 Reels 中⋯ 預計需要 1–3 分鐘</div>}
-                        {msg.videoUrl && (
+                        {msg.videoUrl && (() => {
+                          const regenVideo = () => {
+                            const prompt = editedVideoPrompts[msg.id] ?? msg.response?.videoPrompt ?? ''
+                            if (!prompt) return
+                            const dur = editedDurations[msg.id] ?? msg.videoDuration ?? 5
+                            setMessages(p => p.map(m => m.id === msg.id ? { ...m, videoUrl: undefined, videoLoading: true } : m))
+                            generateVideo(msg.id, prompt, dur)
+                          }
+                          return (
                           <div style={{ marginTop: 8 }}>
                             <video src={msg.videoUrl} controls playsInline style={{ width: '100%', borderRadius: 8, display: 'block', maxHeight: 400 }} />
                             <textarea value={editedVideoPrompts[msg.id] ?? (msg.response?.videoPrompt ?? '')}
                               onChange={e => setEditedVideoPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); regenVideo() } }}
                               style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                             <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
                               <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 5)}
@@ -599,20 +663,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                 style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
                                 {[5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
                               </select>
-                              <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={() => {
-                                const prompt = editedVideoPrompts[msg.id] ?? msg.response?.videoPrompt ?? ''
-                                if (!prompt) return
-                                const dur = editedDurations[msg.id] ?? msg.videoDuration ?? 5
-                                setMessages(p => p.map(m => m.id === msg.id ? { ...m, videoUrl: undefined, videoLoading: true } : m))
-                                generateVideo(msg.id, prompt, dur)
-                              }}>↻ 重新生成</button>
+                              <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenVideo}>↻ 重新生成</button>
                               <a href={msg.videoUrl} download="reels.mp4"
                                 style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', color: 'var(--ad-text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
                                 ⬇ 下載 MP4
                               </a>
                             </div>
                           </div>
-                        )}
+                          )
+                        })()}
                       </div>
                       <div className="ads-sk-msg-time">{msg.time}</div>
                     </div>
