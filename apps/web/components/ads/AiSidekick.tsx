@@ -97,20 +97,35 @@ function renderWithLinks(text: string): React.ReactNode {
 
 function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) => void }) {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+  const [checked, setChecked] = useState<Set<number>>(new Set())
+  const [inputs, setInputs] = useState<Record<number, string>>({})
   const [otherText, setOtherText] = useState('')
-  const [sent, setSent] = useState<number | 'other' | null>(null)
+  const [submitted, setSubmitted] = useState(false)
 
-  function handleAction(text: string, idx: number) {
-    if (sent !== null) return
-    setSent(idx)
-    onSend(text)
+  function toggleChecked(i: number) {
+    if (submitted) return
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i); else next.add(i)
+      return next
+    })
   }
 
-  function handleOtherSubmit() {
-    if (!otherText.trim() || sent !== null) return
-    setSent('other')
-    onSend(otherText.trim())
+  function handleSubmit() {
+    if (submitted) return
+    const parts: string[] = []
+    for (const i of Array.from(checked).sort((a, b) => a - b)) {
+      const detail = (inputs[i] ?? '').trim()
+      parts.push(detail ? `- ${r.actions[i]}：${detail}` : `- ${r.actions[i]}`)
+    }
+    const other = otherText.trim()
+    if (other) parts.push(`其他補充：${other}`)
+    if (parts.length === 0) return
+    setSubmitted(true)
+    onSend(parts.join('\n'))
   }
+
+  const submitCount = checked.size + (otherText.trim() ? 1 : 0)
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
@@ -127,27 +142,44 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
       )}
       {r.actions.length > 0 && (
         <div className="ads-sk-action-list">
-          {r.actions.map((a, i) => (
-            <button key={i} className={`ads-sk-action-item${sent === i ? ' done' : ''}`} disabled={sent !== null} onClick={() => handleAction(a, i)}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: sent !== null ? 'default' : 'pointer', padding: 0 }}>
-              <div className="ads-sk-action-cb">{sent === i && <span style={{ fontSize: 10 }}>✓</span>}</div>
-              <div className="ads-sk-action-text">{a}</div>
-            </button>
-          ))}
-          {sent === null && (
+          {r.actions.map((a, i) => {
+            const isChecked = checked.has(i)
+            return (
+              <div key={i} style={{ marginBottom: 4 }}>
+                <button onClick={() => toggleChecked(i)} disabled={submitted}
+                  className={`ads-sk-action-item${isChecked ? ' done' : ''}`}
+                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: submitted ? 'default' : 'pointer', padding: 0 }}>
+                  <div className="ads-sk-action-cb">{isChecked && <span style={{ fontSize: 10 }}>✓</span>}</div>
+                  <div className="ads-sk-action-text">{a}</div>
+                </button>
+                {isChecked && !submitted && (
+                  <textarea rows={1} value={inputs[i] ?? ''}
+                    onChange={e => setInputs(p => ({ ...p, [i]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSubmit() } }}
+                    onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 100) + 'px' }}
+                    placeholder="請輸入詳細內容…"
+                    style={{ width: 'calc(100% - 24px)', fontSize: 12, padding: '6px 10px', marginTop: 4, marginLeft: 24, borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'none', minHeight: 32, boxSizing: 'border-box', fontFamily: 'inherit', background: 'var(--ad-bg)', color: 'var(--ad-text)', outline: 'none' }} />
+                )}
+              </div>
+            )
+          })}
+          {!submitted && (
             <div style={{ marginTop: 6 }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <textarea rows={1} value={otherText} onChange={e => setOtherText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleOtherSubmit() } }} placeholder="其他問題…"
-                  onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
-                  style={{ flex: 1, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
-                <button onClick={handleOtherSubmit} disabled={!otherText.trim()}
-                  style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: otherText.trim() ? 'pointer' : 'default', opacity: otherText.trim() ? 1 : 0.4, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                  送出
+              <textarea rows={1} value={otherText} onChange={e => setOtherText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSubmit() } }} placeholder="其他補充（選填）…"
+                onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
+                style={{ width: '100%', fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                <div style={{ fontSize: 10, color: 'var(--ad-text3)' }}>Enter 換行　Shift+Enter 送出</div>
+                <button onClick={handleSubmit} disabled={submitCount === 0}
+                  style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: submitCount === 0 ? 'default' : 'pointer', opacity: submitCount === 0 ? 0.4 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                  送出{submitCount > 0 ? ` (${submitCount} 項)` : ''}
                 </button>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 2 }}>Enter 換行　Shift+Enter 送出</div>
             </div>
+          )}
+          {submitted && (
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ad-text3)' }}>✓ 已送出回覆</div>
           )}
         </div>
       )}

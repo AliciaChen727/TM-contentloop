@@ -114,19 +114,36 @@ ${isCreativePage ? `## 🎯 Creative Library Mode
 Current page is the ad creative library. For performance analysis or diagnosis, provide professional insights (return type: "analysis" or "recommendation").
 **Only return type: "image_request" when the user explicitly requests generating a new image/creative.**
 
-` : ''}## ⚡ Highest Priority: Creative Generation Request (overrides all rules below)
-If the user message contains explicit generation verbs like "generate", "create", "make", "design" referring to images/creatives (not video):
-→ Immediately return type: "image_request"
+` : ''}## ⚡ MUTUAL EXCLUSION RULE (HIGHEST PRIORITY — never violate)
+- If type is "image_request" or "video_request":
+  - bullets and actions MUST be empty arrays []
+  - imagePrompt (for image_request) or videoPrompt (for video_request) MUST be filled
+- If bullets or actions are used to ask clarifying questions (e.g. missing product name, target audience, ad goal):
+  - type MUST be "general" or "actions"
+  - imagePrompt and videoPrompt MUST be omitted entirely (do not include the field at all, not even as empty string)
+  - Each action item should describe an information category to be supplied (e.g. "Provide product name or promotion topic"), not an instruction
+- NEVER mix clarifying questions with imagePrompt/videoPrompt in the same response.
+
+## ⚡ Creative Generation Request
+If the user message contains explicit generation verbs like "generate", "create", "make", "design" referring to images/creatives (not video) AND there is enough context to write a meaningful prompt:
+→ Immediately return type: "image_request" with non-empty imagePrompt and empty bullets/actions
 → Write an English imagePrompt based on context. CRITICAL: To avoid distorted output, unless the user explicitly asks for text, always append "No text, no typography, no letters, clean background with empty space for text layout" at the end.
-→ Do NOT analyze or ask questions first — generate directly
 → summary should explain the generation direction (include size recommendation like 1080x1350px)
+
+If the user wants to generate but context is insufficient (no product, no audience, no goal):
+→ Return type: "general" or "actions"
+→ Put clarifying items in actions (e.g. "Provide product name", "Specify ad placement", "Target audience age range")
+→ Do NOT include imagePrompt — wait for the user to supply details first
 
 **Note**: If the user is asking to "analyze", "diagnose", or "improve" an existing creative, do NOT return type: "image_request" — return analysis instead.
 
-If the user message contains "video", "Reels", "motion creative", "generate video", "make a clip":
-→ Immediately return type: "video_request"
+If the user message contains "video", "Reels", "motion creative", "generate video", "make a clip" AND context is sufficient:
+→ Immediately return type: "video_request" with non-empty videoPrompt and empty bullets/actions
 → Write an English videoPrompt, videoDuration defaults to 5
-→ Do NOT analyze or ask questions first — generate directly
+
+If video generation requested but context is insufficient:
+→ Return type: "general" or "actions" with clarifying items in actions
+→ Do NOT include videoPrompt — wait for user to supply details first
 
 ## Behavioral Guidelines
 [Honest]: Point out issues directly. Do not exaggerate or fabricate numbers. If data is insufficient, state "insufficient data, cannot determine."
@@ -188,19 +205,36 @@ ${isCreativePage ? `## 🎯 素材庫模式
 當前頁面為廣告素材庫。如果用戶詢問素材表現、數據分析或診斷，請給予專業的分析與建議（回傳 type: "analysis" 或 "recommendation"）。
 **只有在用戶「明確要求生成新圖片/素材」時，才回傳 type: "image_request"**。
 
-` : ''}## ⚡ 最高優先：生成素材請求（覆蓋以下所有規則）
-若用戶訊息含有明確的「生成」「做一張」「做一版」「製作一張」「出一版」「直接生成」「幫我生成」「給我一張」「做素材」「出素材」等**生成動詞**，且提到圖片/素材/廣告圖/廣告圖片（非影片）：
-→ 立即回傳 type: "image_request"
-→ 根據對話上下文自行撰寫英文 imagePrompt。極度重要：為了避免生成扭曲亂碼，除非用戶明確要求文字，否則必須在提示詞結尾強制加上「No text, no typography, no letters, clean background with empty space for text layout」。
-→ 禁止先分析或詢問問題，直接生成
+` : ''}## ⚡ 互斥規則（最高優先 — 絕對不可違反）
+- 當 type 為 "image_request" 或 "video_request" 時：
+  - bullets 和 actions 必須為空陣列 []
+  - 必須包含對應的 imagePrompt（image_request）或 videoPrompt（video_request）
+- 當 bullets 或 actions 用來「詢問澄清資訊」（如缺少產品名稱、目標受眾、廣告目標）時：
+  - type 必須為 "general" 或 "actions"
+  - **完全不得**包含 imagePrompt / videoPrompt 欄位（連空字串都不行，直接省略）
+  - actions 條目應為「待補充的資訊類別」（如「提供產品名稱或推廣主題」），不是動作指令
+- 絕對禁止在同一個回應中同時出現「澄清問題」和「imagePrompt/videoPrompt」。
+
+## ⚡ 生成素材請求
+若用戶訊息含有「生成」「做一張」「做一版」「製作一張」「出一版」「直接生成」「幫我生成」「給我一張」「做素材」「出素材」等**生成動詞**，且提到圖片/素材/廣告圖 **且上下文資訊足夠寫出有意義的提示詞**：
+→ 立即回傳 type: "image_request"，imagePrompt 必填、bullets/actions 留空
+→ 撰寫英文 imagePrompt。極度重要：除非用戶明確要求文字，否則結尾必須加上「No text, no typography, no letters, clean background with empty space for text layout」
 → summary 說明生成方向（含尺寸建議如 1080x1350px）
+
+若用戶想生成但**資訊不足**（沒提產品、沒提受眾、沒提目標）：
+→ 回傳 type: "general" 或 "actions"
+→ 把待澄清項目放在 actions（例：「提供產品名稱或推廣主題」「說明廣告用途」「告訴我目標受眾」）
+→ **不得**包含 imagePrompt — 等使用者補充資訊後再生成
 
 **注意**：若用戶只是「詢問」「分析」「診斷」某個廣告素材，即使訊息中出現「廣告素材」「素材」等字眼，也**禁止**回傳 type: "image_request"，應回傳分析結果。
 
-若用戶訊息包含「影片」「Reels」「動態素材」「生成影片」「做一段」：
-→ 立即回傳 type: "video_request"
-→ 根據對話上下文自行撰寫英文 videoPrompt，videoDuration 預設 5
-→ 禁止先分析或詢問問題，直接生成
+若用戶訊息包含「影片」「Reels」「動態素材」「生成影片」「做一段」且上下文足夠：
+→ 立即回傳 type: "video_request"，videoPrompt 必填、bullets/actions 留空
+→ 撰寫英文 videoPrompt，videoDuration 預設 5
+
+若影片生成但資訊不足：
+→ 回傳 type: "general" 或 "actions" + 澄清條目放在 actions
+→ **不得**包含 videoPrompt — 等使用者補充資訊後再生成
 
 ## 行為準則
 【實話實說】：直接點出問題，不過度浮誇，不捏造數字。若數據不足，明確說明「數據不足，無法判斷」。
@@ -363,16 +397,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Safety net: if user clearly wants image generation, enforce it regardless of page
+  // Defensive strip: enforce mutual exclusion between clarification and generation
   {
     const p = parsed as Record<string, unknown>
-    const hasGenerationIntent = /生圖|生成.*圖|生成.*素材|做一張|做一版|製作.*圖|出一版|幫我生|直接生|出素材|做素材/.test(message ?? '')
-    if (hasGenerationIntent && p.type !== 'image_request' && p.type !== 'video_request') {
-      const contextText = [p.summary as string, ...((p.bullets ?? []) as string[])].filter(Boolean).join('. ')
-      p.type = 'image_request'
-      if (!p.imagePrompt) {
-        p.imagePrompt = `Professional Meta advertisement creative for Toastmasters District 67, ${contextText.slice(0, 200)}, vibrant gold and blue colors, clean modern design, 1080x1350px vertical format. No text, no typography, clean background.`
-      }
+    if (p.type !== 'image_request') delete p.imagePrompt
+    if (p.type !== 'video_request') { delete p.videoPrompt; delete p.videoDuration }
+    if (p.type === 'image_request' || p.type === 'video_request') {
+      p.bullets = []
+      p.actions = []
     }
   }
 
