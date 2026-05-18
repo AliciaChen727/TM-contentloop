@@ -96,6 +96,37 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 
 interface OrgCtx { name: string; type: string; coreKpi: string; extraContext: string }
 
+interface FeedbackRecord {
+  rating: string
+  response: string
+  pageContext: string
+  improveReason?: string
+  improveNote?: string
+}
+
+const IMPROVE_REASON_LABELS: Record<string, string> = {
+  too_vague: '建議太模糊，不夠具體',
+  wrong_data: '數字分析不準確',
+  not_relevant: '建議跟用戶狀況不符',
+  other: '其他原因',
+}
+
+function buildHelpfulBlock(cases: FeedbackRecord[], lang: 'zh-TW' | 'en'): string {
+  if (cases.length === 0) return ''
+  if (lang === 'en') {
+    return `\n## Past Diagnoses Users Found Helpful\n${cases.map((c, i) => `\nExample ${i + 1} (${c.pageContext}):\n"${c.response.slice(0, 120)}..."`).join('\n')}\n`
+  }
+  return `\n## 過去用戶認為有幫助的診斷範例\n${cases.map((c, i) => `\n範例 ${i + 1}（頁面：${c.pageContext}）：\n「${c.response.slice(0, 120)}...」`).join('\n')}\n`
+}
+
+function buildImproveBlock(cases: FeedbackRecord[], lang: 'zh-TW' | 'en'): string {
+  if (cases.length === 0) return ''
+  if (lang === 'en') {
+    return `\n## Diagnosis Styles to Avoid\n${cases.map((c, i) => `\n${i + 1}. Reason: ${c.improveReason ?? 'other'}${c.improveNote ? ` — "${c.improveNote}"` : ''}\n   Example to avoid: "${c.response.slice(0, 80)}..."`).join('\n')}\n`
+  }
+  return `\n## 請避免以下診斷方式\n${cases.map((c, i) => `\n${i + 1}. 原因：${IMPROVE_REASON_LABELS[c.improveReason ?? ''] ?? '其他'}${c.improveNote ? `（補充：「${c.improveNote}」）` : ''}\n   避免類似這樣的回應：「${c.response.slice(0, 80)}...」`).join('\n')}\n`
+}
+
 interface ABTestResult {
   winner: string
   aiDiagnosis: string
@@ -138,12 +169,14 @@ function buildAbTestBlock(abTestResults: ABTestResult[], lang: 'zh-TW' | 'en'): 
   return `\n## A/B 測試歷史成果（請優先參考這些成功案例）\n過去 AI 建議版勝出的案例：\n${winningCases.map((t, i) => `\n案例 ${i + 1}：\n- 控制組文案：「${t.controlCopy ?? 'N/A'}」\n- AI 建議版：「${t.variantCopy ?? 'N/A'}」\n- AI 當初的診斷：「${t.aiDiagnosis}」\n- 實際結果：CTR ${t.ctrDelta != null ? (t.ctrDelta > 0 ? `+${t.ctrDelta}%` : `${t.ctrDelta}%`) : 'N/A'}，CPA ${t.cpaDelta != null ? (t.cpaDelta > 0 ? `降低 -${t.cpaDelta}%` : `上升 +${Math.abs(t.cpaDelta)}%`) : 'N/A'}`).join('\n')}\n\n根據以上案例，這個帳號的高勝率文案特徵：\n${extractPatterns(winningCases, 'zh-TW')}\n`
 }
 
-function buildSidekickSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW', orgCtx?: OrgCtx | null, abTestResults?: ABTestResult[]): string {
+function buildSidekickSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW', orgCtx?: OrgCtx | null, abTestResults?: ABTestResult[], helpfulResponses?: FeedbackRecord[], improveResponses?: FeedbackRecord[]): string {
   const isPostsContext = contextPage === 'posts' || contextPage === 'combined'
   const isCreativePage = contextPage === 'creative'
   const metricsBlock = metrics && Object.keys(metrics).length > 0 ? buildMetricsBlock(metrics, lang) : ''
 
   const abTestBlock = abTestResults ? buildAbTestBlock(abTestResults, lang) : ''
+  const helpfulBlock = helpfulResponses?.length ? buildHelpfulBlock(helpfulResponses, lang) : ''
+  const improveBlock = improveResponses?.length ? buildImproveBlock(improveResponses, lang) : ''
 
   if (lang === 'en') {
     const role = isCreativePage
@@ -207,7 +240,7 @@ If video generation requested but context is insufficient:
 [Clarify proactively]: When the question is ambiguous, offer 2 options in bullets. Exception: (1) if user requests image/video generation, generate immediately; (2) if message mentions "this image" but no attachment, generate directly for the mentioned topic.
 [Clear positive/negative signals]: Distinguish good metrics (high engagement rate, ROAS on target) from bad (high CPA, frequency fatigue).
 [Specific actions]: Each action must have a specific target, e.g. "Increase audience A daily budget from $X to $Y", not "consider adjusting budget."
-${memoryBlock}${enAbTestBlock}
+${memoryBlock}${helpfulBlock}${improveBlock}${enAbTestBlock}
 ## Audience Analysis Safeguard
 **Meta Graph API does not provide audience age/gender/interest breakdowns** (restricted by Meta privacy policy).
 - When users ask about audience demographics, explain this data is unavailable and suggest checking Meta Ads Manager's Audience Insights.
@@ -318,7 +351,7 @@ ${isCreativePage ? `## 🎯 素材庫模式
 【主動釐清】：當問題語意模糊時，在 bullets 中提出 2 個選項讓用戶選擇，例如「你想了解 A 還是 B？」。例外：（1）若用戶要求生成圖片或影片，直接生成，不得釐清；（2）若訊息含「此圖」但無附件，不得要求上傳，直接為提及的活動／用途生成廣告素材。
 【正負指標明確】：正面數據（如 ROAS 達標、互動率高於均值）與負面數據（如 CPA 過高、頻率疲勞）要明確區分，不混為一談。
 【建議具體可執行】：每條 actions 要有具體數字或對象，例如「將受眾 A 的日預算從 $X 提高至 $Y」，而非「考慮調整預算」。
-${memoryBlock}${abTestBlock}
+${memoryBlock}${helpfulBlock}${improveBlock}${abTestBlock}
 ## 受眾分析防傑機制
 **Meta Graph API 目前無法提供受眾年齡/性別/興趣分布**（Meta 已因隐私政策限制此屬性）。
 - 關鍵規則：**當用戶問詢受眾年齡/性別/地區/興趣特徵分析時**，应說明目前系統無法取得此資料，建議用戶參考 Meta Ads Manager 的「受眾洞察」報表。
@@ -444,7 +477,20 @@ export async function POST(req: NextRequest) {
     } catch { abTestResults = [] }
   }
 
-  const systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx, abTestResults)
+  let helpfulResponses: FeedbackRecord[] = []
+  let improveResponses: FeedbackRecord[] = []
+  try {
+    const [helpfulSnap, improveSnap] = await Promise.all([
+      adminDb.collection('users').doc(uid).collection('sidekickFeedback')
+        .where('rating', '==', 'helpful').where('pageContext', '==', contextPage).limit(3).get(),
+      adminDb.collection('users').doc(uid).collection('sidekickFeedback')
+        .where('rating', '==', 'improve').where('pageContext', '==', contextPage).limit(3).get(),
+    ])
+    helpfulResponses = helpfulSnap.docs.map(d => d.data() as FeedbackRecord)
+    improveResponses = improveSnap.docs.map(d => d.data() as FeedbackRecord).filter(d => !!d.improveReason)
+  } catch { /* non-critical */ }
+
+  const systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx, abTestResults, helpfulResponses, improveResponses)
 
   // Build user message content (text + optional files)
   const userContent: Anthropic.MessageParam['content'] = []

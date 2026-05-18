@@ -128,12 +128,27 @@ function CopyVariantCard({ v }: { v: CopyVariant }) {
   )
 }
 
-function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) => void }) {
+const IMPROVE_OPTIONS = [
+  { key: 'too_vague', label: '建議太模糊，不夠具體' },
+  { key: 'wrong_data', label: '數字分析不準確' },
+  { key: 'not_relevant', label: '建議跟我的狀況不符' },
+  { key: 'other', label: '其他' },
+]
+
+function AiMessageBody({ r, onSend, onFeedback }: {
+  r: AiResponse
+  onSend: (text: string) => void
+  onFeedback?: (payload: { rating: 'helpful' | 'improve'; improveReason?: string; improveNote?: string }) => void
+}) {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [inputs, setInputs] = useState<Record<number, string>>({})
   const [otherText, setOtherText] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [improvePanel, setImprovePanel] = useState(false)
+  const [improveReason, setImproveReason] = useState<string | null>(null)
+  const [improveNote, setImproveNote] = useState('')
+  const [feedbackSent, setFeedbackSent] = useState(false)
 
   function toggleChecked(i: number) {
     if (submitted) return
@@ -240,10 +255,63 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
           )}
         </div>
       )}
-      <div className="ads-sk-feedback">
-        <button className={`ads-sk-fb-btn ${feedback === 'up' ? 'liked' : ''}`} onClick={() => setFeedback(feedback === 'up' ? null : 'up')}><Icon name="thumb_up" size={12} /> 有幫助</button>
-        <button className={`ads-sk-fb-btn ${feedback === 'down' ? 'disliked' : ''}`} onClick={() => setFeedback(feedback === 'down' ? null : 'down')}><Icon name="thumb_down" size={12} /> 改進</button>
-      </div>
+      {feedbackSent ? (
+        <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginTop: 8 }}>✓ 謝謝你的回饋</div>
+      ) : (
+        <div>
+          <div className="ads-sk-feedback">
+            <button
+              className={`ads-sk-fb-btn ${feedback === 'up' ? 'liked' : ''}`}
+              onClick={() => {
+                if (feedback === 'up') return
+                setFeedback('up')
+                setImprovePanel(false)
+                onFeedback?.({ rating: 'helpful' })
+                setFeedbackSent(true)
+              }}
+            ><Icon name="thumb_up" size={12} /> 有幫助</button>
+            <button
+              className={`ads-sk-fb-btn ${feedback === 'down' ? 'disliked' : ''}`}
+              onClick={() => {
+                if (feedback === 'down') { setImprovePanel(p => !p); return }
+                setFeedback('down')
+                setImprovePanel(true)
+              }}
+            ><Icon name="thumb_down" size={12} /> 改進</button>
+          </div>
+          {improvePanel && (
+            <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
+              <div style={{ fontWeight: 500, marginBottom: 8, color: 'var(--ad-text)' }}>你覺得哪裡可以更好？</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {IMPROVE_OPTIONS.map(opt => (
+                  <button key={opt.key} onClick={() => setImproveReason(improveReason === opt.key ? null : opt.key)}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 12, border: `1px solid ${improveReason === opt.key ? 'var(--ad-blue)' : 'var(--ad-border)'}`, background: improveReason === opt.key ? '#dbeafe' : 'var(--ad-bg)', color: improveReason === opt.key ? '#1d4ed8' : 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {improveReason === 'other' && (
+                <textarea rows={2} value={improveNote} onChange={e => setImproveNote(e.target.value)}
+                  placeholder="請說明可以怎麼改進…"
+                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', background: 'var(--ad-bg)', color: 'var(--ad-text)', outline: 'none', marginBottom: 8 }} />
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                <button onClick={() => { setImprovePanel(false); setFeedback(null) }}
+                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>取消</button>
+                <button onClick={() => {
+                  if (!improveReason) return
+                  onFeedback?.({ rating: 'improve', improveReason, improveNote: improveNote.trim() || undefined })
+                  setImprovePanel(false)
+                  setFeedbackSent(true)
+                }} disabled={!improveReason}
+                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: 'none', background: improveReason ? 'var(--ad-blue)' : 'var(--ad-border)', color: improveReason ? '#fff' : 'var(--ad-text3)', cursor: improveReason ? 'pointer' : 'default', fontFamily: 'inherit' }}>
+                  送出回饋
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -414,6 +482,17 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       setTyping(false)
     }
   }, [input, fileAttachments, contextPage, metricsContext, messages, pageId])
+
+  function handleFeedback(msgResponse: AiResponse, payload: { rating: 'helpful' | 'improve'; improveReason?: string; improveNote?: string }) {
+    const responseText = [msgResponse.summary, ...(msgResponse.bullets ?? []), ...(msgResponse.actions ?? [])].filter(Boolean).join('\n')
+    auth.currentUser?.getIdToken().then(idToken => {
+      fetch('/api/ai/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ ...payload, response: responseText, pageContext: contextPage, dataSnapshot: metricsContext ?? null }),
+      })
+    }).catch(() => {})
+  }
 
   // Auto-send when creative pin triggers
   useEffect(() => {
@@ -649,7 +728,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           </div>
                         )}
                         {!msg.noApiKey && msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}
-                        {msg.response && <AiMessageBody r={msg.response} onSend={send} />}
+                        {msg.response && <AiMessageBody r={msg.response} onSend={send} onFeedback={payload => handleFeedback(msg.response!, payload)} />}
                         {msg.response?.imagePrompt && !msg.imageLoading && !msg.imageUrl && !msg.imageError && (() => {
                           const fireImage = () => {
                             const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
