@@ -346,10 +346,18 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [showHistory, setShowHistory] = useState(false)
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportRange, setExportRange] = useState<'30d' | '90d' | 'all'>('30d')
+  const [exportFeedbackFilter, setExportFeedbackFilter] = useState<'all' | 'has_feedback' | 'improve_only'>('all')
+  const [exporting, setExporting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const autoSentRef = useRef<string>('')
+  const sessionIdRef = useRef<string>('')
+  const convStartedRef = useRef(false)
+  const turnCountRef = useRef(0)
 
   const generateImage = useCallback(async (msgId: string, prompt: string) => {
     const user = auth.currentUser
@@ -476,6 +484,28 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const r: AiResponse = { ...raw, bullets: Array.isArray(raw.bullets) ? raw.bullets : [], stats: Array.isArray(raw.stats) ? raw.stats : [], actions: Array.isArray(raw.actions) ? raw.actions : [] }
       const aiMsgId = String(Date.now()) + 'a'
       setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r, imageLoading: false, videoLoading: false, videoDuration: r.videoDuration }])
+
+      // Save conversation turn to Firebase
+      if (sessionIdRef.current) {
+        turnCountRef.current += 1
+        const isFirst = !convStartedRef.current
+        convStartedRef.current = true
+        const nowIso = new Date().toISOString()
+        const newMessages = [
+          { role: 'user' as const, content: t, timestamp: nowIso },
+          { role: 'assistant' as const, content: [r.summary, ...(r.bullets ?? []), ...(r.actions ?? [])].filter(Boolean).join('\n').slice(0, 1000), timestamp: nowIso },
+        ]
+        const convPayload: Record<string, unknown> = {
+          action: 'upsert', sessionId: sessionIdRef.current, pageId, pageContext: contextPage,
+          newMessages, totalTurns: turnCountRef.current, isFirst,
+        }
+        if (isFirst && metricsContext) {
+          convPayload.dataSnapshot = { dateRange: metricsContext.dateRange ?? '', avgCTR: metricsContext.ctr ?? 0, avgCPA: metricsContext.cpa ?? 0, totalAds: metricsContext.topCreatives?.length ?? 0 }
+        }
+        auth.currentUser?.getIdToken().then(convToken => {
+          fetch('/api/ai/conversation', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${convToken}` }, body: JSON.stringify(convPayload) })
+        }).catch(() => {})
+      }
     } catch {
       setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '網路錯誤，請稍後再試。', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
     } finally {
@@ -491,6 +521,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ ...payload, response: responseText, pageContext: contextPage, dataSnapshot: metricsContext ?? null }),
       })
+      // also update the conversation record
+      if (convStartedRef.current && sessionIdRef.current) {
+        fetch('/api/ai/conversation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ action: 'upsert', sessionId: sessionIdRef.current, pageId, feedback: payload.rating, improveReason: payload.improveReason ?? null }),
+        })
+      }
     }).catch(() => {})
   }
 
@@ -503,6 +541,37 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       setTimeout(() => send(autoSendPrompt), 300)
     }
   }, [open, autoSendPrompt, send, initMsg])
+
+  // Session init + owner check on open
+  useEffect(() => {
+    if (!open) return
+    sessionIdRef.current = Date.now().toString(36) + Math.random().toString(36).slice(2)
+    convStartedRef.current = false
+    turnCountRef.current = 0
+    if (pageId) {
+      auth.currentUser?.getIdToken().then(async idToken => {
+        try {
+          const res = await fetch(`/api/user/role?pageId=${pageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
+          if (res.ok) { const d = await res.json(); setIsOwner(!!d.isOwner) }
+        } catch { /* non-critical */ }
+      })
+    }
+  }, [open, pageId])
+
+  // Write endedAt when drawer closes
+  useEffect(() => {
+    if (open || !convStartedRef.current || !sessionIdRef.current) return
+    const sid = sessionIdRef.current
+    const turns = turnCountRef.current
+    auth.currentUser?.getIdToken().then(idToken => {
+      fetch('/api/ai/conversation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: 'close', sessionId: sid, pageId, totalTurns: turns }),
+      })
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // Fill textarea for regular initialPrompt (non-auto-send)
   useEffect(() => {
@@ -639,6 +708,36 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     setShowHistory(false)
   }
 
+  async function handleExport() {
+    if (!pageId) return
+    setExporting(true)
+    try {
+      const idToken = await auth.currentUser?.getIdToken()
+      if (!idToken) return
+      const now = new Date()
+      const endDate = now.toISOString().slice(0, 10)
+      let startDate = ''
+      if (exportRange === '30d') { const d = new Date(now); d.setDate(d.getDate() - 30); startDate = d.toISOString().slice(0, 10) }
+      else if (exportRange === '90d') { const d = new Date(now); d.setDate(d.getDate() - 90); startDate = d.toISOString().slice(0, 10) }
+      const params = new URLSearchParams({ pageId, feedbackFilter: exportFeedbackFilter })
+      if (startDate) params.set('startDate', startDate)
+      params.set('endDate', endDate)
+      const res = await fetch(`/api/ai/conversation?${params}`, { headers: { Authorization: `Bearer ${idToken}` } })
+      if (!res.ok) { alert('匯出失敗，請確認你有管理員權限'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const nameMatch = cd.match(/filename\*=UTF-8''(.+)/)
+      a.download = nameMatch ? decodeURIComponent(nameMatch[1]) : 'sidekick_export.csv'
+      a.href = url
+      a.click()
+      URL.revokeObjectURL(url)
+      setShowExportModal(false)
+    } catch { alert('匯出失敗，請稍後再試') }
+    finally { setExporting(false) }
+  }
+
   const suggestions = SUGGESTIONS_BY_PAGE[contextPage] ?? SUGGESTIONS_BY_PAGE.default
 
   return (
@@ -669,10 +768,49 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
             </div>
           </div>
 
+          {/* Export modal */}
+          {showExportModal && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'inherit' }}>
+              <div style={{ background: 'var(--ad-bg)', borderRadius: 12, padding: '20px 24px', width: 280, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>📥 匯出對話紀錄</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>時間範圍</div>
+                <select value={exportRange} onChange={e => setExportRange(e.target.value as '30d'|'90d'|'all')}
+                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: 12, fontFamily: 'inherit' }}>
+                  <option value="30d">最近 30 天</option>
+                  <option value="90d">最近 90 天</option>
+                  <option value="all">全部</option>
+                </select>
+                <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>篩選條件</div>
+                <select value={exportFeedbackFilter} onChange={e => setExportFeedbackFilter(e.target.value as 'all'|'has_feedback'|'improve_only')}
+                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: 16, fontFamily: 'inherit' }}>
+                  <option value="all">全部對話</option>
+                  <option value="has_feedback">只匯出有評分的</option>
+                  <option value="improve_only">只匯出「改進」評分</option>
+                </select>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setShowExportModal(false)}
+                    style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>取消</button>
+                  <button onClick={handleExport} disabled={exporting}
+                    style={{ fontSize: 12, padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--ad-blue)', color: '#fff', cursor: exporting ? 'default' : 'pointer', opacity: exporting ? 0.6 : 1, fontFamily: 'inherit' }}>
+                    {exporting ? '匯出中⋯' : '確認匯出'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* History panel */}
           {showHistory ? (
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <p style={{ fontSize: 12, color: 'var(--ad-text3)', marginBottom: 4 }}>點擊任一紀錄可還原對話</p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <p style={{ fontSize: 12, color: 'var(--ad-text3)', margin: 0 }}>點擊任一紀錄可還原對話</p>
+                {isOwner && pageId && (
+                  <button onClick={() => setShowExportModal(true)}
+                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    📥 匯出
+                  </button>
+                )}
+              </div>
               {historyLoading && <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>載入中⋯</p>}
               {!historyLoading && historySessions.length === 0 && (
                 <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>尚無歷史紀錄</p>
