@@ -347,7 +347,6 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
-  const [migrating, setMigrating] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportRange, setExportRange] = useState<'30d' | '90d' | 'all' | 'custom'>('30d')
   const [exportCustomStart, setExportCustomStart] = useState('')
@@ -709,25 +708,6 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     })
     setMessages(msgs)
     setShowHistory(false)
-  }
-
-  async function handleMigrateHistory() {
-    if (!pageId) return
-    if (!confirm('將舊對話紀錄（5/18 前）同步至 CSV 資料庫，此操作不可重複（重複執行會自動跳過已存在的紀錄）。確定繼續？')) return
-    setMigrating(true)
-    try {
-      const idToken = await auth.currentUser?.getIdToken()
-      if (!idToken) return
-      const res = await fetch('/api/ai/migrate-history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ pageId }),
-      })
-      const data = await res.json()
-      if (!res.ok) { alert('同步失敗：' + (data.error ?? '未知錯誤')); return }
-      alert(`同步完成！共遷移 ${data.migrated} 段對話（總計 ${data.total} 段，已存在的已略過）`)
-    } catch { alert('同步失敗，請稍後再試') }
-    finally { setMigrating(false) }
   }
 
   async function handleExport() {
