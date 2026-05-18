@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { FieldValue } from 'firebase-admin/firestore'
+
 
 interface AiInsightDoc {
   question?: string
@@ -79,8 +79,8 @@ export async function POST(req: NextRequest) {
       feedback: null,
       improveReason: null,
       totalTurns: group.length,
-      startedAt: FieldValue.serverTimestamp(),
-      endedAt: FieldValue.serverTimestamp(),
+      startedAt: first.ts,
+      endedAt: last.ts,
       _migratedFrom: 'aiInsights',
       _originalStart: first.ts.toISOString(),
       _originalEnd: last.ts.toISOString(),

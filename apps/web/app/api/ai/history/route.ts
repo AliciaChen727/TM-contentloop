@@ -19,6 +19,7 @@ type ConvDoc = {
   pageContext?: string
   messages?: ConvMsg[]
   startedAt?: { toDate(): Date }
+  _originalStart?: string
 }
 
 export async function GET(req: NextRequest) {
@@ -54,7 +55,8 @@ export async function GET(req: NextRequest) {
     const sessions: Session[] = snap.docs
       .map(d => {
         const doc = d.data() as ConvDoc
-        const startDt = doc.startedAt?.toDate() ?? new Date()
+        // migrated sessions store original time in _originalStart; fall back to startedAt
+        const rawDt = doc._originalStart ? new Date(doc._originalStart) : (doc.startedAt?.toDate() ?? new Date())
         const msgs = doc.messages ?? []
         const turns: Turn[] = []
         for (let i = 0; i < msgs.length - 1; i++) {
@@ -63,10 +65,15 @@ export async function GET(req: NextRequest) {
             i++
           }
         }
-        if (turns.length === 0) return null
+        // fallback: try any user message as question
+        if (turns.length === 0) {
+          const firstUser = msgs.find(m => m.role === 'user')
+          if (!firstUser) return null
+          turns.push({ question: firstUser.content, summary: '' })
+        }
         return {
           sessionId: doc.sessionId ?? d.id,
-          date: startDt.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          date: rawDt.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
           contextPage: doc.pageContext ?? 'overview',
           turns,
         }
