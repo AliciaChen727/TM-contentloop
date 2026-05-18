@@ -9,6 +9,14 @@ const STATUS_LABEL: Record<string, string> = { top: '🏆 最佳', good: '👍 �
 const TYPES = ['全部', 'Reels', '貼文', 'Stories', '海報']
 type SortBy = 'roas' | 'spend' | 'cpa'
 type Variant = 'A' | 'B' | 'control'
+type WinnerType = 'pending' | 'A' | 'B' | 'inconclusive'
+
+const WINNER_OPTIONS: { value: WinnerType; label: string }[] = [
+  { value: 'pending', label: '尚未得出結論' },
+  { value: 'A', label: 'A 組勝出' },
+  { value: 'B', label: 'B 組勝出' },
+  { value: 'inconclusive', label: '無顯著差異' },
+]
 
 const STATUS_LABEL_TEXT: Record<string, string> = { top: '最佳', good: '良好', ok: '一般', bad: '待優' }
 
@@ -147,6 +155,103 @@ function calcGroupStats(creatives: AdData['creatives']): GroupStats {
   return { ctr: wCtr / s, cpa: wCpa / s, roas: wRoas / s, totalSpend, count: creatives.length }
 }
 
+function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
+  allCreatives: AdData['creatives']
+  labels: Record<string, Variant>
+  abTestData: { aiDiagnosis: string; winner: string }
+  onAbTestUpdate: (update: { aiDiagnosis?: string; winner?: string }) => void
+}) {
+  const [localDiagnosis, setLocalDiagnosis] = useState(abTestData.aiDiagnosis)
+
+  useEffect(() => { setLocalDiagnosis(abTestData.aiDiagnosis) }, [abTestData.aiDiagnosis])
+
+  const groups: Record<Variant, AdData['creatives']> = { control: [], A: [], B: [] }
+  for (const c of allCreatives) {
+    const v = labels[c.id]
+    if (v) groups[v].push(c)
+  }
+  const controlStats = groups.control.length > 0 ? calcGroupStats(groups.control) : null
+  const aStats = groups.A.length > 0 ? calcGroupStats(groups.A) : null
+  const bStats = groups.B.length > 0 ? calcGroupStats(groups.B) : null
+
+  const baseStats = controlStats ?? aStats
+  const variantStats = controlStats ? (aStats ?? bStats) : bStats
+
+  const winner = abTestData.winner as WinnerType
+  const winnerStats = winner === 'A' ? aStats : winner === 'B' ? bStats : null
+
+  const convOf = (s: GroupStats | null) => s && s.cpa > 0 ? Math.round(s.totalSpend / s.cpa) : null
+
+  const tableRows = [
+    { label: 'CTR', ctrl: baseStats ? `${baseStats.ctr.toFixed(2)}%` : '—', variant: variantStats ? `${variantStats.ctr.toFixed(2)}%` : '—' },
+    { label: 'CPA', ctrl: baseStats ? `$${baseStats.cpa.toFixed(0)}` : '—', variant: variantStats ? `$${variantStats.cpa.toFixed(0)}` : '—' },
+    { label: '花費', ctrl: baseStats ? fmtK(baseStats.totalSpend) : '—', variant: variantStats ? fmtK(variantStats.totalSpend) : '—' },
+    { label: '轉換數', ctrl: String(convOf(baseStats) ?? '—'), variant: String(convOf(variantStats) ?? '—') },
+  ]
+
+  const ctrDelta = winnerStats && baseStats && baseStats.ctr > 0
+    ? (winnerStats.ctr - baseStats.ctr) / baseStats.ctr * 100 : null
+  const cpaDelta = winnerStats && baseStats && baseStats.cpa > 0
+    ? (baseStats.cpa - winnerStats.cpa) / baseStats.cpa * 100 : null
+
+  const inputStyle: React.CSSProperties = {
+    fontSize: 12, padding: '5px 8px', border: '1px solid #bfdbfe', borderRadius: 6,
+    background: 'white', color: '#1e293b', fontFamily: 'var(--font-dm-sans)', width: '100%', boxSizing: 'border-box',
+  }
+
+  return (
+    <div style={{ marginTop: 8, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 10 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', paddingBottom: 4, fontWeight: 500, color: '#64748b' }}>指標</th>
+            <th style={{ textAlign: 'right', paddingBottom: 4, fontWeight: 500, color: '#64748b' }}>控制組</th>
+            <th style={{ textAlign: 'right', paddingBottom: 4, fontWeight: 500, color: '#1d4ed8' }}>AI 建議版</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tableRows.map(r => (
+            <tr key={r.label} style={{ borderTop: '1px solid #dbeafe' }}>
+              <td style={{ padding: '4px 0', color: '#64748b' }}>{r.label}</td>
+              <td style={{ padding: '4px 0', textAlign: 'right', fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{r.ctrl}</td>
+              <td style={{ padding: '4px 0', textAlign: 'right', fontFamily: 'var(--font-dm-mono)', fontWeight: 500, color: '#1d4ed8' }}>{r.variant}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div style={{ marginBottom: 8 }}>
+        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>實驗結果</label>
+        <select value={winner} onChange={e => onAbTestUpdate({ winner: e.target.value })}
+          style={{ ...inputStyle, cursor: 'pointer' }}>
+          {WINNER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      {winnerStats && baseStats && (ctrDelta !== null || cpaDelta !== null) && (
+        <p style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, margin: '0 0 8px' }}>
+          AI 建議版
+          {ctrDelta !== null && ` CTR ${ctrDelta > 0 ? '+' : ''}${ctrDelta.toFixed(0)}%`}
+          {ctrDelta !== null && cpaDelta !== null && '，'}
+          {cpaDelta !== null && ` CPA ${cpaDelta > 0 ? '降低' : '上升'} ${cpaDelta > 0 ? '-' : '+'}${Math.abs(cpaDelta).toFixed(0)}%`}
+        </p>
+      )}
+
+      <div>
+        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>AI 當初的診斷說了什麼</label>
+        <textarea
+          value={localDiagnosis}
+          onChange={e => setLocalDiagnosis(e.target.value)}
+          onBlur={() => { if (localDiagnosis !== abTestData.aiDiagnosis) onAbTestUpdate({ aiDiagnosis: localDiagnosis }) }}
+          placeholder="貼上 AI Sidekick 給出的建議內容..."
+          rows={3}
+          style={{ ...inputStyle, resize: 'vertical' }}
+        />
+      </div>
+    </div>
+  )
+}
+
 function ExperimentResultCard({ creatives, labels }: {
   creatives: AdData['creatives']
   labels: Record<string, Variant>
@@ -226,14 +331,17 @@ function ExperimentResultCard({ creatives, labels }: {
   )
 }
 
-export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange }: {
+export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, abTestData, onAbTestUpdate }: {
   data: AdData
   onAskAI?: (q: string, autoSend?: boolean) => void
   creativeLabels?: Record<string, Variant>
   onLabelChange?: (adId: string, variant: Variant | null) => void
+  abTestData?: { aiDiagnosis: string; winner: string }
+  onAbTestUpdate?: (update: { aiDiagnosis?: string; winner?: string }) => void
 }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
+  const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const labels = creativeLabels ?? {}
 
   const sorted = useMemo(() => {
@@ -304,6 +412,21 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange }
                 ))}
               </div>
             </div>
+            {labels[c.id] && abTestData && onAbTestUpdate && (
+              <>
+                <button
+                  onClick={() => setExpandedCard(prev => prev === c.id ? null : c.id)}
+                  style={{ width: '100%', textAlign: 'center', fontSize: 11, color: 'var(--ad-blue)', background: 'none', border: 'none', borderTop: '1px solid var(--ad-border)', padding: '6px 0', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
+                >
+                  查看 A/B 對比 {expandedCard === c.id ? '↑' : '↓'}
+                </button>
+                <div style={{ overflow: 'hidden', maxHeight: expandedCard === c.id ? '600px' : '0', opacity: expandedCard === c.id ? 1 : 0, transition: 'max-height 0.3s ease, opacity 0.25s ease' }}>
+                  <div style={{ padding: '0 8px 8px' }}>
+                    <AbTestPanel allCreatives={data.creatives} labels={labels} abTestData={abTestData} onAbTestUpdate={onAbTestUpdate} />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>

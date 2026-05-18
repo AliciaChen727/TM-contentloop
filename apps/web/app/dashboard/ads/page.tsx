@@ -324,6 +324,7 @@ export default function AdsPage() {
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [creativeLabels, setCreativeLabels] = useState<Record<string, 'A' | 'B' | 'control'>>({})
+  const [abTestData, setAbTestData] = useState<{ aiDiagnosis: string; winner: string }>({ aiDiagnosis: '', winner: 'pending' })
   const [idTokenRef, setIdTokenRef] = useState('')
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
@@ -401,10 +402,17 @@ export default function AdsPage() {
         }
 
         if (pageId) {
-          const labelsRes = await fetch(`/api/ads/labels?pageId=${pageId}`, { headers })
+          const [labelsRes, abTestRes] = await Promise.all([
+            fetch(`/api/ads/labels?pageId=${pageId}`, { headers }),
+            fetch(`/api/ads/abtest?pageId=${pageId}`, { headers }),
+          ])
           if (labelsRes.ok) {
             const labelsJson = await labelsRes.json()
             setCreativeLabels(labelsJson.labels ?? {})
+          }
+          if (abTestRes.ok) {
+            const abTestJson = await abTestRes.json()
+            setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending' })
           }
         }
 
@@ -542,6 +550,20 @@ export default function AdsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map((p: any) => mapIgPost(p, igPostIdsSwitch, igPostMetricsSwitch))
     setRealPosts([...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date)))
+    if (pid) {
+      const [labelsRes, abTestRes] = await Promise.all([
+        fetch(`/api/ads/labels?pageId=${pid}`, { headers }),
+        fetch(`/api/ads/abtest?pageId=${pid}`, { headers }),
+      ])
+      if (labelsRes.ok) {
+        const labelsJson = await labelsRes.json()
+        setCreativeLabels(labelsJson.labels ?? {})
+      }
+      if (abTestRes.ok) {
+        const abTestJson = await abTestRes.json()
+        setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending' })
+      }
+    }
     setDataLoaded(true)
   }
 
@@ -826,6 +848,9 @@ export default function AdsPage() {
                   return { ...prev, [adId]: variant }
                 })
                 await fetch('/api/ads/labels', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, adId, variant }) })
+              } : undefined} abTestData={abTestData} onAbTestUpdate={selectedPageId ? async (update) => {
+                setAbTestData(prev => ({ ...prev, ...update }))
+                await fetch('/api/ads/abtest', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, ...update }) })
               } : undefined} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'time' && <BestTimeSection data={adData} />}
