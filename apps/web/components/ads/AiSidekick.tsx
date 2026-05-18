@@ -272,6 +272,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [editedVideoPrompts, setEditedVideoPrompts] = useState<Record<string, string>>({})
   const [editedDurations, setEditedDurations] = useState<Record<string, number>>({})
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([])
+  const [typingLabel, setTypingLabel] = useState('正在載入數據⋯')
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadPct, setVideoUploadPct] = useState(0)
   const [showHistory, setShowHistory] = useState(false)
@@ -459,6 +460,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   }, [open])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
+
+  useEffect(() => {
+    if (!typing) return
+    const labels = ['正在載入數據⋯', '分析 A/B 測試結果⋯', '生成建議中⋯']
+    let i = 0
+    setTypingLabel(labels[0])
+    const interval = setInterval(() => { i = (i + 1) % labels.length; setTypingLabel(labels[i]) }, 1800)
+    return () => clearInterval(interval)
+  }, [typing])
 
   // Load history
   useEffect(() => {
@@ -780,7 +790,10 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                 {typing && (
                   <div className="ads-sk-msg ai">
                     <div className="ads-sk-msg-avatar">✨</div>
-                    <div className="ads-sk-msg-bubble"><div className="ads-sk-typing"><span /><span /><span /></div></div>
+                    <div className="ads-sk-msg-bubble">
+                      <div className="ads-sk-typing"><span /><span /><span /></div>
+                      <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginTop: 5 }}>{typingLabel}</div>
+                    </div>
                   </div>
                 )}
                 <div ref={endRef} />

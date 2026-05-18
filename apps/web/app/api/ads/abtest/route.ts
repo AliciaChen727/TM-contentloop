@@ -67,5 +67,19 @@ export async function POST(req: NextRequest) {
   if (controlCopy !== undefined) update.controlCopy = controlCopy
   if (variantCopy !== undefined) update.variantCopy = variantCopy
   await ref.set(update, { merge: true })
+
+  if ((winner === 'A' || winner === 'B') && (controlCopy !== undefined || variantCopy !== undefined)) {
+    const historyRef = adminDb.collection('pages').doc(pageId).collection('abTests')
+    await historyRef.add({
+      winner,
+      aiDiagnosis: aiDiagnosis ?? '',
+      controlCopy: controlCopy ?? '',
+      variantCopy: variantCopy ?? '',
+      ctrDelta: ctrDelta ?? null,
+      cpaDelta: cpaDelta ?? null,
+      completedAt: FieldValue.serverTimestamp(),
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }

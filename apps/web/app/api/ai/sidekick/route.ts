@@ -432,13 +432,16 @@ export async function POST(req: NextRequest) {
   let abTestResults: ABTestResult[] | undefined
   if (pageId) {
     try {
-      const abSnap = await adminDb.collection('pages').doc(pageId).collection('abTests').doc('current').get()
-      if (abSnap.exists) {
-        const d = abSnap.data()!
-        abTestResults = [{ winner: d.winner ?? 'pending', aiDiagnosis: d.aiDiagnosis ?? '', controlCopy: d.controlCopy, variantCopy: d.variantCopy, ctrDelta: d.ctrDelta, cpaDelta: d.cpaDelta }]
-      } else {
-        abTestResults = []
-      }
+      const abSnap = await adminDb.collection('pages').doc(pageId)
+        .collection('abTests')
+        .where('winner', 'in', ['A', 'B'])
+        .orderBy('completedAt', 'desc')
+        .limit(10)
+        .get()
+      abTestResults = abSnap.docs.map(d => {
+        const d2 = d.data()
+        return { winner: d2.winner, aiDiagnosis: d2.aiDiagnosis ?? '', controlCopy: d2.controlCopy, variantCopy: d2.variantCopy, ctrDelta: d2.ctrDelta, cpaDelta: d2.cpaDelta }
+      })
     } catch { abTestResults = [] }
   }
 
