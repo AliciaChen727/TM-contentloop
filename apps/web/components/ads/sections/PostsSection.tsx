@@ -98,7 +98,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
           { label: '總觸及', value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach, sub: '所有貼文合計' },
           { label: '總按讚', value: totalLikes.toLocaleString(), sub: `留言 ${totalComments} · 分享 ${totalShares}` },
           { label: '平均互動率', value: `${avgEng.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
-          { label: '有投廣告', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最低 CPL $${maxRoas.toFixed(2)}` : '尚未串接廣告數據' },
+          { label: '有投廣告', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最低 CPA $${maxRoas.toFixed(2)}` : '尚未串接廣告數據' },
         ].map(s => (
           <div key={s.label} className="ads-posts-sum-card">
             <div className="ads-posts-sum-label">{s.label}</div>
@@ -242,7 +242,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4, marginBottom: 10 }}>{p.title}</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-                        {[['CPL', '$' + (p.adCpa ?? 0).toFixed(2), rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
+                        {[['CPA', '$' + (p.adCpa ?? 0).toFixed(2), rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
                           <div key={label as string}>
                             <div className="ads-posts-ad-metric-label">{label}</div>
                             <div className="ads-posts-ad-metric-value" style={{ color: color as string | undefined }}>{value}</div>
