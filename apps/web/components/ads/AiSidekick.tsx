@@ -842,16 +842,10 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <p style={{ fontSize: 12, color: 'var(--ad-text3)', margin: 0 }}>點擊任一紀錄可還原對話</p>
                 {isOwner && pageId && (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={handleMigrateHistory} disabled={migrating}
-                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: migrating ? 'default' : 'pointer', opacity: migrating ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                      {migrating ? '同步中⋯' : '🔄 同步舊紀錄'}
-                    </button>
-                    <button onClick={() => setShowExportModal(true)}
-                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                      📥 匯出
-                    </button>
-                  </div>
+                  <button onClick={() => setShowExportModal(true)}
+                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    📥 匯出
+                  </button>
                 )}
               </div>
               {historyLoading && <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>載入中⋯</p>}
