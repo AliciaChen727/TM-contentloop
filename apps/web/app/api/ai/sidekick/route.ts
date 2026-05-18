@@ -435,7 +435,6 @@ export async function POST(req: NextRequest) {
       const abSnap = await adminDb.collection('pages').doc(pageId)
         .collection('abTests')
         .where('winner', 'in', ['A', 'B'])
-        .orderBy('completedAt', 'desc')
         .limit(10)
         .get()
       abTestResults = abSnap.docs.map(d => {
