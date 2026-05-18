@@ -348,7 +348,9 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [historyLoading, setHistoryLoading] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [exportRange, setExportRange] = useState<'30d' | '90d' | 'all'>('30d')
+  const [exportRange, setExportRange] = useState<'30d' | '90d' | 'all' | 'custom'>('30d')
+  const [exportCustomStart, setExportCustomStart] = useState('')
+  const [exportCustomEnd, setExportCustomEnd] = useState('')
   const [exportFeedbackFilter, setExportFeedbackFilter] = useState<'all' | 'has_feedback' | 'improve_only'>('all')
   const [exporting, setExporting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -715,10 +717,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const idToken = await auth.currentUser?.getIdToken()
       if (!idToken) return
       const now = new Date()
-      const endDate = now.toISOString().slice(0, 10)
       let startDate = ''
+      let endDate = now.toISOString().slice(0, 10)
       if (exportRange === '30d') { const d = new Date(now); d.setDate(d.getDate() - 30); startDate = d.toISOString().slice(0, 10) }
       else if (exportRange === '90d') { const d = new Date(now); d.setDate(d.getDate() - 90); startDate = d.toISOString().slice(0, 10) }
+      else if (exportRange === 'custom') {
+        if (!exportCustomStart) { alert('請選擇開始日期'); return }
+        startDate = exportCustomStart
+        endDate = exportCustomEnd || endDate
+      }
       const params = new URLSearchParams({ pageId, feedbackFilter: exportFeedbackFilter })
       if (startDate) params.set('startDate', startDate)
       params.set('endDate', endDate)
@@ -774,12 +781,22 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               <div style={{ background: 'var(--ad-bg)', borderRadius: 12, padding: '20px 24px', width: 280, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
                 <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>📥 匯出對話紀錄</div>
                 <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>時間範圍</div>
-                <select value={exportRange} onChange={e => setExportRange(e.target.value as '30d'|'90d'|'all')}
-                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: 12, fontFamily: 'inherit' }}>
+                <select value={exportRange} onChange={e => setExportRange(e.target.value as '30d'|'90d'|'all'|'custom')}
+                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: exportRange === 'custom' ? 8 : 12, fontFamily: 'inherit' }}>
                   <option value="30d">最近 30 天</option>
                   <option value="90d">最近 90 天</option>
                   <option value="all">全部</option>
+                  <option value="custom">自訂日期</option>
                 </select>
+                {exportRange === 'custom' && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+                    <input type="date" value={exportCustomStart} onChange={e => setExportCustomStart(e.target.value)}
+                      style={{ flex: 1, fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', fontFamily: 'inherit' }} />
+                    <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>→</span>
+                    <input type="date" value={exportCustomEnd} onChange={e => setExportCustomEnd(e.target.value)}
+                      style={{ flex: 1, fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', fontFamily: 'inherit' }} />
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>篩選條件</div>
                 <select value={exportFeedbackFilter} onChange={e => setExportFeedbackFilter(e.target.value as 'all'|'has_feedback'|'improve_only')}
                   style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: 16, fontFamily: 'inherit' }}>
