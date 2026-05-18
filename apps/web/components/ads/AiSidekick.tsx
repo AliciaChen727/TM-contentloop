@@ -347,6 +347,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [historySessions, setHistorySessions] = useState<HistorySession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
+  const [migrating, setMigrating] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportRange, setExportRange] = useState<'30d' | '90d' | 'all' | 'custom'>('30d')
   const [exportCustomStart, setExportCustomStart] = useState('')
@@ -710,6 +711,25 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     setShowHistory(false)
   }
 
+  async function handleMigrateHistory() {
+    if (!pageId) return
+    if (!confirm('將舊對話紀錄（5/18 前）同步至 CSV 資料庫，此操作不可重複（重複執行會自動跳過已存在的紀錄）。確定繼續？')) return
+    setMigrating(true)
+    try {
+      const idToken = await auth.currentUser?.getIdToken()
+      if (!idToken) return
+      const res = await fetch('/api/ai/migrate-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ pageId }),
+      })
+      const data = await res.json()
+      if (!res.ok) { alert('同步失敗：' + (data.error ?? '未知錯誤')); return }
+      alert(`同步完成！共遷移 ${data.migrated} 段對話（總計 ${data.total} 段，已存在的已略過）`)
+    } catch { alert('同步失敗，請稍後再試') }
+    finally { setMigrating(false) }
+  }
+
   async function handleExport() {
     if (!pageId) return
     setExporting(true)
@@ -822,10 +842,16 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <p style={{ fontSize: 12, color: 'var(--ad-text3)', margin: 0 }}>點擊任一紀錄可還原對話</p>
                 {isOwner && pageId && (
-                  <button onClick={() => setShowExportModal(true)}
-                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    📥 匯出
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={handleMigrateHistory} disabled={migrating}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: migrating ? 'default' : 'pointer', opacity: migrating ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      {migrating ? '同步中⋯' : '🔄 同步舊紀錄'}
+                    </button>
+                    <button onClick={() => setShowExportModal(true)}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      📥 匯出
+                    </button>
+                  </div>
                 )}
               </div>
               {historyLoading && <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>載入中⋯</p>}
