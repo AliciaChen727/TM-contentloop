@@ -96,10 +96,54 @@ ${metrics.topPosts.map((p, i) => `${i + 1}. [${p.platform}] ${p.title.slice(0, 4
 
 interface OrgCtx { name: string; type: string; coreKpi: string; extraContext: string }
 
-function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW', orgCtx?: OrgCtx | null): string {
+interface ABTestResult {
+  winner: string
+  aiDiagnosis: string
+  controlCopy?: string
+  variantCopy?: string
+  ctrDelta?: number
+  cpaDelta?: number
+}
+
+function extractPatterns(cases: ABTestResult[], lang: 'zh-TW' | 'en'): string {
+  const n = cases.length
+  const avgCtr = cases.reduce((s, t) => s + (t.ctrDelta ?? 0), 0) / n
+  const avgCpa = cases.reduce((s, t) => s + (t.cpaDelta ?? 0), 0) / n
+  const shortWins = cases.filter(t => (t.variantCopy?.length ?? 0) < 30).length
+  const qWins = cases.filter(t => /你|嗎？|是不是/.test(t.variantCopy ?? '')).length
+
+  if (lang === 'en') {
+    const lines: string[] = []
+    if (avgCtr > 0) lines.push(`- AI-suggested version averaged CTR improvement: +${avgCtr.toFixed(1)}%`)
+    if (avgCpa > 0) lines.push(`- AI-suggested version averaged CPA reduction: -${avgCpa.toFixed(1)}%`)
+    if (shortWins > n * 0.6) lines.push(`- Short copy (under 30 chars) tends to win`)
+    if (qWins > n * 0.5) lines.push(`- Question-format openings ("Are you...?") tend to win`)
+    return lines.length > 0 ? lines.join('\n') : '- Insufficient cases to identify patterns yet'
+  }
+  const lines: string[] = []
+  if (avgCtr > 0) lines.push(`- AI 建議版平均 CTR 提升 +${avgCtr.toFixed(1)}%`)
+  if (avgCpa > 0) lines.push(`- AI 建議版平均 CPA 降低 -${avgCpa.toFixed(1)}%`)
+  if (shortWins > n * 0.6) lines.push(`- 短文案（30 字以內）勝率較高`)
+  if (qWins > n * 0.5) lines.push(`- 問句開頭（「你是不是...」「你有沒有...」）勝率較高`)
+  return lines.length > 0 ? lines.join('\n') : '- 案例數量尚不足以歸納規律，持續累積測試中'
+}
+
+function buildAbTestBlock(abTestResults: ABTestResult[], lang: 'zh-TW' | 'en'): string {
+  const winningCases = abTestResults.filter(t => t.winner === 'A' || t.winner === 'B')
+  if (lang === 'en') {
+    if (winningCases.length === 0) return `\n## A/B Test History\nNo winning AI-suggested cases recorded yet. Rely on ad data and general best practices.\n`
+    return `\n## A/B Test Historical Results (prioritize these insights)\n${winningCases.map((t, i) => `\nCase ${i + 1}:\n- Control copy: "${t.controlCopy ?? 'N/A'}"\n- AI-suggested copy: "${t.variantCopy ?? 'N/A'}"\n- AI diagnosis: "${t.aiDiagnosis}"\n- Result: CTR ${t.ctrDelta != null ? (t.ctrDelta > 0 ? `+${t.ctrDelta}%` : `${t.ctrDelta}%`) : 'N/A'}, CPA ${t.cpaDelta != null ? (t.cpaDelta > 0 ? `-${t.cpaDelta}%` : `+${Math.abs(t.cpaDelta)}%`) : 'N/A'}`).join('\n')}\n\nHigh-win-rate copy patterns for this account:\n${extractPatterns(winningCases, 'en')}\n`
+  }
+  if (winningCases.length === 0) return `\n## A/B 測試歷史\n這個帳號目前尚無 AI 建議版勝出的測試記錄。請根據廣告成效數據與通用最佳實踐給出建議。\n`
+  return `\n## A/B 測試歷史成果（請優先參考這些成功案例）\n過去 AI 建議版勝出的案例：\n${winningCases.map((t, i) => `\n案例 ${i + 1}：\n- 控制組文案：「${t.controlCopy ?? 'N/A'}」\n- AI 建議版：「${t.variantCopy ?? 'N/A'}」\n- AI 當初的診斷：「${t.aiDiagnosis}」\n- 實際結果：CTR ${t.ctrDelta != null ? (t.ctrDelta > 0 ? `+${t.ctrDelta}%` : `${t.ctrDelta}%`) : 'N/A'}，CPA ${t.cpaDelta != null ? (t.cpaDelta > 0 ? `降低 -${t.cpaDelta}%` : `上升 +${Math.abs(t.cpaDelta)}%`) : 'N/A'}`).join('\n')}\n\n根據以上案例，這個帳號的高勝率文案特徵：\n${extractPatterns(winningCases, 'zh-TW')}\n`
+}
+
+function buildSidekickSystemPrompt(contextPage: string, metrics?: MetricsContext, memory?: string, lang: 'zh-TW' | 'en' = 'zh-TW', orgCtx?: OrgCtx | null, abTestResults?: ABTestResult[]): string {
   const isPostsContext = contextPage === 'posts' || contextPage === 'combined'
   const isCreativePage = contextPage === 'creative'
   const metricsBlock = metrics && Object.keys(metrics).length > 0 ? buildMetricsBlock(metrics, lang) : ''
+
+  const abTestBlock = abTestResults ? buildAbTestBlock(abTestResults, lang) : ''
 
   if (lang === 'en') {
     const role = isCreativePage
@@ -111,6 +155,7 @@ function buildSystemPrompt(contextPage: string, metrics?: MetricsContext, memory
           : 'You are a senior Meta advertising consultant. Analyze ad account data and provide specific actionable optimization recommendations.\n\n[Important Context]: This is a Toastmasters International District 67 non-profit ad account. The main goal is to drive clicks on a registration link (Google Form) for events. Since there is no revenue:\n- **ROAS is meaningless for this account** (no revenue), ROAS = 0.00x is normal\n- **Core KPI is CPL (cost per registration click)**: Spend ÷ link clicks\n- Top priority: improve CTR and lower CPL\n- Google Form cannot track form completion rate; suggest UTM parameters + GA for tracking'
 
     const memoryBlock = memory ? `\n## Past Analysis Memory (build on these conclusions)\n${memory}\n` : ''
+    const enAbTestBlock = abTestBlock
 
     return `${role}
 
@@ -162,7 +207,7 @@ If video generation requested but context is insufficient:
 [Clarify proactively]: When the question is ambiguous, offer 2 options in bullets. Exception: (1) if user requests image/video generation, generate immediately; (2) if message mentions "this image" but no attachment, generate directly for the mentioned topic.
 [Clear positive/negative signals]: Distinguish good metrics (high engagement rate, ROAS on target) from bad (high CPA, frequency fatigue).
 [Specific actions]: Each action must have a specific target, e.g. "Increase audience A daily budget from $X to $Y", not "consider adjusting budget."
-${memoryBlock}
+${memoryBlock}${enAbTestBlock}
 ## Audience Analysis Safeguard
 **Meta Graph API does not provide audience age/gender/interest breakdowns** (restricted by Meta privacy policy).
 - When users ask about audience demographics, explain this data is unavailable and suggest checking Meta Ads Manager's Audience Insights.
@@ -273,7 +318,7 @@ ${isCreativePage ? `## 🎯 素材庫模式
 【主動釐清】：當問題語意模糊時，在 bullets 中提出 2 個選項讓用戶選擇，例如「你想了解 A 還是 B？」。例外：（1）若用戶要求生成圖片或影片，直接生成，不得釐清；（2）若訊息含「此圖」但無附件，不得要求上傳，直接為提及的活動／用途生成廣告素材。
 【正負指標明確】：正面數據（如 ROAS 達標、互動率高於均值）與負面數據（如 CPA 過高、頻率疲勞）要明確區分，不混為一談。
 【建議具體可執行】：每條 actions 要有具體數字或對象，例如「將受眾 A 的日預算從 $X 提高至 $Y」，而非「考慮調整預算」。
-${memoryBlock}
+${memoryBlock}${abTestBlock}
 ## 受眾分析防傑機制
 **Meta Graph API 目前無法提供受眾年齡/性別/興趣分布**（Meta 已因隐私政策限制此屬性）。
 - 關鍵規則：**當用戶問詢受眾年齡/性別/地區/興趣特徵分析時**，应說明目前系統無法取得此資料，建議用戶參考 Meta Ads Manager 的「受眾洞察」報表。
@@ -343,12 +388,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { message, contextPage, metricsContext, fileAttachments, history } = body as {
+  const { message, contextPage, metricsContext, fileAttachments, history, pageId } = body as {
     message: string
     contextPage: string
     metricsContext?: MetricsContext
     fileAttachments?: { type: 'image' | 'pdf' | 'text' | 'video'; mimeType: string; content: string; name: string; videoUrl?: string }[]
     history?: { role: 'user' | 'assistant'; text: string }[]
+    pageId?: string
   }
 
   if (!message?.trim() && (!fileAttachments || fileAttachments.length === 0)) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
@@ -383,7 +429,20 @@ export async function POST(req: NextRequest) {
   const lang: 'zh-TW' | 'en' = prefData?.language === 'en' ? 'en' : 'zh-TW'
   const orgCtx: OrgCtx | null = prefData?.organizationContext ?? null
 
-  const systemPrompt = buildSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx)
+  let abTestResults: ABTestResult[] | undefined
+  if (pageId) {
+    try {
+      const abSnap = await adminDb.collection('pages').doc(pageId).collection('abTests').doc('current').get()
+      if (abSnap.exists) {
+        const d = abSnap.data()!
+        abTestResults = [{ winner: d.winner ?? 'pending', aiDiagnosis: d.aiDiagnosis ?? '', controlCopy: d.controlCopy, variantCopy: d.variantCopy, ctrDelta: d.ctrDelta, cpaDelta: d.cpaDelta }]
+      } else {
+        abTestResults = []
+      }
+    } catch { abTestResults = [] }
+  }
+
+  const systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx, abTestResults)
 
   // Build user message content (text + optional files)
   const userContent: Anthropic.MessageParam['content'] = []

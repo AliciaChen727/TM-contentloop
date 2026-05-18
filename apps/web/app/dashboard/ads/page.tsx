@@ -870,6 +870,7 @@ export default function AdsPage() {
         contextPage={active}
         initialPrompt={skInitPrompt}
         autoSendPrompt={skAutoSend ? skInitPrompt : undefined}
+        pageId={selectedPageId || undefined}
         metricsContext={{
           spend: adData.overview.summary.spend,
           roas: adData.overview.summary.roas,

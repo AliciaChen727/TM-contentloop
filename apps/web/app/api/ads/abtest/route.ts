@@ -48,7 +48,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { pageId, aiDiagnosis, winner } = await req.json() as { pageId: string; aiDiagnosis?: string; winner?: string }
+  const { pageId, aiDiagnosis, winner, ctrDelta, cpaDelta, controlCopy, variantCopy } = await req.json() as {
+    pageId: string; aiDiagnosis?: string; winner?: string
+    ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string
+  }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
 
   if (!(await hasPageAccess(uid, pageId))) {
@@ -59,6 +62,10 @@ export async function POST(req: NextRequest) {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() }
   if (aiDiagnosis !== undefined) update.aiDiagnosis = aiDiagnosis
   if (winner !== undefined) update.winner = winner
+  if (ctrDelta !== undefined) update.ctrDelta = ctrDelta
+  if (cpaDelta !== undefined) update.cpaDelta = cpaDelta
+  if (controlCopy !== undefined) update.controlCopy = controlCopy
+  if (variantCopy !== undefined) update.variantCopy = variantCopy
   await ref.set(update, { merge: true })
   return NextResponse.json({ ok: true })
 }

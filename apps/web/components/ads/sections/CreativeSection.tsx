@@ -155,11 +155,13 @@ function calcGroupStats(creatives: AdData['creatives']): GroupStats {
   return { ctr: wCtr / s, cpa: wCpa / s, roas: wRoas / s, totalSpend, count: creatives.length }
 }
 
+type AbTestUpdate = { aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string }
+
 function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   allCreatives: AdData['creatives']
   labels: Record<string, Variant>
   abTestData: { aiDiagnosis: string; winner: string }
-  onAbTestUpdate: (update: { aiDiagnosis?: string; winner?: string }) => void
+  onAbTestUpdate: (update: AbTestUpdate) => void
 }) {
   const [localDiagnosis, setLocalDiagnosis] = useState(abTestData.aiDiagnosis)
 
@@ -222,8 +224,18 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
 
       <div style={{ marginBottom: 8 }}>
         <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>實驗結果</label>
-        <select value={winner} onChange={e => onAbTestUpdate({ winner: e.target.value })}
-          style={{ ...inputStyle, cursor: 'pointer' }}>
+        <select value={winner} onChange={e => {
+          const newWinner = e.target.value
+          const update: AbTestUpdate = { winner: newWinner }
+          if (newWinner === 'A' || newWinner === 'B') {
+            const winStats = newWinner === 'A' ? aStats : bStats
+            if (winStats && baseStats && baseStats.ctr > 0) update.ctrDelta = parseFloat(((winStats.ctr - baseStats.ctr) / baseStats.ctr * 100).toFixed(1))
+            if (winStats && baseStats && baseStats.cpa > 0) update.cpaDelta = parseFloat(((baseStats.cpa - winStats.cpa) / baseStats.cpa * 100).toFixed(1))
+            update.controlCopy = groups.control[0]?.name ?? groups.A[0]?.name ?? ''
+            update.variantCopy = (newWinner === 'A' ? groups.A[0] : groups.B[0])?.name ?? ''
+          }
+          onAbTestUpdate(update)
+        }} style={{ ...inputStyle, cursor: 'pointer' }}>
           {WINNER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
@@ -337,7 +349,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
   creativeLabels?: Record<string, Variant>
   onLabelChange?: (adId: string, variant: Variant | null) => void
   abTestData?: { aiDiagnosis: string; winner: string }
-  onAbTestUpdate?: (update: { aiDiagnosis?: string; winner?: string }) => void
+  onAbTestUpdate?: (update: AbTestUpdate) => void
 }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')

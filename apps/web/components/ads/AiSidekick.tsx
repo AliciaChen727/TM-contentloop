@@ -248,13 +248,14 @@ function AiMessageBody({ r, onSend }: { r: AiResponse; onSend: (text: string) =>
   )
 }
 
-export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSendPrompt, metricsContext }: {
+export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSendPrompt, metricsContext, pageId }: {
   open: boolean
   onClose: () => void
   contextPage: string
   initialPrompt?: string
   autoSendPrompt?: string
   metricsContext?: MetricsContext
+  pageId?: string
 }) {
   const initMsg = useCallback((): Message => ({
     id: 'm0', role: 'ai', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
@@ -390,7 +391,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/sidekick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachments: atts.length > 0 ? atts : undefined, history }),
+        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachments: atts.length > 0 ? atts : undefined, history, pageId }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -411,7 +412,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     } finally {
       setTyping(false)
     }
-  }, [input, fileAttachments, contextPage, metricsContext, messages])
+  }, [input, fileAttachments, contextPage, metricsContext, messages, pageId])
 
   // Auto-send when creative pin triggers
   useEffect(() => {
