@@ -13,6 +13,14 @@ interface AiInsightDoc {
 interface Turn { question: string; summary: string }
 interface Session { sessionId: string; date: string; contextPage: string; turns: Turn[] }
 
+type ConvMsg = { role: string; content: string; timestamp: string }
+type ConvDoc = {
+  sessionId?: string
+  pageContext?: string
+  messages?: ConvMsg[]
+  startedAt?: { toDate(): Date }
+}
+
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -25,6 +33,50 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
+  const pageId = req.nextUrl.searchParams.get('pageId')
+
+  // Page-scoped: read from sidekickConversations
+  if (pageId) {
+    const adminSnap = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
+    if (!adminSnap.exists) {
+      const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+      const viewerPages: { pageId: string; permissions?: { sidekick?: boolean } }[] = viewerSnap.data()?.pages ?? []
+      if (!viewerPages.some(p => p.pageId === pageId && p.permissions?.sidekick)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
+    const snap = await adminDb.collection('pages').doc(pageId).collection('sidekickConversations')
+      .orderBy('startedAt', 'desc')
+      .limit(50)
+      .get()
+
+    const sessions: Session[] = snap.docs
+      .map(d => {
+        const doc = d.data() as ConvDoc
+        const startDt = doc.startedAt?.toDate() ?? new Date()
+        const msgs = doc.messages ?? []
+        const turns: Turn[] = []
+        for (let i = 0; i < msgs.length - 1; i++) {
+          if (msgs[i].role === 'user' && msgs[i + 1]?.role === 'assistant') {
+            turns.push({ question: msgs[i].content, summary: msgs[i + 1].content })
+            i++
+          }
+        }
+        if (turns.length === 0) return null
+        return {
+          sessionId: doc.sessionId ?? d.id,
+          date: startDt.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          contextPage: doc.pageContext ?? 'overview',
+          turns,
+        }
+      })
+      .filter((s): s is Session => s !== null)
+
+    return NextResponse.json({ sessions })
+  }
+
+  // Fallback: read from legacy aiInsights
   const snap = await adminDb
     .collection('users').doc(uid)
     .collection('aiInsights')
@@ -38,7 +90,6 @@ export async function GET(req: NextRequest) {
     ts: (d.data() as AiInsightDoc).createdAt?.toDate() ?? new Date(0),
   }))
 
-  // Group docs within 60-minute windows into sessions
   const sessions: Session[] = []
   let current: typeof docs = []
 

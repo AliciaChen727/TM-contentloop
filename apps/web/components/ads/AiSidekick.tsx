@@ -625,7 +625,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     if (!showHistory) return
     setHistoryLoading(true)
     auth.currentUser?.getIdToken().then(idToken => {
-      fetch('/api/ai/history', { headers: { Authorization: `Bearer ${idToken}` } })
+      fetch(pageId ? `/api/ai/history?pageId=${pageId}` : '/api/ai/history', { headers: { Authorization: `Bearer ${idToken}` } })
         .then(r => r.json())
         .then(d => setHistorySessions(d.sessions ?? []))
         .catch(() => {})
