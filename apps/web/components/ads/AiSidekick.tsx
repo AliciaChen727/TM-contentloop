@@ -55,7 +55,7 @@ interface HistoryTurn { question: string; summary: string }
 interface HistorySession { sessionId: string; date: string; contextPage: string; turns: HistoryTurn[] }
 
 const SUGGESTIONS_BY_PAGE: Record<string, string[]> = {
-  posts: ['這期間哪類貼文互動率最高？', '我的 Reels 和圖文貼文哪個表現更好？', '如何優化下一篇貼文的文案？', '分享數偏低的原因可能是什麼？'],
+  posts: ['這期間哪類貼文互動率最高？', '我的 Reels 和圖文貼文哪個表現更好？', '貼上文案，幫我優化出 A/B 測試版本', '分享數偏低的原因可能是什麼？'],
   creative: ['幫我生成一張廣告素材', '根據表現最差的廣告建議新素材方向', '貼上文案，幫我優化出 A/B 測試版本', '如何改善 CTR 偏低的廣告圖？'],
   default: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '貼上文案，幫我優化出 A/B 測試版本', '幫我生成一張廣告素材'],
 }
