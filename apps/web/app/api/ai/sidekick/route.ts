@@ -257,11 +257,15 @@ ${memoryBlock}${helpfulBlock}${improveBlock}${enAbTestBlock}
 ## Copy A/B Test Request
 When the user pastes ad copy and asks for "A/B test versions", "optimize copy", "give me variants", or similar:
 → Return type: "copy_variants" with non-empty copyVariants array and empty bullets/actions/stats
+→ **Before generating, ALWAYS check in order**:
+  1. "A/B Test Historical Results" block above (if present): extract winning copy patterns (e.g. emotional openings, question format, short copy under 30 chars, specific hooks that won)
+  2. Top creative performance data (topCreatives CTR/CPA): infer which copy styles correlate with high performance
+  3. If no historical data: default to emotional appeal + rhetorical question as the higher-win-rate direction
 → copyVariants must contain exactly 3 items:
   1. label: "Control (Original)" — copy field = original text unchanged
-  2. label: "Test A" — optimized for stronger CTA or emotional appeal
-  3. label: "Test B" — alternative angle: simpler, different target audience perspective
-→ rationale: one sentence explaining what changed and why
+  2. label: "Test A" — apply the highest-win-rate pattern from history (e.g. emotional opening, question hook); rationale must cite the historical pattern used
+  3. label: "Test B" — alternative angle that also draws from history (e.g. shorter copy, different emotional angle, different audience perspective)
+→ rationale: one sentence citing which historical pattern was applied and why it tends to win for this account
 
 ## Response Format
 Always respond in English. Output pure JSON directly — no markdown code block, no explanation text, only JSON:
@@ -370,11 +374,15 @@ ${memoryBlock}${helpfulBlock}${improveBlock}${abTestBlock}
 ## 文案 A/B 測試請求
 當用戶貼上廣告文案並說「A/B 測試」「給我幾個版本」「優化文案」「幫我優化出測試版本」等：
 → 回傳 type: "copy_variants"，copyVariants 必填，bullets/actions/stats 均為空陣列
+→ **生成前必須按順序參考**：
+  1. 上方「A/B 測試歷史成果」區塊（若有）：萃取勝率高的文案特徵（如情緒開場、問句格式、短文案 30 字以內、具體贏過的 hook 寫法）
+  2. 素材表現數據（topCreatives CTR/CPA）：推斷哪種文案風格對應高表現素材
+  3. 若無歷史資料：以「情感訴求 + 反問式開場」為預設勝率較高的方向
 → copyVariants 必須包含 3 個項目：
   1. label: "控制組（原版）" — copy 欄位保留原文不動
-  2. label: "測試版 A" — 優化方向：強化 CTA 或情緒訴求
-  3. label: "測試版 B" — 換一個角度：更簡潔或不同受眾視角
-→ rationale：一句話說明改了什麼、為什麼
+  2. label: "測試版 A" — 套用歷史最高勝率規律（如情緒開場、問句 hook）；rationale 必須明確引用用的哪條歷史規律
+  3. label: "測試版 B" — 同樣依據歷史，嘗試另一個高勝率角度（如不同情感切點、更短版本、不同受眾視角）
+→ rationale：一句話說明「根據帳戶哪條歷史勝出規律」做了什麼改動，讓用戶看得出優化依據
 
 ## 回傳格式
 繁體中文。直接輸出純 JSON 物件，禁止包在 markdown code block 裡，禁止任何說明文字，只輸出 JSON：
