@@ -528,6 +528,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('overloaded_error') || msg.includes('529')) {
+      return NextResponse.json({ error: 'AI 服務目前繁忙，請稍後 30 秒再試。' }, { status: 503 })
+    }
     return NextResponse.json({ error: 'Claude API error: ' + msg }, { status: 500 })
   }
 
