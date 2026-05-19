@@ -206,6 +206,18 @@ Current page is the ad creative library. For performance analysis or diagnosis, 
   - Each action item should describe an information category to be supplied (e.g. "Provide product name or promotion topic"), not an instruction
 - NEVER mix clarifying questions with imagePrompt/videoPrompt in the same response.
 
+## 🚫 Existing Design Edit Request (highest priority, overrides all generation rules)
+If the user's message meets BOTH conditions:
+  A. An image is attached that appears to be a finished design (contains text, logos, portraits, event info)
+  B. The message contains editing intent: "keep", "preserve", "only change", "modify the subtitle", "just replace X", "retain the original"
+→ NEVER return type: "image_request"
+→ Return type: "recommendation"
+→ summary: explain that AI can only generate brand-new images from scratch — it CANNOT edit or modify an existing design; furthermore, ALL AI image models (Imagen, DALL-E, Stable Diffusion) cannot accurately render Chinese characters — any generated image will have garbled or incorrect Chinese text, and this cannot be fixed by prompting
+→ actions must include exactly these 3 alternatives:
+  1. "Open the original design in Canva (or your design tool) and edit the subtitle text directly — fastest option"
+  2. "I can draft the revised subtitle/copy text for you to paste back into your design tool"
+  3. "If you still want AI to generate, I can create an English-only or icon-only version; Chinese text would need to be added manually afterward"
+
 ## ⚡ Creative Generation Request
 If the user message contains explicit generation verbs like "generate", "create", "make", "design" referring to images/creatives (not video) AND there is enough context to write a meaningful prompt:
 → Immediately return type: "image_request" with non-empty imagePrompt and empty bullets/actions
@@ -320,6 +332,18 @@ ${isCreativePage ? `## 🎯 素材庫模式
   - **完全不得**包含 imagePrompt / videoPrompt 欄位（連空字串都不行，直接省略）
   - actions 條目應為「待補充的資訊類別」（如「提供產品名稱或推廣主題」），不是動作指令
 - 絕對禁止在同一個回應中同時出現「澄清問題」和「imagePrompt/videoPrompt」。
+
+## 🚫 現有設計稿修改請求（最高優先，覆蓋所有生成規則）
+若用戶訊息同時符合以下兩個條件：
+  A. 附有上傳的圖片，且該圖片看起來是已完成的設計稿（含有文字、Logo、人物照片、活動資訊等）
+  B. 訊息包含局部編輯意圖：「保留」「只修改」「副標題改成」「只換」「改成」「維持原有」等詞彙
+→ 絕對禁止回傳 type: "image_request"
+→ 回傳 type: "recommendation"
+→ summary 說明：AI 目前只能全新生成圖片，**無法在現有設計稿上局部修改**；此外，所有 AI 圖像模型（包含 Imagen、DALL-E、Stable Diffusion）均無法準確渲染中文字，若強制生成，中文文字將出現亂碼或錯字，且此問題無法透過調整提示詞解決
+→ actions 必須給出以下三條替代建議：
+  1. 「用 Canva（或你的設計工具）開啟原始設計檔，直接修改副標題文字，最快速」
+  2. 「我可以幫你擬好修改後的副標題或文案，你再貼回設計工具套用」
+  3. 「若仍想 AI 生成，我可以提供無中文的英文版或提示詞，中文文字需自行後製加入」
 
 ## ⚡ 生成素材請求
 若用戶訊息含有「生成」「做一張」「做一版」「製作一張」「出一版」「直接生成」「幫我生成」「給我一張」「做素材」「出素材」等**生成動詞**，且提到圖片/素材/廣告圖 **且上下文資訊足夠寫出有意義的提示詞**：
