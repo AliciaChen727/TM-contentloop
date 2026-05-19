@@ -49,3 +49,31 @@ users/{uid}
 - 元件：PascalCase
 - 工具函式：camelCase
 - Firestore collection：camelCase 複數（`fbPosts`, `igPosts`）
+
+## AI Sidekick 整合規則（新增儀表板必讀）
+
+每個儀表板頁面使用 `<AiSidekick>` 時，**必須傳入 `pageId` prop**，否則：
+- 對話不會存進 `pages/{pageId}/sidekickConversations`
+- 歷史面板顯示「尚無歷史紀錄」
+- Owner 看不到「匯出」按鈕
+
+### 正確寫法
+```tsx
+<AiSidekick
+  open={skOpen}
+  onClose={() => setSkOpen(false)}
+  contextPage="posts"          // 或 "overview" / "creative" / "diagnosis" 等
+  pageId={pageData?.pageId ?? undefined}   // ← 必須加
+  metricsContext={...}
+/>
+```
+
+### 已整合的儀表板
+| 頁面 | 檔案 | contextPage |
+|---|---|---|
+| 廣告儀表板 | `apps/web/app/dashboard/ads/page.tsx` | overview / diagnosis / creative 等 |
+| 內容表現 | `apps/web/app/dashboard/page.tsx` | posts |
+
+### Firestore 路徑
+- 有 `pageId`：`pages/{pageId}/sidekickConversations/{sessionId}`（對話存檔、歷史、CSV 匯出）
+- 無 `pageId`：fallback 讀 `users/{uid}/aiInsights`（舊系統，不支援匯出）
