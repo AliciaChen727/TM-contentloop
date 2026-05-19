@@ -450,6 +450,7 @@ export default function DashboardPage() {
           reelsCount: stats.reelsCount,
           dateRange: dateMode === 'preset' ? (days === 0 ? '全部時間' : `近 ${days} 天`) : `${customStart} ~ ${customEnd}`,
         } satisfies MetricsContext}
+        pageId={pageData?.pageId ?? undefined}
       />
     </main>
   )
