@@ -157,6 +157,89 @@ function calcGroupStats(creatives: AdData['creatives']): GroupStats {
 
 type AbTestUpdate = { aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string; experimentName?: string }
 
+type AbDiagnosis = {
+  pattern: string | null
+  roiWinner: 'A' | 'B' | 'control' | 'inconclusive'
+  interpretation: string
+  actions: string[]
+}
+
+function buildAbDiagnosis(
+  baseStats: GroupStats,
+  testStats: GroupStats,
+  testLabel: 'A' | 'B',
+  hasControl: boolean
+): AbDiagnosis {
+  const ctrDelta = baseStats.ctr > 0 ? (testStats.ctr - baseStats.ctr) / baseStats.ctr : 0
+  const roasDelta = baseStats.roas > 0 ? (testStats.roas - baseStats.roas) / baseStats.roas : 0
+  const baseLabel = hasControl ? '控制組' : 'A 版'
+  const v = testLabel
+
+  const ctrUp = ctrDelta > 0.15
+  const ctrDown = ctrDelta < -0.05
+  const roasUp = roasDelta > 0.10
+  const roasDown = roasDelta < -0.15
+
+  if (ctrUp && roasDown) {
+    return {
+      pattern: '好奇點擊',
+      roiWinner: hasControl ? 'control' : 'inconclusive',
+      interpretation: `${v} 版 CTR 大幅提升，代表創意 hook 有效、成功引發受眾注意力。但 ROAS 大幅下滑是更關鍵的訊號：點進來的用戶沒有轉換行為，吸引的可能是「好奇點擊」而非真正有意願的族群。CPC 偏高也顯示 Meta 演算法對 ${v} 版的「品質分」較低。`,
+      actions: [
+        `暫緩停止${baseLabel}——ROAS ${baseStats.roas.toFixed(1)}x 是目前 ROI 最佳表現，先保留`,
+        `調查 ${v} 版的流量質量：確認點進來的用戶是否完成目標行動`,
+        `${v} 版 hook 有效，試著優化 CTA 或 landing page，讓後段轉換跟上`,
+      ],
+    }
+  }
+
+  if (ctrUp && roasUp) {
+    return {
+      pattern: '全面領先',
+      roiWinner: v,
+      interpretation: `${v} 版在點擊率與投資報酬率雙雙優於${baseLabel}，是真正有效的素材升級。受眾不只更願意點擊，點進來後的轉換行為也更好。`,
+      actions: [
+        `可以逐步增加 ${v} 版預算比例，縮減${baseLabel}份額`,
+        `記錄 ${v} 版與${baseLabel}的差異（文案、視覺、CTA），作為下次素材的設計原則`,
+      ],
+    }
+  }
+
+  if (ctrDown && roasUp) {
+    return {
+      pattern: '精準轉換',
+      roiWinner: v,
+      interpretation: `${v} 版 CTR 雖未大幅增加，但轉換效率更高——吸引的是更有意願的受眾，而非廣泛的好奇點擊。這是高品質流量的訊號。`,
+      actions: [
+        `考慮以 ${v} 版取代${baseLabel}作為主力素材`,
+        `這類素材適合搭配再行銷受眾，放大精準轉換優勢`,
+      ],
+    }
+  }
+
+  if (!ctrUp && !roasUp && roasDown) {
+    return {
+      pattern: null,
+      roiWinner: hasControl ? 'control' : 'inconclusive',
+      interpretation: `${v} 版各項指標均未優於${baseLabel}，目前${baseLabel}仍是最佳選擇。`,
+      actions: [
+        `暫停或縮減 ${v} 版預算`,
+        `重新審視 ${v} 版素材的差異點，下次實驗調整更顯著的變數`,
+      ],
+    }
+  }
+
+  return {
+    pattern: null,
+    roiWinner: 'inconclusive',
+    interpretation: `目前數據尚未顯示明確的 ROI 差異，建議繼續跑取得更多數據再判斷。`,
+    actions: [
+      `維持現狀，等待曝光量增加後再評估`,
+      `確認兩版本的預算分配是否對等`,
+    ],
+  }
+}
+
 function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   allCreatives: AdData['creatives']
   labels: Record<string, Variant>
@@ -312,16 +395,14 @@ function ExperimentResultCard({ creatives, labels, experimentName }: {
   const bStats = hasB ? calcGroupStats(groups.B) : null
   const baseStats = controlStats ?? aStats!
 
-  const bestGroup = (() => {
-    if (aStats && bStats) return aStats.ctr > bStats.ctr ? 'A' : 'B'
-    if (aStats) return 'A'
-    return null
-  })()
-
   const rows: { stats: GroupStats; variant: Variant }[] = []
   if (controlStats) rows.push({ stats: controlStats, variant: 'control' })
   if (aStats) rows.push({ stats: aStats, variant: 'A' })
   if (bStats) rows.push({ stats: bStats, variant: 'B' })
+
+  const testStats = controlStats ? (aStats ?? bStats) : bStats
+  const testLabel: 'A' | 'B' = controlStats ? (aStats ? 'A' : 'B') : 'B'
+  const diag = testStats ? buildAbDiagnosis(baseStats, testStats, testLabel, hasControl) : null
 
   return (
     <div style={{ marginBottom: 16, borderRadius: 12, border: '1.5px solid #bfdbfe', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', padding: '14px 16px' }}>
@@ -360,13 +441,26 @@ function ExperimentResultCard({ creatives, labels, experimentName }: {
         })}
       </div>
 
-      {bestGroup && aStats && (
-        <p style={{ marginTop: 10, fontSize: 11.5, color: '#1e40af', fontWeight: 500 }}>
-          📌 AI Sidekick 建議版（A 版）{hasControl
-            ? `CTR ${pct(aStats.ctr, baseStats.ctr)} ，CPC ${pct(aStats.cpa, baseStats.cpa)}`
-            : `CTR ${aStats.ctr.toFixed(2)}%`}
-          {bestGroup === 'A' ? '，目前領先' : ''}
-        </p>
+      {diag && (
+        <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.85)', border: '1px solid #bfdbfe' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span style={{ fontSize: 11 }}>📌</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e40af' }}>AI Sidekick 診斷</span>
+            {diag.pattern && (
+              <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 8, background: '#fee2e2', color: '#b91c1c', fontWeight: 600 }}>{diag.pattern}</span>
+            )}
+          </div>
+          <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.65, margin: '0 0 8px 0' }}>{diag.interpretation}</p>
+          <div style={{ fontSize: 11.5, color: '#475569' }}>
+            <div style={{ fontWeight: 600, marginBottom: 3 }}>建議行動</div>
+            {diag.actions.map((a, i) => (
+              <div key={i} style={{ display: 'flex', gap: 5, marginBottom: 2 }}>
+                <span style={{ color: '#94a3b8', flexShrink: 0 }}>•</span>
+                <span>{a}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
