@@ -1,6 +1,6 @@
 'use client'
 
-import { signInWithPopup, signOut } from 'firebase/auth'
+import { signInWithPopup, signOut, linkWithCredential, FacebookAuthProvider, type AuthError } from 'firebase/auth'
 import { collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -58,8 +58,22 @@ export default function LoginPage() {
       const idToken = await result.user.getIdToken()
       await handlePostLogin(idToken, result.user.uid)
     } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'code' in err && err.code === 'auth/account-exists-with-different-credential') {
-        setError('此 Email 已用其他方式（如 Google）登入過，請改用原本的登入方式。')
+      const authErr = err as AuthError
+      if (authErr?.code === 'auth/account-exists-with-different-credential') {
+        const fbCredential = FacebookAuthProvider.credentialFromError(authErr)
+        if (fbCredential) {
+          try {
+            setError('你的 Email 已有 Google 帳號，正在自動連結，請在 Google 彈窗中確認身份…')
+            const googleResult = await signInWithPopup(auth, googleProvider)
+            await linkWithCredential(googleResult.user, fbCredential)
+            setError('')
+            const idToken = await googleResult.user.getIdToken()
+            await handlePostLogin(idToken, googleResult.user.uid)
+          } catch (linkErr) {
+            console.error('Account linking failed:', linkErr)
+            setError('帳號連結失敗，請重試或聯絡管理員。')
+          }
+        }
       } else {
         console.error('Facebook login failed:', err)
       }
