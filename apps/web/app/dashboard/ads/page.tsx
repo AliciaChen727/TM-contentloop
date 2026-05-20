@@ -448,9 +448,11 @@ export default function AdsPage() {
 
   async function handleSync(since?: string, until?: string) {
     const syncFrom = since ?? dateFrom
-    const syncTo = until ?? dateTo
+    const today = new Date().toISOString().slice(0, 10)
+    const syncTo = until ?? (dateTo < today ? today : dateTo)
     if (since) setDateFrom(since)
     if (until) setDateTo(until)
+    else if (dateTo < today) setDateTo(today)
     setSyncing(true)
     setSyncError(null)
     try {
