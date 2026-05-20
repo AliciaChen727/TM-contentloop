@@ -310,9 +310,7 @@ export default function AdsPage() {
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
   })
-  const [dateTo, setDateTo] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10)
-  })
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [realPosts, setRealPosts] = useState<Post[] | null>(null)
   const [adData, setAdData] = useState<AdData>(MOCK_DATA)
   const [lastSync, setLastSync] = useState<string | null>(null)
