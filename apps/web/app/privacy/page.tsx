@@ -62,7 +62,7 @@ export default function PrivacyPage() {
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>7. Contact</h2>
         <p style={{ fontSize: 14 }}>
           If you have any questions about this Privacy Policy, please contact us at:{' '}
-          <a href="mailto:peiwenchen726@gmail.com" style={{ color: '#3B6FD4' }}>peiwenchen726@gmail.com</a>
+          <a href="mailto:courage727@gmail.com" style={{ color: '#3B6FD4' }}>courage727@gmail.com</a>
         </p>
       </section>
     </main>
