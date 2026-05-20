@@ -57,8 +57,12 @@ export default function LoginPage() {
       const result = await signInWithPopup(auth, facebookProvider)
       const idToken = await result.user.getIdToken()
       await handlePostLogin(idToken, result.user.uid)
-    } catch (err) {
-      console.error('Facebook login failed:', err)
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && err.code === 'auth/account-exists-with-different-credential') {
+        setError('此 Email 已用其他方式（如 Google）登入過，請改用原本的登入方式。')
+      } else {
+        console.error('Facebook login failed:', err)
+      }
     }
   }
 
