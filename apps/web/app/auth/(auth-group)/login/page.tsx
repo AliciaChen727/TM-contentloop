@@ -65,12 +65,21 @@ export default function LoginPage() {
           try {
             setError('你的 Email 已有 Google 帳號，正在自動連結，請在 Google 彈窗中確認身份…')
             const googleResult = await signInWithPopup(auth, googleProvider)
-            await linkWithCredential(googleResult.user, fbCredential)
+            try {
+              await linkWithCredential(googleResult.user, fbCredential)
+            } catch (linkErr: unknown) {
+              const le = linkErr as AuthError
+              if (le?.code !== 'auth/provider-already-linked') {
+                console.error('Account linking failed:', linkErr)
+                setError('帳號連結失敗，請重試或聯絡管理員。')
+                return
+              }
+            }
             setError('')
             const idToken = await googleResult.user.getIdToken()
             await handlePostLogin(idToken, googleResult.user.uid)
-          } catch (linkErr) {
-            console.error('Account linking failed:', linkErr)
+          } catch (googleErr) {
+            console.error('Google sign-in during linking failed:', googleErr)
             setError('帳號連結失敗，請重試或聯絡管理員。')
           }
         }
