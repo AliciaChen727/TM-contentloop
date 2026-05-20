@@ -42,6 +42,8 @@ export interface Creative {
   impressions: number
   thumb: 'reels' | 'post' | 'stories' | 'poster'
   status: 'top' | 'good' | 'ok' | 'bad'
+  linkClicks?: number
+  cpc?: number
 }
 
 export interface DiagItem {

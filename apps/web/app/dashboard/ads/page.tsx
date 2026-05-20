@@ -142,6 +142,8 @@ function mapRawAdCreative(c: any, idx: number) {
     cpa,
     thumb: inferThumb(type),
     status: inferStatus(roas),
+    linkClicks: linkClicks > 0 ? linkClicks : 0,
+    cpc: linkClicks > 0 ? parseFloat((spend / linkClicks).toFixed(2)) : 0,
   }
 }
 

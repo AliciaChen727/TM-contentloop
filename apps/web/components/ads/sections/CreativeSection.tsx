@@ -27,7 +27,7 @@ const VARIANT_STYLE: Record<Variant, { bg: string; color: string; label: string 
 }
 
 function buildCreativePrompt(c: AdData['creatives'][number]): string {
-  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPL：$${c.cpa.toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
+  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPA：$${c.cpa.toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
 }
 
 const PlatformIcon = ({ type }: { type: 'IG' | 'FB' }) => (
@@ -182,19 +182,31 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   const winner = abTestData.winner as WinnerType
   const winnerStats = winner === 'A' ? aStats : winner === 'B' ? bStats : null
 
-  const convOf = (s: GroupStats | null) => s && s.cpa > 0 ? Math.round(s.totalSpend / s.cpa) : null
+  const totalLinkClicks = (arr: AdData['creatives']) =>
+    arr.reduce((sum, c) => sum + (c.linkClicks ?? 0), 0)
+
+  const baseGroup = groups.control.length > 0 ? groups.control : groups.A
+  const variantGroup = controlStats ? (groups.A.length > 0 ? groups.A : groups.B) : groups.B
+  const baseLinkClicks = totalLinkClicks(baseGroup)
+  const variantLinkClicks = variantStats ? totalLinkClicks(variantGroup) : 0
+  const baseCpc = baseLinkClicks > 0 && baseStats ? parseFloat((baseStats.totalSpend / baseLinkClicks).toFixed(2)) : 0
+  const variantCpc = variantLinkClicks > 0 && variantStats ? parseFloat((variantStats.totalSpend / variantLinkClicks).toFixed(2)) : 0
+
+  const winnerGroup = winner === 'A' ? groups.A : winner === 'B' ? groups.B : []
+  const winnerLinkClicks = totalLinkClicks(winnerGroup)
+  const winnerCpc = winnerLinkClicks > 0 && winnerStats ? parseFloat((winnerStats.totalSpend / winnerLinkClicks).toFixed(2)) : 0
 
   const tableRows = [
     { label: 'CTR', ctrl: baseStats ? `${baseStats.ctr.toFixed(2)}%` : '—', variant: variantStats ? `${variantStats.ctr.toFixed(2)}%` : '—' },
-    { label: 'CPA', ctrl: baseStats ? `$${baseStats.cpa.toFixed(0)}` : '—', variant: variantStats ? `$${variantStats.cpa.toFixed(0)}` : '—' },
+    { label: 'CPC', ctrl: baseCpc > 0 ? `$${baseCpc.toFixed(2)}` : '—', variant: variantCpc > 0 ? `$${variantCpc.toFixed(2)}` : '—' },
     { label: '花費', ctrl: baseStats ? fmtK(baseStats.totalSpend) : '—', variant: variantStats ? fmtK(variantStats.totalSpend) : '—' },
-    { label: '轉換數', ctrl: String(convOf(baseStats) ?? '—'), variant: String(convOf(variantStats) ?? '—') },
+    { label: '連結點擊數', ctrl: baseLinkClicks > 0 ? baseLinkClicks.toLocaleString() : '—', variant: variantLinkClicks > 0 ? variantLinkClicks.toLocaleString() : '—' },
   ]
 
   const ctrDelta = winnerStats && baseStats && baseStats.ctr > 0
     ? (winnerStats.ctr - baseStats.ctr) / baseStats.ctr * 100 : null
-  const cpaDelta = winnerStats && baseStats && baseStats.cpa > 0
-    ? (baseStats.cpa - winnerStats.cpa) / baseStats.cpa * 100 : null
+  const cpaDelta = baseCpc > 0 && winnerCpc > 0
+    ? (baseCpc - winnerCpc) / baseCpc * 100 : null
 
   const inputStyle: React.CSSProperties = {
     fontSize: 12, padding: '5px 8px', border: '1px solid #bfdbfe', borderRadius: 6,
@@ -229,8 +241,10 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
           const update: AbTestUpdate = { winner: newWinner }
           if (newWinner === 'A' || newWinner === 'B') {
             const winStats = newWinner === 'A' ? aStats : bStats
+            const wClicks = totalLinkClicks(newWinner === 'A' ? groups.A : groups.B)
+            const wCpc = wClicks > 0 && winStats ? winStats.totalSpend / wClicks : 0
             if (winStats && baseStats && baseStats.ctr > 0) update.ctrDelta = parseFloat(((winStats.ctr - baseStats.ctr) / baseStats.ctr * 100).toFixed(1))
-            if (winStats && baseStats && baseStats.cpa > 0) update.cpaDelta = parseFloat(((baseStats.cpa - winStats.cpa) / baseStats.cpa * 100).toFixed(1))
+            if (baseCpc > 0 && wCpc > 0) update.cpaDelta = parseFloat(((baseCpc - wCpc) / baseCpc * 100).toFixed(1))
             update.controlCopy = groups.control[0]?.name ?? groups.A[0]?.name ?? ''
             update.variantCopy = (newWinner === 'A' ? groups.A[0] : groups.B[0])?.name ?? ''
           }
@@ -245,7 +259,7 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
           AI 建議版
           {ctrDelta !== null && ` CTR ${ctrDelta > 0 ? '+' : ''}${ctrDelta.toFixed(0)}%`}
           {ctrDelta !== null && cpaDelta !== null && '，'}
-          {cpaDelta !== null && ` CPA ${cpaDelta > 0 ? '降低' : '上升'} ${cpaDelta > 0 ? '-' : '+'}${Math.abs(cpaDelta).toFixed(0)}%`}
+          {cpaDelta !== null && ` CPC ${cpaDelta > 0 ? '降低' : '上升'} ${cpaDelta > 0 ? '-' : '+'}${Math.abs(cpaDelta).toFixed(0)}%`}
         </p>
       )}
 
