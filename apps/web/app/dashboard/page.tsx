@@ -452,6 +452,9 @@ export default function DashboardPage() {
         } satisfies MetricsContext}
         pageId={pageData?.pageId ?? undefined}
       />
+      <footer className="mt-8 pb-6 text-center">
+        <a href="/privacy" className="text-xs text-gray-400 hover:text-gray-600">Privacy Policy</a>
+      </footer>
     </main>
   )
 }
