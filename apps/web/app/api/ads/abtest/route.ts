@@ -31,9 +31,9 @@ export async function GET(req: NextRequest) {
   }
 
   const snap = await adminDb.collection('pages').doc(pageId).collection('abTests').doc('current').get()
-  if (!snap.exists) return NextResponse.json({ aiDiagnosis: '', winner: 'pending' })
+  if (!snap.exists) return NextResponse.json({ aiDiagnosis: '', winner: 'pending', experimentName: '' })
   const data = snap.data()!
-  return NextResponse.json({ aiDiagnosis: data.aiDiagnosis ?? '', winner: data.winner ?? 'pending' })
+  return NextResponse.json({ aiDiagnosis: data.aiDiagnosis ?? '', winner: data.winner ?? 'pending', experimentName: data.experimentName ?? '' })
 }
 
 export async function POST(req: NextRequest) {
@@ -48,9 +48,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { pageId, aiDiagnosis, winner, ctrDelta, cpaDelta, controlCopy, variantCopy } = await req.json() as {
+  const { pageId, aiDiagnosis, winner, ctrDelta, cpaDelta, controlCopy, variantCopy, experimentName } = await req.json() as {
     pageId: string; aiDiagnosis?: string; winner?: string
-    ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string
+    ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string; experimentName?: string
   }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
 
@@ -66,12 +66,14 @@ export async function POST(req: NextRequest) {
   if (cpaDelta !== undefined) update.cpaDelta = cpaDelta
   if (controlCopy !== undefined) update.controlCopy = controlCopy
   if (variantCopy !== undefined) update.variantCopy = variantCopy
+  if (experimentName !== undefined) update.experimentName = experimentName
   await ref.set(update, { merge: true })
 
   if ((winner === 'A' || winner === 'B') && (controlCopy !== undefined || variantCopy !== undefined)) {
     const historyRef = adminDb.collection('pages').doc(pageId).collection('abTests')
     await historyRef.add({
       winner,
+      experimentName: experimentName ?? '',
       aiDiagnosis: aiDiagnosis ?? '',
       controlCopy: controlCopy ?? '',
       variantCopy: variantCopy ?? '',

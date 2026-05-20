@@ -155,17 +155,19 @@ function calcGroupStats(creatives: AdData['creatives']): GroupStats {
   return { ctr: wCtr / s, cpa: wCpa / s, roas: wRoas / s, totalSpend, count: creatives.length }
 }
 
-type AbTestUpdate = { aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string }
+type AbTestUpdate = { aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string; experimentName?: string }
 
 function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   allCreatives: AdData['creatives']
   labels: Record<string, Variant>
-  abTestData: { aiDiagnosis: string; winner: string }
+  abTestData: { aiDiagnosis: string; winner: string; experimentName?: string }
   onAbTestUpdate: (update: AbTestUpdate) => void
 }) {
   const [localDiagnosis, setLocalDiagnosis] = useState(abTestData.aiDiagnosis)
+  const [localName, setLocalName] = useState(abTestData.experimentName ?? '')
 
   useEffect(() => { setLocalDiagnosis(abTestData.aiDiagnosis) }, [abTestData.aiDiagnosis])
+  useEffect(() => { setLocalName(abTestData.experimentName ?? '') }, [abTestData.experimentName])
 
   const groups: Record<Variant, AdData['creatives']> = { control: [], A: [], B: [] }
   for (const c of allCreatives) {
@@ -215,6 +217,17 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
 
   return (
     <div style={{ marginTop: 8, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>實驗名稱</label>
+        <input
+          type="text"
+          value={localName}
+          onChange={e => setLocalName(e.target.value)}
+          onBlur={() => { if (localName !== (abTestData.experimentName ?? '')) onAbTestUpdate({ experimentName: localName }) }}
+          placeholder="例：[2026/5/20] 推廣 D67 演講節"
+          style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #bfdbfe', borderRadius: 6, background: 'white', color: '#1e293b', fontFamily: 'var(--font-dm-sans)', width: '100%', boxSizing: 'border-box' }}
+        />
+      </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 10 }}>
         <thead>
           <tr>
@@ -278,9 +291,10 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   )
 }
 
-function ExperimentResultCard({ creatives, labels }: {
+function ExperimentResultCard({ creatives, labels, experimentName }: {
   creatives: AdData['creatives']
   labels: Record<string, Variant>
+  experimentName?: string
 }) {
   const groups: Record<Variant, AdData['creatives']> = { control: [], A: [], B: [] }
   for (const c of creatives) {
@@ -314,6 +328,7 @@ function ExperimentResultCard({ creatives, labels }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         <span style={{ fontSize: 14 }}>🧪</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1e40af' }}>A/B 實驗結果</span>
+        {experimentName && <span style={{ fontSize: 11, color: '#64748b', background: '#e0e7ff', padding: '2px 8px', borderRadius: 10 }}>{experimentName}</span>}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -362,7 +377,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
   onAskAI?: (q: string, autoSend?: boolean) => void
   creativeLabels?: Record<string, Variant>
   onLabelChange?: (adId: string, variant: Variant | null) => void
-  abTestData?: { aiDiagnosis: string; winner: string }
+  abTestData?: { aiDiagnosis: string; winner: string; experimentName?: string }
   onAbTestUpdate?: (update: AbTestUpdate) => void
 }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
@@ -401,7 +416,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
       </div>
 
       {onLabelChange && Object.keys(labels).length > 0 && (
-        <ExperimentResultCard creatives={data.creatives} labels={labels} />
+        <ExperimentResultCard creatives={data.creatives} labels={labels} experimentName={abTestData?.experimentName} />
       )}
 
       {sorted.length === 0 && (

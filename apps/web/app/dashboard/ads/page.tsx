@@ -326,7 +326,7 @@ export default function AdsPage() {
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [creativeLabels, setCreativeLabels] = useState<Record<string, 'A' | 'B' | 'control'>>({})
-  const [abTestData, setAbTestData] = useState<{ aiDiagnosis: string; winner: string }>({ aiDiagnosis: '', winner: 'pending' })
+  const [abTestData, setAbTestData] = useState<{ aiDiagnosis: string; winner: string; experimentName: string }>({ aiDiagnosis: '', winner: 'pending', experimentName: '' })
   const [idTokenRef, setIdTokenRef] = useState('')
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
@@ -414,7 +414,7 @@ export default function AdsPage() {
           }
           if (abTestRes.ok) {
             const abTestJson = await abTestRes.json()
-            setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending' })
+            setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending', experimentName: abTestJson.experimentName ?? '' })
           }
         }
 
@@ -563,7 +563,7 @@ export default function AdsPage() {
       }
       if (abTestRes.ok) {
         const abTestJson = await abTestRes.json()
-        setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending' })
+        setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending', experimentName: abTestJson.experimentName ?? '' })
       }
     }
     setDataLoaded(true)
