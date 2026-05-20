@@ -29,6 +29,15 @@ export async function POST(req: NextRequest) {
   const since: string | undefined = body.since
   const until: string | undefined = body.until
 
+  // Sync requires the user's own Meta token — only page admins (not viewers) can sync.
+  // Check that the user actually owns this page before proceeding.
+  if (pageId) {
+    const ownTokenSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
+    if (!ownTokenSnap.exists) {
+      return NextResponse.json({ error: 'Sync requires page admin access.' }, { status: 403 })
+    }
+  }
+
   const userRef = adminDb.collection('users').doc(uid)
   // Try new per-page token doc, fallback to legacy 'page' doc
   const tokenDocRef = pageId
