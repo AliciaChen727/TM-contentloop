@@ -484,7 +484,7 @@ export async function POST(req: NextRequest) {
   } catch { /* Firestore index missing or other error: non-critical, proceed without memory */ }
 
   // Retrieve user's own Claude API key (required — no fallback to owner key)
-  const anthropicKey = await getUserApiKey(uid, 'anthropic')
+  const anthropicKey = await getUserApiKey(uid, 'anthropic') ?? process.env.ANTHROPIC_API_KEY ?? null
   if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
@@ -604,6 +604,18 @@ export async function POST(req: NextRequest) {
       metricsSnapshot: metricsContext ?? null,
       createdAt: FieldValue.serverTimestamp(),
     })
+  } catch { /* non-critical */ }
+
+  try {
+    const inputTokens = claudeRes.usage.input_tokens
+    const outputTokens = claudeRes.usage.output_tokens
+    const claudeCostUsd = (inputTokens * 0.80 + outputTokens * 4) / 1_000_000
+    const month = new Date().toISOString().slice(0, 7)
+    await adminDb.collection('users').doc(uid).collection('usage').doc(month).set({
+      claudeInputTokens: FieldValue.increment(inputTokens),
+      claudeOutputTokens: FieldValue.increment(outputTokens),
+      claudeCostUsd: FieldValue.increment(claudeCostUsd),
+    }, { merge: true })
   } catch { /* non-critical */ }
 
   return NextResponse.json({ response: parsed })

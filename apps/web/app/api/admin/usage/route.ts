@@ -42,9 +42,12 @@ export async function GET(req: NextRequest) {
       const videoCount: number = usage?.videoCount ?? 0
       const videoSeconds: number = usage?.videoSeconds ?? 0
       const videoCostUsd: number = usage?.videoCostUsd ?? 0
-      const totalCostUsd = imageCostUsd + videoCostUsd
+      const claudeInputTokens: number = usage?.claudeInputTokens ?? 0
+      const claudeOutputTokens: number = usage?.claudeOutputTokens ?? 0
+      const claudeCostUsd: number = usage?.claudeCostUsd ?? 0
+      const totalCostUsd = imageCostUsd + videoCostUsd + claudeCostUsd
 
-      if (imageCount === 0 && videoSeconds === 0) return null
+      if (imageCount === 0 && videoSeconds === 0 && claudeInputTokens === 0) return null
 
       let email = userId
       let displayName = ''
@@ -54,7 +57,7 @@ export async function GET(req: NextRequest) {
         displayName = userRecord.displayName ?? ''
       } catch { /* user might not exist in Auth */ }
 
-      return { uid: userId, email, displayName, imageCount, imageCostUsd, videoCount, videoSeconds, videoCostUsd, totalCostUsd }
+      return { uid: userId, email, displayName, imageCount, imageCostUsd, videoCount, videoSeconds, videoCostUsd, claudeInputTokens, claudeOutputTokens, claudeCostUsd, totalCostUsd }
     })
   )
 

@@ -13,6 +13,9 @@ interface UsageRow {
   videoCount: number
   videoSeconds: number
   videoCostUsd: number
+  claudeInputTokens: number
+  claudeOutputTokens: number
+  claudeCostUsd: number
   totalCostUsd: number
 }
 
@@ -81,6 +84,7 @@ export default function AdminUsagePage() {
 
   const totalImage = rows.reduce((s, r) => s + r.imageCostUsd, 0)
   const totalVideo = rows.reduce((s, r) => s + r.videoCostUsd, 0)
+  const totalClaude = rows.reduce((s, r) => s + r.claudeCostUsd, 0)
   const totalCost = rows.reduce((s, r) => s + r.totalCostUsd, 0)
   const totalImages = rows.reduce((s, r) => s + r.imageCount, 0)
   const totalVideoSec = rows.reduce((s, r) => s + r.videoSeconds, 0)
@@ -126,6 +130,7 @@ export default function AdminUsagePage() {
                   <th className="text-right px-4 py-3">圖片成本</th>
                   <th className="text-right px-4 py-3">影片秒數</th>
                   <th className="text-right px-4 py-3">影片成本</th>
+                  <th className="text-right px-4 py-3">Claude 對話</th>
                   <th className="text-right px-5 py-3">合計</th>
                 </tr>
               </thead>
@@ -140,6 +145,7 @@ export default function AdminUsagePage() {
                     <td className="text-right px-4 py-3 text-gray-600 font-mono">{fmt(r.imageCostUsd)}</td>
                     <td className="text-right px-4 py-3 text-gray-600 font-mono">{r.videoSeconds} 秒</td>
                     <td className="text-right px-4 py-3 text-gray-600 font-mono">{fmt(r.videoCostUsd)}</td>
+                    <td className="text-right px-4 py-3 text-gray-600 font-mono" title={`${(r.claudeInputTokens ?? 0).toLocaleString()} input / ${(r.claudeOutputTokens ?? 0).toLocaleString()} output tokens`}>{fmt(r.claudeCostUsd ?? 0)}</td>
                     <td className="text-right px-5 py-3 font-semibold text-gray-800 font-mono">{fmt(r.totalCostUsd)}</td>
                   </tr>
                 ))}
@@ -151,6 +157,7 @@ export default function AdminUsagePage() {
                   <td className="text-right px-4 py-3 font-mono">{fmt(totalImage)}</td>
                   <td className="text-right px-4 py-3 font-mono">{totalVideoSec} 秒</td>
                   <td className="text-right px-4 py-3 font-mono">{fmt(totalVideo)}</td>
+                  <td className="text-right px-4 py-3 font-mono">{fmt(totalClaude)}</td>
                   <td className="text-right px-5 py-3 font-mono text-blue-600">{fmt(totalCost)}</td>
                 </tr>
               </tfoot>
@@ -158,7 +165,7 @@ export default function AdminUsagePage() {
           )}
         </div>
 
-        <p className="mt-3 text-xs text-gray-400">成本以 Imagen 3 Fast $0.02/張、Veo 2 $0.50/秒計算</p>
+        <p className="mt-3 text-xs text-gray-400">成本以 Imagen 3 Fast $0.02/張、Veo 2 $0.50/秒、Claude Haiku 4.5 $0.80/M input + $4/M output tokens 計算</p>
       </div>
     </main>
   )
