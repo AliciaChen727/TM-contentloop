@@ -27,7 +27,7 @@ const VARIANT_STYLE: Record<Variant, { bg: string; color: string; label: string 
 }
 
 function buildCreativePrompt(c: AdData['creatives'][number]): string {
-  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPA：$${c.cpa.toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
+  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPC：$${(c.cpc ?? c.cpa).toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
 }
 
 const PlatformIcon = ({ type }: { type: 'IG' | 'FB' }) => (
@@ -345,7 +345,7 @@ function ExperimentResultCard({ creatives, labels, experimentName }: {
                   {!isBase && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: pctColor(stats.ctr, baseStats.ctr, true) }}>{pct(stats.ctr, baseStats.ctr)}</span>}
                 </div>
                 <div>
-                  <span style={{ color: '#64748b' }}>CPA </span>
+                  <span style={{ color: '#64748b' }}>CPC </span>
                   <span style={{ fontWeight: 600 }}>${stats.cpa.toFixed(0)}</span>
                   {!isBase && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: pctColor(stats.cpa, baseStats.cpa, false) }}>{pct(stats.cpa, baseStats.cpa)}</span>}
                 </div>
@@ -363,7 +363,7 @@ function ExperimentResultCard({ creatives, labels, experimentName }: {
       {bestGroup && aStats && (
         <p style={{ marginTop: 10, fontSize: 11.5, color: '#1e40af', fontWeight: 500 }}>
           📌 AI Sidekick 建議版（A 版）{hasControl
-            ? `CTR ${pct(aStats.ctr, baseStats.ctr)} ，CPA ${pct(aStats.cpa, baseStats.cpa)}`
+            ? `CTR ${pct(aStats.ctr, baseStats.ctr)} ，CPC ${pct(aStats.cpa, baseStats.cpa)}`
             : `CTR ${aStats.ctr.toFixed(2)}%`}
           {bestGroup === 'A' ? '，目前領先' : ''}
         </p>
@@ -410,7 +410,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
           >
             <option value="roas">點擊效益 ↓</option>
             <option value="spend">花費 ↓</option>
-            <option value="cpa">CPA ↑</option>
+            <option value="cpa">CPC ↑</option>
           </select>
         </div>
       </div>
@@ -445,7 +445,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
             <div className="ads-creative-info">
               <div className="ads-creative-name">{renderAdName(c.name)}</div>
               <div className="ads-creative-meta">
-                {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPA', '$' + c.cpa]].map(([k, v]) => (
+                {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPC', '$' + (c.cpc ?? c.cpa)]].map(([k, v]) => (
                   <div key={k} className="ads-creative-kv">
                     <span style={{ color: 'var(--ad-text3)' }}>{k}</span>
                     <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{v}</span>
