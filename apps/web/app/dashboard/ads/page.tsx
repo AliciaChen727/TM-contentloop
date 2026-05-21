@@ -48,7 +48,7 @@ function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string
     type: 'post',
     url: p.permalink || '#',
     hasAd,
-    paidReach: p.insights?.paidReach ?? 0,
+    paidReach: p.insights?.paidReach || metrics?.reach || 0,
     organicReach: p.insights?.organicReach ?? 0,
     adRoas: metrics?.roas,
     adSpend: metrics?.spend,
