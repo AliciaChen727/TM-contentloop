@@ -480,13 +480,22 @@ export default function AdsPage() {
       // Await IG sync so errors are surfaced to the user
       if (selectedPageId) {
         try {
-          const igRes = await fetch('/api/insights/ig/sync', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pageId: selectedPageId }),
-          })
-          const igJson = await igRes.json()
-          if (!igRes.ok) console.warn('[ig sync]', igJson.error ?? '未知錯誤')
+          const [igSyncRes, fbSyncRes] = await Promise.all([
+            fetch('/api/insights/ig/sync', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pageId: selectedPageId }),
+            }),
+            fetch('/api/insights/fb/sync', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pageId: selectedPageId }),
+            }),
+          ])
+          const igJson = await igSyncRes.json()
+          if (!igSyncRes.ok) console.warn('[ig sync]', igJson.error ?? '未知錯誤')
+          const fbSyncJson = await fbSyncRes.json()
+          if (!fbSyncRes.ok) console.warn('[fb sync]', fbSyncJson.error ?? '未知錯誤')
         } catch { /* ignore */ }
       }
       const { adPostIds: newIds, adPostMetrics: newMetrics, igPostIds: newIgIds, igPostMetrics: newIgMetrics } = await fetchAdData(idToken, selectedPageId)
