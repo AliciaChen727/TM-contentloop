@@ -65,6 +65,25 @@
 
 ---
 
+## ⚠️ 常見混淆：`business_management`（權限） vs Business Verification（商家驗證）
+
+兩者**不是同一件事**，但有前後關係：
+
+| | `business_management`（權限/Scope） | Business Verification（商家驗證） |
+|---|---|---|
+| 是什麼 | App 在 OAuth 跟使用者要的**權限** | Meta 對「你這個開發者/公司是否合法商家」的**身份驗證程序** |
+| 作用 | 讓 App 透過 API 讀取 Business Manager 底下的粉專/廣告帳戶 | 證明你的商家是真的（交營業登記等文件） |
+| 在哪做 | code 的 SCOPES + App Review 送審 | Meta Business Settings → 安全中心 → 商家驗證 |
+
+**關係**：要讓 `business_management` 通過 App Review（進階存取），Meta 通常**要求先完成 Business Verification**。
+- Business Verification = 先證明「你」是合法商家（一次性，針對開發者帳號/商家）
+- `business_management` App Review = 再證明「你的 App」需要這權限做什麼（針對權限用途）
+- 商家驗證是拿到權限的**前置條件**，但驗證本身不會自動給權限，仍需逐項送審。
+
+**對現階段的影響**：Tester（你、Irene）不需要商家驗證也能用；只有未來開放給一般使用者時才需要。
+
+---
+
 ## 送審前檢查
 
 1. **App 要先填好基本資料**：隱私政策 URL、資料刪除說明 URL（你已經做了 privacy policy 和 data deletion 頁）、App 圖示、類別。
