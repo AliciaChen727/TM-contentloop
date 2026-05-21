@@ -242,7 +242,7 @@ export async function POST(req: NextRequest) {
   // IG handles: (A) fbPageId_igMediaId format, (B) oldIgUserId_igMediaId format.
   // FB fallback uses page-scoped fbPosts only — safe because FB post IDs are globally unique.
   let igMediaIdSet = new Set<string>()
-  let fbMediaIdSet = new Set<string>()
+  const fbMediaIdSet = new Set<string>()
   const fbPostsByDate = new Map<string, string[]>() // YYYY-MM-DD → [shortId, ...]
   if (pageId) {
     try {
