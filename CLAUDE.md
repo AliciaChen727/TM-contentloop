@@ -107,3 +107,35 @@ Firestore 有兩層 post 資料路徑：
 5. **新增前先用兩個粉專交叉測試**：切換到 A 粉專不可看到 B 粉專任何貼文 / 廣告 / 對話。
 
 > 跨頁資料洩漏屬於嚴重問題，新增任何粉專相關功能時，隔離測試是 release 前的必要關卡。
+
+## 🔑 OAuth 連接架構：User-Centric（多粉專 Admin 必讀）
+
+**核心原則**：連接流程一律抓「**連接者自己管理的粉專**」，**絕不寫死單一粉專**。
+
+ContentLoop 未來會給多個粉專 Admin 使用（D67、Legacy、Irene 的職涯教練粉專…），每個人登入後應該看到「自己管理的粉專」，而不是被綁定到某個固定粉專。
+
+### 正確流程（`apps/web/app/api/auth/meta/route.ts`）
+
+```typescript
+// 1. 先抓連接者自己的所有粉專（user-centric）
+const pageMap = new Map<string, PageToken>()
+const ownPages = await getAllManagedPages(longLived).catch(() => [])
+for (const p of ownPages) pageMap.set(p.pageId, p)
+
+// 2. META_PAGE_IDENTIFIER 只當「補充」，不是主來源
+if (process.env.META_PAGE_IDENTIFIER) {
+  const configured = await getPageToken(longLived).catch(() => null)
+  if (configured) pageMap.set(configured.pageId, configured)
+}
+
+const pages = Array.from(pageMap.values())  // 每人拿到自己管理的粉專
+```
+
+### 規則
+
+1. **不可把 `META_PAGE_IDENTIFIER` 當主來源** — 它只是補充（owner 的 `/me/accounts` 不穩時的保險）。先 `getAllManagedPages`，再 merge 設定的粉專。
+2. **錯誤訊息不可暴露其他粉專** — 連接失敗時只能說「找不到你管理的粉專」，不可把 D67（或任何特定粉專）的錯誤丟給其他使用者。
+3. **OAuth scope 含 `business_management`** — 才能透過 `/me/businesses` 抓到掛在 Business Manager 底下的粉專（見 `connect/page.tsx` SCOPES）。⚠️ 此 scope 對非 Tester 的一般使用者需 App Review。
+4. **每個 page token 各存一份** — `users/{uid}/metaTokens/{pageId}`，並把連接者註冊為該粉專 admin（`pages/{pageId}/admins/{uid}`），第一個連接者為 owner。
+
+**已知發生的 bug**：2026-05-22 之前流程是 D67-centric（先 `getPageToken(D67)`），導致非 D67 管理員（Irene）連接時必拿到誤導的 `#100` 錯誤，連不上自己的粉專。
