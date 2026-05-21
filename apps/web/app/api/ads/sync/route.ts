@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No Meta token. Please reconnect.' }, { status: 400 })
   }
 
-  const { userAccessToken, storyIdPrefix, igUserId } = tokenDoc.data() as { userAccessToken?: string; storyIdPrefix?: string; igUserId?: string }
+  const { accessToken: pageAccessToken, userAccessToken, storyIdPrefix, igUserId } = tokenDoc.data() as { accessToken?: string; userAccessToken?: string; storyIdPrefix?: string; igUserId?: string }
   if (!userAccessToken) {
     return NextResponse.json({ error: 'No user access token. Please reconnect Meta to grant ads_read.' }, { status: 400 })
   }
@@ -243,6 +243,7 @@ export async function POST(req: NextRequest) {
   // FB fallback uses page-scoped fbPosts only — safe because FB post IDs are globally unique.
   let igMediaIdSet = new Set<string>()
   let fbMediaIdSet = new Set<string>()
+  const fbPostsByDate = new Map<string, string[]>() // YYYY-MM-DD → [shortId, ...]
   if (pageId) {
     try {
       const [igPostsSnap, fbPostsSnap] = await Promise.all([
@@ -250,11 +251,18 @@ export async function POST(req: NextRequest) {
         userRef.collection('pages').doc(pageId).collection('fbPosts').get(),
       ])
       igMediaIdSet = new Set(igPostsSnap.docs.map(d => d.id))
-      // Extract short postId (strip pageId_ prefix) for effective_object_story_id matching
-      fbMediaIdSet = new Set(fbPostsSnap.docs.map(d => {
-        const id = d.id
-        return id.includes('_') ? id.split('_').slice(1).join('_') : id
-      }))
+      for (const doc of fbPostsSnap.docs) {
+        const id = doc.id
+        const shortId = id.includes('_') ? id.split('_').slice(1).join('_') : id
+        fbMediaIdSet.add(shortId)
+        const data = doc.data() as { createdTime?: { toDate: () => Date } }
+        if (data.createdTime) {
+          const date = data.createdTime.toDate().toISOString().slice(0, 10)
+          const arr = fbPostsByDate.get(date) ?? []
+          arr.push(shortId)
+          fbPostsByDate.set(date, arr)
+        }
+      }
     } catch { /* non-critical */ }
   }
 
@@ -454,6 +462,40 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Correlate A/B test dark posts to visible page posts by creation date.
+  // Split tests in Ads Manager create dark (unpublished) page posts that don't appear
+  // in /{pageId}/posts. Fetch their created_time and link to same-date regular posts.
+  if (fbPostsByDate.size > 0 && adPostIds.length > 0) {
+    const token = pageAccessToken ?? userAccessToken ?? ''
+    const darkIds = adPostIds.filter(id => !fbMediaIdSet.has(id))
+    await Promise.all(darkIds.map(async darkId => {
+      try {
+        const url = new URL(`${BASE}/${effectivePagePrefix}_${darkId}`)
+        url.searchParams.set('fields', 'created_time')
+        url.searchParams.set('access_token', token)
+        const r = await fetch(url)
+        if (!r.ok) return
+        const d = await r.json()
+        if (!d.created_time) return
+        const date = (d.created_time as string).slice(0, 10)
+        for (const matchedId of (fbPostsByDate.get(date) ?? [])) {
+          if (!adPostIds.includes(matchedId)) adPostIds.push(matchedId)
+          const darkMetrics = adPostMetrics[darkId]
+          if (darkMetrics) {
+            const existing = adPostMetrics[matchedId]
+            adPostMetrics[matchedId] = existing ? {
+              spend: parseFloat((existing.spend + darkMetrics.spend).toFixed(2)),
+              reach: (existing.reach ?? 0) + (darkMetrics.reach ?? 0),
+              roas: parseFloat(((existing.roas + darkMetrics.roas) / 2).toFixed(2)),
+              cpa: parseFloat(((existing.cpa + darkMetrics.cpa) / 2).toFixed(2)),
+              ctr: parseFloat(((existing.ctr + darkMetrics.ctr) / 2).toFixed(2)),
+            } : darkMetrics
+          }
+        }
+      } catch { /* ignore */ }
+    }))
+  }
+
   const insightsRef = pageId
     ? userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest')
     : userRef.collection('adInsights').doc('latest')
@@ -519,6 +561,8 @@ export async function POST(req: NextRequest) {
       igPostMetricsSample: Object.entries(igPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
       igMediaIdSetSize: igMediaIdSet.size,
       fbMediaIdSetSize: fbMediaIdSet.size,
+      fbPostsByDateSize: fbPostsByDate.size,
+      adPostIds,
       igUserId: igUserId ?? null,
       allTimeErrors,
     },
