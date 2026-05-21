@@ -298,6 +298,18 @@ function buildAdData(raw: any): AdData {
   }
 }
 
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return '剛剛'
+  if (mins < 60) return `${mins} 分鐘前`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} 小時前`
+  return `${Math.floor(hrs / 24)} 天前`
+}
+
+const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000
+
 export default function AdsPage() {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
@@ -511,6 +523,14 @@ export default function AdsPage() {
       setSyncing(false)
     }
   }
+
+  useEffect(() => {
+    if (!idToken || !selectedPageId) return
+    const id = setInterval(() => {
+      if (!syncing) handleSync()
+    }, AUTO_SYNC_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [idToken, selectedPageId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handlePageSwitch(pid: string, pname: string) {
     setShowPageMenu(false)
@@ -759,7 +779,7 @@ export default function AdsPage() {
         <div className="ads-nav-footer">
           <div>最後更新</div>
           <div style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 11 }}>
-            {lastSync ? new Date(lastSync).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '— 尚未同步'}
+            {lastSync ? formatRelativeTime(lastSync) : '— 尚未同步'}
           </div>
         </div>
       </nav>
