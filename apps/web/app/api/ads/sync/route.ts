@@ -238,16 +238,23 @@ export async function POST(req: NextRequest) {
       })
     : (adLevelData.data ?? [])
 
-  // Load known IG media IDs from Firestore to catch cross-account and cross-format ads.
+  // Load known media IDs from Firestore.
   // IG handles: (A) fbPageId_igMediaId format, (B) oldIgUserId_igMediaId format.
-  // FB matching uses page ID prefix only — no Firestore fallback to prevent cross-page data leakage.
+  // FB fallback uses page-scoped fbPosts only — safe because FB post IDs are globally unique.
   let igMediaIdSet = new Set<string>()
+  let fbMediaIdSet = new Set<string>()
   if (pageId) {
     try {
-      const [igPostsSnap] = await Promise.all([
+      const [igPostsSnap, fbPostsSnap] = await Promise.all([
         userRef.collection('pages').doc(pageId).collection('igPosts').get(),
+        userRef.collection('pages').doc(pageId).collection('fbPosts').get(),
       ])
       igMediaIdSet = new Set(igPostsSnap.docs.map(d => d.id))
+      // Extract short postId (strip pageId_ prefix) for effective_object_story_id matching
+      fbMediaIdSet = new Set(fbPostsSnap.docs.map(d => {
+        const id = d.id
+        return id.includes('_') ? id.split('_').slice(1).join('_') : id
+      }))
     } catch { /* non-critical */ }
   }
 
@@ -255,7 +262,10 @@ export async function POST(req: NextRequest) {
   const pageIdPrefixes = new Set([pageId, effectivePagePrefix].filter(Boolean) as string[])
   const matchesPage = (storyId: string | undefined) => {
     if (typeof storyId !== 'string') return false
-    return Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))
+    if (Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))) return true
+    // Fallback for pages whose effective_object_story_id still uses old page ID (New Page Experience)
+    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+    return fbMediaIdSet.has(postId) || fbMediaIdSet.has(storyId)
   }
 
   const matchesIg = (storyId: string | undefined) => {
@@ -508,6 +518,7 @@ export async function POST(req: NextRequest) {
       igPostMetricsCount: Object.keys(igPostMetrics).length,
       igPostMetricsSample: Object.entries(igPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
       igMediaIdSetSize: igMediaIdSet.size,
+      fbMediaIdSetSize: fbMediaIdSet.size,
       igUserId: igUserId ?? null,
       allTimeErrors,
     },
