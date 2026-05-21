@@ -33,23 +33,23 @@ export async function POST(req: NextRequest) {
     const shortLived = await exchangeCodeForShortLived(code)
     const longLived = await exchangeForLongLived(shortLived)
 
-    // If META_PAGE_IDENTIFIER is set, fetch that page directly to avoid interference
-    // from other pages the user manages (e.g. old company pages with restricted access).
-    // Fall back to /me/accounts for multi-page setups without a specific identifier.
-    let pages: PageToken[] = []
-    let getPageTokenError: string | null = null
+    // User-centric page resolution: always fetch the connecting user's own managed
+    // pages first (the D67 owner gets D67+Legacy, Irene gets her own page), then
+    // merge in the configured page as a supplement. Previously this was D67-centric
+    // (getPageToken first), which surfaced a misleading #100 error to non-D67 admins.
+    const pageMap = new Map<string, PageToken>()
+    const ownPages = await getAllManagedPages(longLived).catch(() => [])
+    for (const p of ownPages) pageMap.set(p.pageId, p)
+
     if (process.env.META_PAGE_IDENTIFIER) {
-      try {
-        const single = await getPageToken(longLived)
-        pages = [single]
-      } catch (e) {
-        getPageTokenError = e instanceof Error ? e.message : null
-        pages = await getAllManagedPages(longLived).catch(() => [])
-      }
-    } else {
-      pages = await getAllManagedPages(longLived).catch(() => [])
+      const configured = await getPageToken(longLived).catch(() => null)
+      if (configured) pageMap.set(configured.pageId, configured)
     }
-    if (pages.length === 0) throw new Error(getPageTokenError ?? 'No managed pages found. Check page admin role or META_PAGE_IDENTIFIER env var.')
+
+    const pages: PageToken[] = Array.from(pageMap.values())
+    if (pages.length === 0) {
+      throw new Error('找不到你管理的粉絲專頁。請確認授權時有勾選你的粉專，且你是該粉專的管理員（Admin）。')
+    }
 
     const userRef = adminDb.collection('users').doc(uid)
 

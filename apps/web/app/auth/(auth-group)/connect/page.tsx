@@ -15,6 +15,7 @@ const SCOPES = [
   'instagram_basic',
   'instagram_manage_insights',
   'ads_read',
+  'business_management',
 ].join(',')
 
 function ConnectContent() {
