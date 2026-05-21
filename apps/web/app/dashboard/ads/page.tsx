@@ -543,12 +543,12 @@ export default function AdsPage() {
   }
 
   useEffect(() => {
-    if (!idToken || !selectedPageId) return
+    if (!authed || !selectedPageId) return
     const id = setInterval(() => {
       if (!syncing) handleSync()
     }, AUTO_SYNC_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [idToken, selectedPageId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authed, selectedPageId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handlePageSwitch(pid: string, pname: string) {
     setShowPageMenu(false)
