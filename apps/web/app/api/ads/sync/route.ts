@@ -238,21 +238,35 @@ export async function POST(req: NextRequest) {
       })
     : (adLevelData.data ?? [])
 
-  // Load known IG media IDs from Firestore early to catch cross-account and cross-format ads.
-  // Handles two cases: (A) fbPageId_igMediaId format (Meta Ads Manager cross-posts),
-  // (B) oldIgUserId_igMediaId format (boosts from a previously linked IG account).
+  // Load known IG and FB media IDs from Firestore early to catch cross-account and cross-format ads.
+  // IG handles: (A) fbPageId_igMediaId format, (B) oldIgUserId_igMediaId format.
+  // FB handles: page ID prefix mismatch (e.g. New Page Experience migration).
   let igMediaIdSet = new Set<string>()
+  let fbMediaIdSet = new Set<string>()
   if (pageId) {
     try {
-      const igPostsSnap = await userRef.collection('pages').doc(pageId).collection('igPosts').get()
+      const [igPostsSnap, fbNewSnap, fbLegacySnap] = await Promise.all([
+        userRef.collection('pages').doc(pageId).collection('igPosts').get(),
+        userRef.collection('pages').doc(pageId).collection('fbPosts').get(),
+        userRef.collection('fbPosts').get(),
+      ])
       igMediaIdSet = new Set(igPostsSnap.docs.map(d => d.id))
+      fbMediaIdSet = new Set([
+        ...fbNewSnap.docs.map(d => d.id),
+        ...fbLegacySnap.docs.map(d => d.id),
+      ])
     } catch { /* non-critical */ }
   }
 
   // Filter creatives to only those belonging to the current page or IG account.
   const pageIdPrefixes = new Set([pageId, effectivePagePrefix].filter(Boolean) as string[])
-  const matchesPage = (storyId: string | undefined) =>
-    typeof storyId === 'string' && Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))
+  const matchesPage = (storyId: string | undefined) => {
+    if (typeof storyId !== 'string') return false
+    if (Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))) return true
+    // Fallback: check if postId part matches a known FB post ID in Firestore
+    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+    return fbMediaIdSet.has(postId) || fbMediaIdSet.has(storyId)
+  }
 
   const matchesIg = (storyId: string | undefined) => {
     if (typeof storyId !== 'string') return false
@@ -504,6 +518,7 @@ export async function POST(req: NextRequest) {
       igPostMetricsCount: Object.keys(igPostMetrics).length,
       igPostMetricsSample: Object.entries(igPostMetrics).slice(0, 3).map(([k, v]) => ({ key: k, ...v })),
       igMediaIdSetSize: igMediaIdSet.size,
+      fbMediaIdSetSize: fbMediaIdSet.size,
       igUserId: igUserId ?? null,
       allTimeErrors,
     },
