@@ -95,3 +95,15 @@ Firestore 有兩層 post 資料路徑：
 - **IG legacy**：無 page 前綴，有 `pageId` 時**只讀** page-scoped path，不讀 legacy
 
 **已知發生的 bug**：`/api/insights/fb/route.ts` 曾在 2026-05-22 把兩個粉專的 FB 貼文混合顯示，原因正是 legacy fallback 沒有加 prefix filter。
+
+### 🔒 新增粉絲頁前必做的隔離檢查清單
+
+使用者可能同時是多個粉專的 Admin（例如 D67 + Legacy）。**每次新增粉專、或寫任何讀取貼文/廣告/洞察資料的程式碼前**，都必須確認以下每一項：
+
+1. **一律以 `pageId` 為主鍵查詢** — 所有 Firestore 讀寫都走 `users/{uid}/pages/{pageId}/...` 或 `pages/{pageId}/...`，不要走無 page 區隔的 collection。
+2. **必要時讀 legacy collection，一定要加 page filter**（FB 用 `${pageId}_` 前綴；IG 有 pageId 時不讀 legacy）。
+3. **API route 收到 `pageId` 後要驗權**：admin 查 `metaTokens/{pageId}`、viewer 查 `viewerAccess`，確認此 user 有權看這個粉專才回傳資料。
+4. **廣告比對用 `effective_object_story_id` 前綴**（`${pageId}_`），不可只比 short postId（FB post ID 雖全球唯一，但仍應以 pageId 前綴為準）。
+5. **新增前先用兩個粉專交叉測試**：切換到 A 粉專不可看到 B 粉專任何貼文 / 廣告 / 對話。
+
+> 跨頁資料洩漏屬於嚴重問題，新增任何粉專相關功能時，隔離測試是 release 前的必要關卡。
