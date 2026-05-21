@@ -39,8 +39,11 @@ export async function GET(req: NextRequest) {
       userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
       userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
     ])
+    // Legacy fbPosts doc IDs are "{pageId}_{postId}" — filter by prefix to prevent
+    // cross-page leakage when the user is admin of multiple pages.
+    const filteredLegacyDocs = legacySnap.docs.filter(d => d.id.startsWith(`${pageId}_`))
     const seen = new Set<string>()
-    rawDocs = [...newSnap.docs, ...legacySnap.docs]
+    rawDocs = [...newSnap.docs, ...filteredLegacyDocs]
       .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
       .sort((a, b) => (b.data().createdTime?.toMillis?.() ?? 0) - (a.data().createdTime?.toMillis?.() ?? 0))
       .slice(0, 200)

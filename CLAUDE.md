@@ -77,3 +77,21 @@ users/{uid}
 ### Firestore 路徑
 - 有 `pageId`：`pages/{pageId}/sidekickConversations/{sessionId}`（對話存檔、歷史、CSV 匯出）
 - 無 `pageId`：fallback 讀 `users/{uid}/aiInsights`（舊系統，不支援匯出）
+
+## ⚠️ Legacy Collection 隔離規則（防止跨頁資料洩漏）
+
+Firestore 有兩層 post 資料路徑：
+
+| 路徑 | 類型 | 說明 |
+|---|---|---|
+| `users/{uid}/fbPosts` | Legacy multi-page | ❌ 所有粉專混在一起 |
+| `users/{uid}/igPosts` | Legacy multi-page | ❌ 所有粉專混在一起 |
+| `users/{uid}/pages/{pageId}/fbPosts` | Page-scoped | ✅ 安全，只含該粉專 |
+| `users/{uid}/pages/{pageId}/igPosts` | Page-scoped | ✅ 安全，只含該粉專 |
+
+**規則**：當 `pageId` 已知時，**絕對不可以**把 legacy collection 無過濾地合併進結果。
+
+- **FB legacy filter**：`doc.id.startsWith(`${pageId}_`)` — doc ID 格式為 `{pageId}_{postId}`
+- **IG legacy**：無 page 前綴，有 `pageId` 時**只讀** page-scoped path，不讀 legacy
+
+**已知發生的 bug**：`/api/insights/fb/route.ts` 曾在 2026-05-22 把兩個粉專的 FB 貼文混合顯示，原因正是 legacy fallback 沒有加 prefix filter。
