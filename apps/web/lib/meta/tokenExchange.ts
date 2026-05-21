@@ -33,20 +33,33 @@ export async function exchangeForLongLived(shortLivedToken: string): Promise<str
   return data.access_token as string
 }
 
+async function fetchIgUserId(pageId: string, token: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/${pageId}?fields=instagram_business_account&access_token=${token}`)
+    const data = await res.json()
+    return (data.instagram_business_account as { id?: string } | undefined)?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function getAllManagedPages(userToken: string): Promise<PageToken[]> {
   const pageMap = new Map<string, PageToken>()
-  const pageFields = 'id,name,access_token,instagram_business_account'
+  // instagram_business_account requires pages_read_engagement — fetched separately so
+  // a missing permission doesn't block the entire connect flow.
+  const pageFields = 'id,name,access_token'
 
   // 1. Personal direct-admin pages
   const accRes = await fetch(`${BASE}/me/accounts?fields=${pageFields}&access_token=${userToken}`)
   const accData = await accRes.json()
   for (const p of (accData.data ?? []) as Record<string, unknown>[]) {
     const id = p.id as string
+    const igUserId = await fetchIgUserId(id, userToken)
     pageMap.set(id, {
       pageId: id,
       pageName: p.name as string,
       accessToken: p.access_token as string,
-      igUserId: (p.instagram_business_account as { id?: string } | undefined)?.id ?? null,
+      igUserId,
     })
   }
 
@@ -59,11 +72,12 @@ export async function getAllManagedPages(userToken: string): Promise<PageToken[]
       for (const p of ownedPages) {
         const id = p.id as string
         if (!pageMap.has(id)) {
+          const igUserId = await fetchIgUserId(id, userToken)
           pageMap.set(id, {
             pageId: id,
             pageName: p.name as string,
             accessToken: p.access_token as string,
-            igUserId: (p.instagram_business_account as { id?: string } | undefined)?.id ?? null,
+            igUserId,
           })
         }
       }
@@ -78,18 +92,19 @@ export async function getAllManagedPages(userToken: string): Promise<PageToken[]
 export async function getPageTokenById(longLivedUserToken: string, pageIdentifier: string): Promise<PageToken> {
   const url = new URL(`${BASE}/${pageIdentifier}`)
   url.searchParams.set('access_token', longLivedUserToken)
-  url.searchParams.set('fields', 'id,name,access_token,instagram_business_account')
+  url.searchParams.set('fields', 'id,name,access_token')
 
   const res = await fetch(url)
   const data = await res.json()
   if (!res.ok || data.error) throw new Error(data.error?.message ?? 'get page token failed')
   if (!data.access_token) throw new Error('Page access_token not returned. Check page admin role and permissions.')
 
+  const igUserId = await fetchIgUserId(data.id, longLivedUserToken)
   return {
     pageId: data.id,
     pageName: data.name,
     accessToken: data.access_token,
-    igUserId: data.instagram_business_account?.id ?? null,
+    igUserId,
   }
 }
 
@@ -100,7 +115,7 @@ export async function getPageToken(longLivedUserToken: string): Promise<PageToke
   // 直接用 Page username 或 ID 取 Page token，繞過 /me/accounts 的 Business Manager 限制
   const url = new URL(`${BASE}/${pageIdentifier}`)
   url.searchParams.set('access_token', longLivedUserToken)
-  url.searchParams.set('fields', 'id,name,access_token,instagram_business_account')
+  url.searchParams.set('fields', 'id,name,access_token')
 
   const res = await fetch(url)
   const data = await res.json()
@@ -109,10 +124,11 @@ export async function getPageToken(longLivedUserToken: string): Promise<PageToke
   if (!res.ok || data.error) throw new Error(data.error?.message ?? 'get page token failed')
   if (!data.access_token) throw new Error('你沒有此粉絲頁的管理員（Admin）權限，無法取得存取憑證。請在 Facebook 粉絲頁設定確認角色為「管理員」後再試。')
 
+  const igUserId = await fetchIgUserId(data.id, longLivedUserToken)
   return {
     pageId: data.id,
     pageName: data.name,
     accessToken: data.access_token,
-    igUserId: data.instagram_business_account?.id ?? null,
+    igUserId,
   }
 }
