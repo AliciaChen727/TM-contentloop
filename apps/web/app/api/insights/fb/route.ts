@@ -33,11 +33,23 @@ export async function GET(req: NextRequest) {
   }
   const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
-  const snap = pageId
-    ? await userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
-    : await userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
+  let rawDocs
+  if (pageId) {
+    const [newSnap, legacySnap] = await Promise.all([
+      userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
+      userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
+    ])
+    const seen = new Set<string>()
+    rawDocs = [...newSnap.docs, ...legacySnap.docs]
+      .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
+      .sort((a, b) => (b.data().createdTime?.toMillis?.() ?? 0) - (a.data().createdTime?.toMillis?.() ?? 0))
+      .slice(0, 200)
+  } else {
+    const snap = await userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
+    rawDocs = snap.docs
+  }
 
-  const posts = snap.docs
+  const posts = rawDocs
     .map((doc) => ({
       id: doc.id,
       ...(doc.data() as { message?: string; [key: string]: unknown }),

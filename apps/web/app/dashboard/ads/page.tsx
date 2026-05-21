@@ -517,6 +517,24 @@ export default function AdsPage() {
         }
         return p
       }) : prev)
+      // Reload full post list so newly-published posts also appear
+      const u2 = auth.currentUser
+      if (u2) {
+        const freshToken = await u2.getIdToken()
+        const qs2 = selectedPageId ? `?pageId=${selectedPageId}` : ''
+        const h2 = { Authorization: `Bearer ${freshToken}` }
+        const [fbRefresh, igRefresh] = await Promise.all([
+          fetch(`/api/insights/fb${qs2}`, { headers: h2 }),
+          fetch(`/api/insights/ig${qs2}`, { headers: h2 }),
+        ])
+        const fbJson2 = fbRefresh.ok ? await fbRefresh.json() : null
+        const igJson2 = igRefresh.ok ? await igRefresh.json() : null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fbPosts2: Post[] = (fbJson2?.posts ?? []).filter((p: any) => p.message).map((p: any) => mapFbPost(p, newIds, newMetrics))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const igPosts2: Post[] = (igJson2?.posts ?? []).filter((p: any) => p.caption).map((p: any) => mapIgPost(p, newIgIds, newIgMetrics))
+        setRealPosts([...fbPosts2, ...igPosts2].sort((a, b) => b.date.localeCompare(a.date)))
+      }
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步失敗')
     } finally {
