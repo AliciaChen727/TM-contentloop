@@ -10,7 +10,6 @@ import { Suspense } from 'react'
 const SCOPES = [
   'pages_show_list',
   'pages_read_engagement',
-  'pages_manage_metadata',
   'read_insights',
   'instagram_basic',
   'instagram_manage_insights',
