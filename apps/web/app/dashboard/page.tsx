@@ -166,6 +166,18 @@ export default function DashboardPage() {
     return { totalReach, totalLikes, totalComments, totalShares, avgEngRate, totalPosts: total, reelsCount }
   }, [rangedFb, rangedIg])
 
+  // Follower summary: current total + net change across the selected range
+  const followerSummary = useMemo(() => {
+    const inRange = followerStats.filter(s => s.date >= dateBounds.start && s.date <= dateBounds.end)
+    if (inRange.length === 0) {
+      const latest = followerStats[followerStats.length - 1]
+      return { total: latest?.total ?? 0, net: 0 }
+    }
+    const total = inRange[inRange.length - 1].total
+    const net = total - inRange[0].total
+    return { total, net }
+  }, [followerStats, dateBounds])
+
   // Chart data (daily aggregation, date-range filtered)
   const chartData = useMemo<DailyPoint[]>(() => {
     const byDate = new Map<string, { reach: number; likes: number; comments: number; shares: number }>()
@@ -379,6 +391,7 @@ export default function DashboardPage() {
                 { label: '總觸擊', value: fmtBig(stats.totalReach), sub: 'FB + IG 貼文' },
                 { label: '總按讚', value: fmtBig(stats.totalLikes), sub: `留言 ${stats.totalComments} · 分享 ${stats.totalShares}` },
                 { label: '平均互動率', value: `${stats.avgEngRate.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
+                { label: '追蹤數', value: followerSummary.total > 0 ? fmtBig(followerSummary.total) : '—', sub: followerSummary.total > 0 ? `本區間 ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}` : '尚未同步' },
               ].map(s => (
                 <div key={s.label} className="ads-posts-sum-card">
                   <div className="ads-posts-sum-label">{s.label}</div>
