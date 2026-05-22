@@ -109,3 +109,19 @@ export interface AdData {
 }
 
 export type NavId = 'overview' | 'diagnosis' | 'creative' | 'posts' | 'time' | 'budget'
+
+export type Variant = 'A' | 'B' | 'control'
+
+export interface LabelEntry {
+  variant: Variant
+  experimentId: string
+}
+
+export interface Experiment {
+  id: string
+  name: string
+  aiDiagnosis: string
+  winner: string
+  ctrDelta?: number | null
+  cpaDelta?: number | null
+}

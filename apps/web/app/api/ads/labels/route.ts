@@ -33,8 +33,11 @@ export async function GET(req: NextRequest) {
   }
 
   const snap = await adminDb.collection('pages').doc(pageId).collection('creativeLabels').get()
-  const labels: Record<string, Variant> = {}
-  snap.docs.forEach(d => { labels[d.id] = d.data().variant as Variant })
+  const labels: Record<string, { variant: Variant; experimentId: string }> = {}
+  snap.docs.forEach(d => {
+    const data = d.data()
+    labels[d.id] = { variant: data.variant as Variant, experimentId: (data.experimentId as string) ?? '' }
+  })
   return NextResponse.json({ labels })
 }
 
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { pageId, adId, variant } = await req.json() as { pageId: string; adId: string; variant: Variant | null }
+  const { pageId, adId, variant, experimentId } = await req.json() as { pageId: string; adId: string; variant: Variant | null; experimentId?: string }
   if (!pageId || !adId) return NextResponse.json({ error: 'pageId and adId required' }, { status: 400 })
 
   if (!(await hasPageAccess(uid, pageId))) {
@@ -61,7 +64,8 @@ export async function POST(req: NextRequest) {
   if (variant === null) {
     await ref.delete()
   } else {
-    await ref.set({ variant, setBy: uid, setAt: FieldValue.serverTimestamp() })
+    if (!experimentId) return NextResponse.json({ error: 'experimentId required' }, { status: 400 })
+    await ref.set({ variant, experimentId, setBy: uid, setAt: FieldValue.serverTimestamp() })
   }
   return NextResponse.json({ ok: true })
 }

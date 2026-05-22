@@ -13,7 +13,7 @@ import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
-import type { NavId, Post, AdData, DiagItem } from '@/components/ads/types'
+import type { NavId, Post, AdData, DiagItem, LabelEntry, Experiment } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
@@ -337,8 +337,8 @@ export default function AdsPage() {
   const [canSync, setCanSync] = useState(false)
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
-  const [creativeLabels, setCreativeLabels] = useState<Record<string, 'A' | 'B' | 'control'>>({})
-  const [abTestData, setAbTestData] = useState<{ aiDiagnosis: string; winner: string; experimentName: string }>({ aiDiagnosis: '', winner: 'pending', experimentName: '' })
+  const [creativeLabels, setCreativeLabels] = useState<Record<string, LabelEntry>>({})
+  const [experiments, setExperiments] = useState<Experiment[]>([])
   const [idTokenRef, setIdTokenRef] = useState('')
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
@@ -416,17 +416,17 @@ export default function AdsPage() {
         }
 
         if (pageId) {
-          const [labelsRes, abTestRes] = await Promise.all([
+          const [labelsRes, expRes] = await Promise.all([
             fetch(`/api/ads/labels?pageId=${pageId}`, { headers }),
-            fetch(`/api/ads/abtest?pageId=${pageId}`, { headers }),
+            fetch(`/api/ads/experiments?pageId=${pageId}`, { headers }),
           ])
           if (labelsRes.ok) {
             const labelsJson = await labelsRes.json()
             setCreativeLabels(labelsJson.labels ?? {})
           }
-          if (abTestRes.ok) {
-            const abTestJson = await abTestRes.json()
-            setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending', experimentName: abTestJson.experimentName ?? '' })
+          if (expRes.ok) {
+            const expJson = await expRes.json()
+            setExperiments(expJson.experiments ?? [])
           }
         }
 
@@ -602,17 +602,17 @@ export default function AdsPage() {
     const igPosts: Post[] = (igJson?.posts ?? []).filter((p: any) => p.caption).map((p: any) => mapIgPost(p, igPostIdsSwitch, igPostMetricsSwitch))
     setRealPosts([...fbPosts, ...igPosts].sort((a, b) => b.date.localeCompare(a.date)))
     if (pid) {
-      const [labelsRes, abTestRes] = await Promise.all([
+      const [labelsRes, expRes] = await Promise.all([
         fetch(`/api/ads/labels?pageId=${pid}`, { headers }),
-        fetch(`/api/ads/abtest?pageId=${pid}`, { headers }),
+        fetch(`/api/ads/experiments?pageId=${pid}`, { headers }),
       ])
       if (labelsRes.ok) {
         const labelsJson = await labelsRes.json()
         setCreativeLabels(labelsJson.labels ?? {})
       }
-      if (abTestRes.ok) {
-        const abTestJson = await abTestRes.json()
-        setAbTestData({ aiDiagnosis: abTestJson.aiDiagnosis ?? '', winner: abTestJson.winner ?? 'pending', experimentName: abTestJson.experimentName ?? '' })
+      if (expRes.ok) {
+        const expJson = await expRes.json()
+        setExperiments(expJson.experiments ?? [])
       }
     }
     setDataLoaded(true)
@@ -893,16 +893,38 @@ export default function AdsPage() {
             <>
               {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
-              {active === 'creative' && <CreativeSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} creativeLabels={creativeLabels} onLabelChange={selectedPageId ? async (adId, variant) => {
-                setCreativeLabels(prev => {
-                  if (variant === null) { const n = { ...prev }; delete n[adId]; return n }
-                  return { ...prev, [adId]: variant }
-                })
-                await fetch('/api/ads/labels', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, adId, variant }) })
-              } : undefined} abTestData={abTestData} onAbTestUpdate={selectedPageId ? async (update) => {
-                setAbTestData(prev => ({ ...prev, ...update }))
-                await fetch('/api/ads/abtest', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, ...update }) })
-              } : undefined} />}
+              {active === 'creative' && <CreativeSection
+                data={adData}
+                onAskAI={canSidekick ? openSidekick : undefined}
+                creativeLabels={creativeLabels}
+                experiments={experiments}
+                onLabelChange={selectedPageId ? async (adId, variant, experimentId) => {
+                  setCreativeLabels(prev => {
+                    if (variant === null) { const n = { ...prev }; delete n[adId]; return n }
+                    return { ...prev, [adId]: { variant, experimentId: experimentId ?? '' } }
+                  })
+                  await fetch('/api/ads/labels', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, adId, variant, experimentId }) })
+                } : undefined}
+                onCreateExperiment={selectedPageId ? async (name) => {
+                  const res = await fetch('/api/ads/experiments', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, action: 'create', name }) })
+                  const { id } = res.ok ? await res.json() : { id: '' }
+                  if (id) setExperiments(prev => [...prev, { id, name, aiDiagnosis: '', winner: 'pending' }])
+                  return id
+                } : undefined}
+                onExperimentUpdate={selectedPageId ? async (experimentId, update) => {
+                  setExperiments(prev => prev.map(e => e.id === experimentId ? { ...e, ...update } : e))
+                  await fetch('/api/ads/experiments', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, experimentId, ...update }) })
+                } : undefined}
+                onDeleteExperiment={selectedPageId ? async (experimentId) => {
+                  setExperiments(prev => prev.filter(e => e.id !== experimentId))
+                  setCreativeLabels(prev => {
+                    const n = { ...prev }
+                    for (const k of Object.keys(n)) if (n[k].experimentId === experimentId) delete n[k]
+                    return n
+                  })
+                  await fetch('/api/ads/experiments', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, action: 'delete', experimentId }) })
+                } : undefined}
+              />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} />}

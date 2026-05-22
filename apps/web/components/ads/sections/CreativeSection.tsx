@@ -2,13 +2,12 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Icon } from '../Icon'
-import type { AdData } from '../types'
+import type { AdData, Variant, LabelEntry, Experiment } from '../types'
 
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}`
 const STATUS_LABEL: Record<string, string> = { top: '🏆 最佳', good: '👍 良好', ok: '一般', bad: '⚠️ 待優' }
 const TYPES = ['全部', 'Reels', '貼文', 'Stories', '海報']
 type SortBy = 'roas' | 'spend' | 'cpa'
-type Variant = 'A' | 'B' | 'control'
 type WinnerType = 'pending' | 'A' | 'B' | 'inconclusive'
 
 const WINNER_OPTIONS: { value: WinnerType; label: string }[] = [
@@ -25,6 +24,8 @@ const VARIANT_STYLE: Record<Variant, { bg: string; color: string; label: string 
   A: { bg: '#dbeafe', color: '#1d4ed8', label: 'A 版' },
   B: { bg: '#ffedd5', color: '#c2410c', label: 'B 版' },
 }
+
+type ExperimentUpdate = { name?: string; aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number }
 
 function buildCreativePrompt(c: AdData['creatives'][number]): string {
   return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPC：$${(c.cpc ?? c.cpa).toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
@@ -68,28 +69,48 @@ function renderAdName(name: string) {
   )
 }
 
-function VariantBadge({ adId, variant, onLabelChange }: {
+// Two-step badge: first pick (or create) an experiment, then pick the variant.
+// An ad belongs to exactly one experiment, so the badge shows "{experiment}·{variant}".
+function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExperiment }: {
   adId: string
-  variant: Variant | undefined
-  onLabelChange: (adId: string, variant: Variant | null) => void
+  label: LabelEntry | undefined
+  experiments: Experiment[]
+  onLabelChange: (adId: string, variant: Variant | null, experimentId?: string) => void
+  onCreateExperiment: (name: string) => Promise<string>
 }) {
   const [open, setOpen] = useState(false)
+  const [selectedExp, setSelectedExp] = useState<string>(label?.experimentId ?? '')
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { setSelectedExp(label?.experimentId ?? '') }, [label?.experimentId])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setCreating(false) }
     }
     if (open) document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const options: { value: Variant | null; label: string }[] = [
-    { value: 'A', label: 'A 版（AI 建議）' },
-    { value: 'B', label: 'B 版（測試）' },
-    { value: 'control', label: '控制組（原版）' },
-    { value: null, label: '清除標籤' },
-  ]
+  const currentExp = experiments.find(e => e.id === label?.experimentId)
+  const badgeText = label
+    ? `${currentExp?.name || '實驗'}·${VARIANT_STYLE[label.variant].label}`
+    : '＋ 標記'
+
+  async function handleCreate() {
+    const name = newName.trim()
+    if (!name) return
+    const id = await onCreateExperiment(name)
+    if (id) { setSelectedExp(id); setCreating(false); setNewName('') }
+  }
+
+  function pickVariant(v: Variant) {
+    if (!selectedExp) return
+    onLabelChange(adId, v, selectedExp)
+    setOpen(false)
+  }
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -98,29 +119,83 @@ function VariantBadge({ adId, variant, onLabelChange }: {
         title="設定 A/B 測試標籤"
         style={{
           fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', border: 'none',
-          ...(variant ? { background: VARIANT_STYLE[variant].bg, color: VARIANT_STYLE[variant].color } : { background: '#f1f5f9', color: '#94a3b8' }),
+          maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          ...(label ? { background: VARIANT_STYLE[label.variant].bg, color: VARIANT_STYLE[label.variant].color } : { background: '#f1f5f9', color: '#94a3b8' }),
           fontFamily: 'inherit',
         }}
       >
-        {variant ? VARIANT_STYLE[variant].label : '＋ 標記'}
+        {badgeText}
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 140, overflow: 'hidden' }}>
-          {options.map(opt => (
+        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 180, overflow: 'hidden', padding: '6px 0' }}>
+          <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>實驗</div>
+          {experiments.length === 0 && !creating && (
+            <div style={{ padding: '4px 12px', fontSize: 11, color: '#cbd5e1' }}>尚無實驗，請新增</div>
+          )}
+          {experiments.map(e => (
             <button
-              key={String(opt.value)}
-              onClick={() => { onLabelChange(adId, opt.value); setOpen(false) }}
+              key={e.id}
+              onClick={() => setSelectedExp(e.id)}
               style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12,
-                background: 'none', border: 'none', cursor: 'pointer', color: opt.value === null ? '#ef4444' : '#1e293b',
-                fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12,
+                background: selectedExp === e.id ? '#eff6ff' : 'none', border: 'none', cursor: 'pointer',
+                color: selectedExp === e.id ? '#1d4ed8' : '#1e293b', fontWeight: selectedExp === e.id ? 600 : 400, fontFamily: 'inherit',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
             >
-              {opt.label}
+              <span style={{ width: 8 }}>{selectedExp === e.id ? '✓' : ''}</span>
+              {e.name || '(未命名)'}
             </button>
           ))}
+          {creating ? (
+            <div style={{ display: 'flex', gap: 4, padding: '6px 12px' }}>
+              <input
+                autoFocus
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+                placeholder="實驗名稱"
+                style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '4px 6px', border: '1px solid #bfdbfe', borderRadius: 6, fontFamily: 'inherit' }}
+              />
+              <button onClick={handleCreate} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>確認</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCreating(true)}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#1d4ed8', fontWeight: 600, fontFamily: 'inherit' }}
+            >
+              ＋ 新增實驗
+            </button>
+          )}
+
+          <div style={{ borderTop: '1px solid #f1f5f9', margin: '6px 0' }} />
+          <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>版本</div>
+          {(['control', 'A', 'B'] as Variant[]).map(v => (
+            <button
+              key={v}
+              disabled={!selectedExp}
+              onClick={() => pickVariant(v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12,
+                background: label?.variant === v && label?.experimentId === selectedExp ? '#f8fafc' : 'none', border: 'none',
+                cursor: selectedExp ? 'pointer' : 'not-allowed', color: selectedExp ? '#1e293b' : '#cbd5e1', fontFamily: 'inherit',
+              }}
+            >
+              <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: VARIANT_STYLE[v].bg, border: `1px solid ${VARIANT_STYLE[v].color}` }} />
+              {VARIANT_STYLE[v].label}
+            </button>
+          ))}
+
+          {label && (
+            <>
+              <div style={{ borderTop: '1px solid #f1f5f9', margin: '6px 0' }} />
+              <button
+                onClick={() => { onLabelChange(adId, null); setOpen(false) }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontFamily: 'inherit' }}
+              >
+                清除標籤
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -154,8 +229,6 @@ function calcGroupStats(creatives: AdData['creatives']): GroupStats {
   const s = totalSpend || 1
   return { ctr: wCtr / s, cpa: wCpa / s, roas: wRoas / s, totalSpend, count: creatives.length }
 }
-
-type AbTestUpdate = { aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number; controlCopy?: string; variantCopy?: string; experimentName?: string }
 
 type AbDiagnosis = {
   pattern: string | null
@@ -240,21 +313,21 @@ function buildAbDiagnosis(
   }
 }
 
-function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
-  allCreatives: AdData['creatives']
-  labels: Record<string, Variant>
-  abTestData: { aiDiagnosis: string; winner: string; experimentName?: string }
-  onAbTestUpdate: (update: AbTestUpdate) => void
+function AbTestPanel({ creatives, labels, experiment, onExperimentUpdate }: {
+  creatives: AdData['creatives']   // members of this experiment only
+  labels: Record<string, LabelEntry>
+  experiment: Experiment
+  onExperimentUpdate: (experimentId: string, update: ExperimentUpdate) => void
 }) {
-  const [localDiagnosis, setLocalDiagnosis] = useState(abTestData.aiDiagnosis)
-  const [localName, setLocalName] = useState(abTestData.experimentName ?? '')
+  const [localDiagnosis, setLocalDiagnosis] = useState(experiment.aiDiagnosis)
+  const [localName, setLocalName] = useState(experiment.name ?? '')
 
-  useEffect(() => { setLocalDiagnosis(abTestData.aiDiagnosis) }, [abTestData.aiDiagnosis])
-  useEffect(() => { setLocalName(abTestData.experimentName ?? '') }, [abTestData.experimentName])
+  useEffect(() => { setLocalDiagnosis(experiment.aiDiagnosis) }, [experiment.aiDiagnosis])
+  useEffect(() => { setLocalName(experiment.name ?? '') }, [experiment.name])
 
   const groups: Record<Variant, AdData['creatives']> = { control: [], A: [], B: [] }
-  for (const c of allCreatives) {
-    const v = labels[c.id]
+  for (const c of creatives) {
+    const v = labels[c.id]?.variant
     if (v) groups[v].push(c)
   }
   const controlStats = groups.control.length > 0 ? calcGroupStats(groups.control) : null
@@ -264,7 +337,7 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   const baseStats = controlStats ?? aStats
   const variantStats = controlStats ? (aStats ?? bStats) : bStats
 
-  const winner = abTestData.winner as WinnerType
+  const winner = experiment.winner as WinnerType
   const winnerStats = winner === 'A' ? aStats : winner === 'B' ? bStats : null
 
   const totalLinkClicks = (arr: AdData['creatives']) =>
@@ -306,7 +379,7 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
           type="text"
           value={localName}
           onChange={e => setLocalName(e.target.value)}
-          onBlur={() => { if (localName !== (abTestData.experimentName ?? '')) onAbTestUpdate({ experimentName: localName }) }}
+          onBlur={() => { if (localName !== (experiment.name ?? '')) onExperimentUpdate(experiment.id, { name: localName }) }}
           placeholder="例：[2026/5/20] 推廣 D67 演講節"
           style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #bfdbfe', borderRadius: 6, background: 'white', color: '#1e293b', fontFamily: 'var(--font-dm-sans)', width: '100%', boxSizing: 'border-box' }}
         />
@@ -334,17 +407,15 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
         <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>實驗結果</label>
         <select value={winner} onChange={e => {
           const newWinner = e.target.value
-          const update: AbTestUpdate = { winner: newWinner }
+          const update: ExperimentUpdate = { winner: newWinner }
           if (newWinner === 'A' || newWinner === 'B') {
             const winStats = newWinner === 'A' ? aStats : bStats
             const wClicks = totalLinkClicks(newWinner === 'A' ? groups.A : groups.B)
             const wCpc = wClicks > 0 && winStats ? winStats.totalSpend / wClicks : 0
             if (winStats && baseStats && baseStats.ctr > 0) update.ctrDelta = parseFloat(((winStats.ctr - baseStats.ctr) / baseStats.ctr * 100).toFixed(1))
             if (baseCpc > 0 && wCpc > 0) update.cpaDelta = parseFloat(((baseCpc - wCpc) / baseCpc * 100).toFixed(1))
-            update.controlCopy = groups.control[0]?.name ?? groups.A[0]?.name ?? ''
-            update.variantCopy = (newWinner === 'A' ? groups.A[0] : groups.B[0])?.name ?? ''
           }
-          onAbTestUpdate(update)
+          onExperimentUpdate(experiment.id, update)
         }} style={{ ...inputStyle, cursor: 'pointer' }}>
           {WINNER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -364,7 +435,7 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
         <textarea
           value={localDiagnosis}
           onChange={e => setLocalDiagnosis(e.target.value)}
-          onBlur={() => { if (localDiagnosis !== abTestData.aiDiagnosis) onAbTestUpdate({ aiDiagnosis: localDiagnosis }) }}
+          onBlur={() => { if (localDiagnosis !== experiment.aiDiagnosis) onExperimentUpdate(experiment.id, { aiDiagnosis: localDiagnosis }) }}
           placeholder="貼上 AI Sidekick 給出的建議內容..."
           rows={3}
           style={{ ...inputStyle, resize: 'vertical' }}
@@ -374,14 +445,15 @@ function AbTestPanel({ allCreatives, labels, abTestData, onAbTestUpdate }: {
   )
 }
 
-function ExperimentResultCard({ creatives, labels, experimentName }: {
-  creatives: AdData['creatives']
-  labels: Record<string, Variant>
-  experimentName?: string
+function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
+  creatives: AdData['creatives']   // members of this experiment only
+  labels: Record<string, LabelEntry>
+  experiment: Experiment
+  onDelete?: (experimentId: string) => void
 }) {
   const groups: Record<Variant, AdData['creatives']> = { control: [], A: [], B: [] }
   for (const c of creatives) {
-    const v = labels[c.id]
+    const v = labels[c.id]?.variant
     if (v) groups[v].push(c)
   }
 
@@ -409,7 +481,15 @@ function ExperimentResultCard({ creatives, labels, experimentName }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         <span style={{ fontSize: 14 }}>🧪</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1e40af' }}>A/B 實驗結果</span>
-        {experimentName && <span style={{ fontSize: 11, color: '#64748b', background: '#e0e7ff', padding: '2px 8px', borderRadius: 10 }}>{experimentName}</span>}
+        {experiment.name && <span style={{ fontSize: 11, color: '#64748b', background: '#e0e7ff', padding: '2px 8px', borderRadius: 10 }}>{experiment.name}</span>}
+        {onDelete && (
+          <button
+            onClick={() => { if (window.confirm(`確定要刪除實驗「${experiment.name || '未命名'}」嗎？此實驗的廣告標籤會一併清除。`)) onDelete(experiment.id) }}
+            style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            刪除
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -466,18 +546,21 @@ function ExperimentResultCard({ creatives, labels, experimentName }: {
   )
 }
 
-export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, abTestData, onAbTestUpdate }: {
+export function CreativeSection({ data, onAskAI, creativeLabels, experiments, onLabelChange, onCreateExperiment, onExperimentUpdate, onDeleteExperiment }: {
   data: AdData
   onAskAI?: (q: string, autoSend?: boolean) => void
-  creativeLabels?: Record<string, Variant>
-  onLabelChange?: (adId: string, variant: Variant | null) => void
-  abTestData?: { aiDiagnosis: string; winner: string; experimentName?: string }
-  onAbTestUpdate?: (update: AbTestUpdate) => void
+  creativeLabels?: Record<string, LabelEntry>
+  experiments?: Experiment[]
+  onLabelChange?: (adId: string, variant: Variant | null, experimentId?: string) => void
+  onCreateExperiment?: (name: string) => Promise<string>
+  onExperimentUpdate?: (experimentId: string, update: ExperimentUpdate) => void
+  onDeleteExperiment?: (experimentId: string) => void
 }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const labels = creativeLabels ?? {}
+  const exps = experiments ?? []
 
   const sorted = useMemo(() => {
     let arr = [...data.creatives]
@@ -487,6 +570,8 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
     else arr.sort((a, b) => a.cpa - b.cpa)
     return arr
   }, [data.creatives, sortBy, filter])
+
+  const membersOf = (expId: string) => data.creatives.filter(c => labels[c.id]?.experimentId === expId)
 
   return (
     <div>
@@ -509,9 +594,15 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
         </div>
       </div>
 
-      {onLabelChange && Object.keys(labels).length > 0 && (
-        <ExperimentResultCard creatives={data.creatives} labels={labels} experimentName={abTestData?.experimentName} />
-      )}
+      {onLabelChange && exps.map(exp => (
+        <ExperimentResultCard
+          key={exp.id}
+          creatives={membersOf(exp.id)}
+          labels={labels}
+          experiment={exp}
+          onDelete={onDeleteExperiment}
+        />
+      ))}
 
       {sorted.length === 0 && (
         <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
@@ -519,51 +610,55 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
         </p>
       )}
       <div className="ads-creative-grid">
-        {sorted.map((c, i) => (
-          <div key={c.id} className="ads-creative-card" style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, display: 'flex', gap: 4, alignItems: 'center' }}>
-              {onLabelChange && (
-                <VariantBadge adId={c.id} variant={labels[c.id]} onLabelChange={onLabelChange} />
-              )}
-              {onAskAI && <button
-                title="用 AI 分析此素材"
-                onClick={() => onAskAI(buildCreativePrompt(c), true)}
-                style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
-              >✨ 分析</button>}
-            </div>
-            <div className={`ads-creative-thumb ${c.thumb}`}>
-              <div className={`ads-creative-rank ${c.status === 'top' ? 'top' : c.status === 'bad' ? 'bad' : ''}`}>{i + 1}</div>
-              <div className={`ads-creative-status ${c.status}`}>{STATUS_LABEL[c.status]}</div>
-              <span style={{ opacity: 0.5 }}>{c.type} · {c.channel}</span>
-            </div>
-            <div className="ads-creative-info">
-              <div className="ads-creative-name" title={[c.campaignName, c.adName || c.name].filter(Boolean).join(' › ')}>{renderAdName(c.name)}</div>
-              <div className="ads-creative-meta">
-                {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPC', '$' + (c.cpc ?? c.cpa)]].map(([k, v]) => (
-                  <div key={k} className="ads-creative-kv">
-                    <span style={{ color: 'var(--ad-text3)' }}>{k}</span>
-                    <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{v}</span>
-                  </div>
-                ))}
+        {sorted.map((c, i) => {
+          const label = labels[c.id]
+          const exp = label ? exps.find(e => e.id === label.experimentId) : undefined
+          return (
+            <div key={c.id} className="ads-creative-card" style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, display: 'flex', gap: 4, alignItems: 'center' }}>
+                {onLabelChange && onCreateExperiment && (
+                  <ExperimentBadge adId={c.id} label={label} experiments={exps} onLabelChange={onLabelChange} onCreateExperiment={onCreateExperiment} />
+                )}
+                {onAskAI && <button
+                  title="用 AI 分析此素材"
+                  onClick={() => onAskAI(buildCreativePrompt(c), true)}
+                  style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
+                >✨ 分析</button>}
               </div>
-            </div>
-            {labels[c.id] && abTestData && onAbTestUpdate && (
-              <>
-                <button
-                  onClick={() => setExpandedCard(prev => prev === c.id ? null : c.id)}
-                  style={{ width: '100%', textAlign: 'center', fontSize: 11, color: 'var(--ad-blue)', background: 'none', border: 'none', borderTop: '1px solid var(--ad-border)', padding: '6px 0', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
-                >
-                  查看 A/B 對比 {expandedCard === c.id ? '↑' : '↓'}
-                </button>
-                <div style={{ overflow: 'hidden', maxHeight: expandedCard === c.id ? '600px' : '0', opacity: expandedCard === c.id ? 1 : 0, transition: 'max-height 0.3s ease, opacity 0.25s ease' }}>
-                  <div style={{ padding: '0 8px 8px' }}>
-                    <AbTestPanel allCreatives={data.creatives} labels={labels} abTestData={abTestData} onAbTestUpdate={onAbTestUpdate} />
-                  </div>
+              <div className={`ads-creative-thumb ${c.thumb}`}>
+                <div className={`ads-creative-rank ${c.status === 'top' ? 'top' : c.status === 'bad' ? 'bad' : ''}`}>{i + 1}</div>
+                <div className={`ads-creative-status ${c.status}`}>{STATUS_LABEL[c.status]}</div>
+                <span style={{ opacity: 0.5 }}>{c.type} · {c.channel}</span>
+              </div>
+              <div className="ads-creative-info">
+                <div className="ads-creative-name" title={[c.campaignName, c.adName || c.name].filter(Boolean).join(' › ')}>{renderAdName(c.name)}</div>
+                <div className="ads-creative-meta">
+                  {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPC', '$' + (c.cpc ?? c.cpa)]].map(([k, v]) => (
+                    <div key={k} className="ads-creative-kv">
+                      <span style={{ color: 'var(--ad-text3)' }}>{k}</span>
+                      <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{v}</span>
+                    </div>
+                  ))}
                 </div>
-              </>
-            )}
-          </div>
-        ))}
+              </div>
+              {label && exp && onExperimentUpdate && (
+                <>
+                  <button
+                    onClick={() => setExpandedCard(prev => prev === c.id ? null : c.id)}
+                    style={{ width: '100%', textAlign: 'center', fontSize: 11, color: 'var(--ad-blue)', background: 'none', border: 'none', borderTop: '1px solid var(--ad-border)', padding: '6px 0', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
+                  >
+                    查看 A/B 對比 {expandedCard === c.id ? '↑' : '↓'}
+                  </button>
+                  <div style={{ overflow: 'hidden', maxHeight: expandedCard === c.id ? '600px' : '0', opacity: expandedCard === c.id ? 1 : 0, transition: 'max-height 0.3s ease, opacity 0.25s ease' }}>
+                    <div style={{ padding: '0 8px 8px' }}>
+                      <AbTestPanel creatives={membersOf(exp.id)} labels={labels} experiment={exp} onExperimentUpdate={onExperimentUpdate} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
