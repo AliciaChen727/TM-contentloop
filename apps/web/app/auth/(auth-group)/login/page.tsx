@@ -48,6 +48,7 @@ export default function LoginPage() {
       await handlePostLogin(idToken, result.user.uid)
     } catch (err) {
       console.error('Login failed:', err)
+      setError('登入失敗，請重試。')
     }
   }
 
@@ -85,6 +86,7 @@ export default function LoginPage() {
         }
       } else {
         console.error('Facebook login failed:', err)
+        setError('Facebook 登入目前暫時無法使用，請改用上方的「使用 Google 帳號登入」。')
       }
     }
   }
@@ -123,6 +125,10 @@ export default function LoginPage() {
           </svg>
           使用 Facebook 帳號登入
         </button>
+
+        <p className="mt-2 text-center text-xs text-gray-400">
+          若 Facebook 登入無法使用，請改用 Google 登入
+        </p>
       </div>
     </main>
   )
