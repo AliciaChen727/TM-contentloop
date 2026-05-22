@@ -11,9 +11,11 @@ export async function GET(req: NextRequest) {
   const decoded = await adminAuth.verifyIdToken(idToken)
   const uid = decoded.uid
 
+  // Prefer page-scoped token (multi-page) when ?pageId= is given; fall back to legacy 'page'.
+  const pageIdParam = req.nextUrl.searchParams.get('pageId')
   const tokenSnap = await adminDb
     .collection('users').doc(uid)
-    .collection('metaTokens').doc('page').get()
+    .collection('metaTokens').doc(pageIdParam || 'page').get()
 
   const { pageId, accessToken, igUserId } = tokenSnap.data() as {
     pageId: string; accessToken: string; igUserId: string
@@ -32,6 +34,28 @@ export async function GET(req: NextRequest) {
   const firstIgMediaId = igPostsSnap.docs[0]?.id
 
   const results: Record<string, unknown> = { pageId, igUserId, firstFbPostId, firstIgMediaId }
+
+  // ── Follower-stats probe: which metric/field actually returns data? ──
+  {
+    const followerProbe: Record<string, unknown> = {}
+    const nodeUrl = new URL(`${BASE}/${pageId}`)
+    nodeUrl.searchParams.set('fields', 'followers_count,fan_count')
+    nodeUrl.searchParams.set('access_token', accessToken)
+    followerProbe.nodeFields = await (await fetch(nodeUrl)).json()
+
+    const until = Math.floor(Date.now() / 1000)
+    const since = until - 30 * 86400
+    for (const metric of ['page_follows', 'page_fans', 'page_daily_follows_unique', 'page_fan_adds', 'page_fan_removes']) {
+      const u = new URL(`${BASE}/${pageId}/insights`)
+      u.searchParams.set('metric', metric)
+      u.searchParams.set('period', 'day')
+      u.searchParams.set('since', String(since))
+      u.searchParams.set('until', String(until))
+      u.searchParams.set('access_token', accessToken)
+      followerProbe[metric] = await (await fetch(u)).json()
+    }
+    results.followerProbe = followerProbe
+  }
 
   // 測試 syncFbInsights 實際使用的 API call（/{pageId}/posts with reactions/comments/shares）
   {
