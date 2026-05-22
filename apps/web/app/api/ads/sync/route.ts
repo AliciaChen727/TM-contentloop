@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
   const adIdToStoryId = new Map<string, string>()
   const adIdToIgStoryId = new Map<string, string>()
   for (const ad of adsList) {
@@ -228,13 +228,16 @@ export async function POST(req: NextRequest) {
         let item = (dateRangeItem && parseFloat(dateRangeItem.spend as string ?? '0') > 0) ? dateRangeItem
           : allTimeItem ? allTimeItem
           : dateRangeItem ? dateRangeItem  // date-range exists but spend=0
-          : { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
-        
+          : { ad_id: ad.id, ad_name: ad.name, campaign_name: ad.campaign?.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
+
         const storyId = adIdToStoryId.get(ad.id)
         if (storyId && !item.effective_object_story_id) {
           item = { ...item, effective_object_story_id: storyId }
         }
-        return { ...item, effective_status: ad.effective_status }
+        // Ensure campaign_name is always set — insights data has it directly;
+        // fallback to ads-list campaign{name} for zero-spend ads with no insights row.
+        const campaignName = (item.campaign_name as string | undefined) ?? ad.campaign?.name
+        return { ...item, effective_status: ad.effective_status, campaign_name: campaignName }
       })
     : (adLevelData.data ?? [])
 
