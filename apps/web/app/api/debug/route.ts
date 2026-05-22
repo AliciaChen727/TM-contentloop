@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     .collection('users').doc(uid)
     .collection('metaTokens').doc(pageIdParam || 'page').get()
 
-  const { pageId, accessToken, igUserId } = tokenSnap.data() as {
-    pageId: string; accessToken: string; igUserId: string
+  const { pageId, accessToken, igUserId, userAccessToken } = tokenSnap.data() as {
+    pageId: string; accessToken: string; igUserId: string; userAccessToken?: string
   }
 
   // 取第一篇 FB 貼文
@@ -55,6 +55,27 @@ export async function GET(req: NextRequest) {
       followerProbe[metric] = await (await fetch(u)).json()
     }
     results.followerProbe = followerProbe
+  }
+
+  // ── Budget probe: raw campaign/adset budgets + run dates for the first few ads ──
+  // Ads live under the ad account, reachable via the USER token (not the page token).
+  try {
+    const adsToken = userAccessToken ?? accessToken
+    const acctUrl = new URL(`${BASE}/me/adaccounts`)
+    acctUrl.searchParams.set('fields', 'id,name,currency')
+    acctUrl.searchParams.set('access_token', adsToken)
+    const acctData = await (await fetch(acctUrl)).json()
+    const acctId = acctData.data?.[0]?.id
+    results.budgetProbeCurrency = acctData.data?.[0]?.currency
+    if (acctId) {
+      const adsUrl = new URL(`${BASE}/${acctId}/ads`)
+      adsUrl.searchParams.set('fields', 'id,name,campaign{name,daily_budget,lifetime_budget,start_time,stop_time},adset{name,daily_budget,lifetime_budget,start_time,end_time}')
+      adsUrl.searchParams.set('limit', '5')
+      adsUrl.searchParams.set('access_token', adsToken)
+      results.budgetProbe = await (await fetch(adsUrl)).json()
+    }
+  } catch (e) {
+    results.budgetProbeError = e instanceof Error ? e.message : 'budget probe failed'
   }
 
   // 測試 syncFbInsights 實際使用的 API call（/{pageId}/posts with reactions/comments/shares）

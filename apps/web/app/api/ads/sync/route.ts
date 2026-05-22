@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,daily_budget,lifetime_budget},adset{daily_budget,lifetime_budget},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -212,16 +212,33 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; daily_budget?: string; lifetime_budget?: string }; adset?: { daily_budget?: string; lifetime_budget?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
 
-  // Per-ad configured budget (major currency unit). Boosted posts carry the budget
-  // at campaign level (lifetime for fixed-duration boosts); fall back to adset.
+  // Per-ad WHOLE-RUN budget (major currency unit). Meta stores boosts/A-B tests as
+  // a daily_budget (e.g. NT$96/day); the user thinks in total terms (e.g. ~NT$500).
+  // So reconstruct the full-run total: lifetime_budget as-is, else daily × run days.
+  // Resolve adset first (per A/B cell), then campaign, to avoid a shared CBO value
+  // showing on every row.
+  const runDays = (start?: string, stop?: string): number => {
+    if (!start) return 1
+    const startMs = new Date(start).getTime()
+    const endMs = stop ? new Date(stop).getTime() : Date.now()
+    return Math.max(1, Math.ceil((endMs - startMs) / 86400000))
+  }
+  const levelBudget = (
+    lt?: string, dl?: string, start?: string, stop?: string,
+  ): number => {
+    const life = lt != null ? parseFloat(lt) : 0
+    if (life > 0) return life / budgetDivisor
+    const daily = dl != null ? parseFloat(dl) : 0
+    if (daily > 0) return (daily / budgetDivisor) * runDays(start, stop)
+    return 0
+  }
   const adIdToBudget = new Map<string, number>()
   for (const ad of adsList) {
-    const raw = ad.campaign?.lifetime_budget ?? ad.campaign?.daily_budget
-      ?? ad.adset?.lifetime_budget ?? ad.adset?.daily_budget
-    const minor = raw != null ? parseFloat(raw) : 0
-    if (ad.id && minor > 0) adIdToBudget.set(ad.id, minor / budgetDivisor)
+    const total = levelBudget(ad.adset?.lifetime_budget, ad.adset?.daily_budget, ad.adset?.start_time, ad.adset?.end_time)
+      || levelBudget(ad.campaign?.lifetime_budget, ad.campaign?.daily_budget, ad.campaign?.start_time, ad.campaign?.stop_time)
+    if (ad.id && total > 0) adIdToBudget.set(ad.id, Math.round(total))
   }
   const adIdToStoryId = new Map<string, string>()
   const adIdToIgStoryId = new Map<string, string>()
