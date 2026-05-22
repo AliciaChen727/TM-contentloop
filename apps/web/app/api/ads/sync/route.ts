@@ -72,10 +72,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
   }
   const adAccountId = accounts[0].id
-  // Meta returns budgets in the currency's minor unit. Most currencies divide by
-  // 100; a known set are zero-decimal (no division). TWD = 100.
-  const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'BIF', 'DJF', 'GNF', 'ISK', 'KMF', 'PYG', 'RWF', 'UGX', 'VUV', 'XAF', 'XOF', 'XPF', 'MGA'])
-  const budgetDivisor = ZERO_DECIMAL.has(accounts[0].currency ?? '') ? 1 : 100
+  // Meta returns budgets in the currency's minor unit for 2-decimal currencies
+  // (÷100), but some currencies (incl. TWD, verified against this account, plus
+  // the zero-decimal currencies) are returned already in the major unit (÷1).
+  const NO_DIVIDE = new Set(['TWD', 'JPY', 'KRW', 'VND', 'CLP', 'BIF', 'DJF', 'GNF', 'ISK', 'KMF', 'PYG', 'RWF', 'UGX', 'VUV', 'XAF', 'XOF', 'XPF', 'MGA'])
+  const budgetDivisor = NO_DIVIDE.has(accounts[0].currency ?? '') ? 1 : 100
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 
