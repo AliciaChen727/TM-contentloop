@@ -217,9 +217,12 @@ function buildAdData(raw: any): AdData {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? raw.adCreatives.map((c: any, i: number) => mapRawAdCreative(c, i))
     : []
-  const budget = MOCK_DATA.overview.summary.budget
+  // Only feed a REAL budget into diagnosis. We don't yet fetch ad-account budget
+  // from Meta, so this is 0 → the budget-overspend rule stays silent instead of
+  // comparing real spend against a fake mock budget (which was misleading).
+  const realBudget = typeof s.budget === 'number' ? s.budget : 0
   const realCreatives = creatives.length > 0
-  const diagnosis = buildDiagnosis(s as Record<string, number>, realCreatives ? creatives : [], budget)
+  const diagnosis = buildDiagnosis(s as Record<string, number>, realCreatives ? creatives : [], realBudget)
 
   // Real adsets from per-creative data
   const realAdsets = realCreatives
