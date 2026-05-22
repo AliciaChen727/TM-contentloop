@@ -62,6 +62,7 @@ export interface DiagItem {
 }
 
 export interface Adset {
+  id?: string
   name: string
   budget: number
   spent: number

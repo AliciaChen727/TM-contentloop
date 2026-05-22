@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '../Icon'
-import type { AdData, Adset } from '../types'
+import type { AdData, Adset, LabelEntry, Experiment } from '../types'
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${fmt(n)}`
@@ -48,13 +48,55 @@ function renderAdName(name: string) {
 
 type AdsetRow = Adset & { newBudget: number }
 
-export function BudgetSection({ data }: { data: AdData }) {
+export function BudgetSection({ data, creativeLabels, experiments }: {
+  data: AdData
+  creativeLabels?: Record<string, LabelEntry>
+  experiments?: Experiment[]
+}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const convType = (data as any).conversionType as string | undefined
   const isClickBased = convType === 'link_click'
   const isVideoBased = convType === 'video_view'
-  const [adsets, setAdsets] = useState<AdsetRow[]>(data.budget.adsets.map(a => ({ ...a, newBudget: a.budget })))
-  const sliderMax = Math.max(...data.budget.adsets.map(a => a.budget)) * 3 || 200000
+
+  // Merge ads tagged in the same A/B experiment into one combined row (budget/spent
+  // summed, ROAS/CPA spend-weighted). Untagged ads stay individual.
+  const baseAdsets = useMemo<Adset[]>(() => {
+    const labels = creativeLabels ?? {}
+    const expName = new Map((experiments ?? []).map(e => [e.id, e.name]))
+    const groups = new Map<string, Adset[]>()
+    const singles: Adset[] = []
+    for (const a of data.budget.adsets) {
+      const expId = a.id ? labels[a.id]?.experimentId : undefined
+      if (expId) {
+        const arr = groups.get(expId) ?? []
+        arr.push(a)
+        groups.set(expId, arr)
+      } else {
+        singles.push(a)
+      }
+    }
+    const merged: Adset[] = []
+    for (const [expId, members] of Array.from(groups.entries())) {
+      if (members.length < 2) { merged.push(members[0]); continue }
+      const budget = members.reduce((s, m) => s + m.budget, 0)
+      const spent = members.reduce((s, m) => s + m.spent, 0)
+      const roas = spent > 0
+        ? members.reduce((s, m) => s + m.roas * m.spent, 0) / spent
+        : members.reduce((s, m) => s + m.roas, 0) / members.length
+      const cpa = spent > 0 ? members.reduce((s, m) => s + m.cpa * m.spent, 0) / spent : 0
+      merged.push({
+        id: `exp:${expId}`,
+        name: `🧪 ${expName.get(expId) || '實驗'}（A/B 合併 ${members.length} 組）`,
+        budget, spent, roas: Number(roas.toFixed(2)), cpa: Math.round(cpa),
+      })
+    }
+    return [...merged, ...singles]
+  }, [data.budget.adsets, creativeLabels, experiments])
+
+  const [adsets, setAdsets] = useState<AdsetRow[]>(baseAdsets.map(a => ({ ...a, newBudget: a.budget })))
+  useEffect(() => { setAdsets(baseAdsets.map(a => ({ ...a, newBudget: a.budget }))) }, [baseAdsets])
+
+  const sliderMax = Math.max(...baseAdsets.map(a => a.budget)) * 3 || 200000
   const sliderStep = sliderMax > 50000 ? 5000 : 100
 
   const totalNew = adsets.reduce((s, a) => s + a.newBudget, 0)
@@ -71,7 +113,7 @@ export function BudgetSection({ data }: { data: AdData }) {
         : a.budget,
   })))
 
-  const reset = () => setAdsets(data.budget.adsets.map(a => ({ ...a, newBudget: a.budget })))
+  const reset = () => setAdsets(baseAdsets.map(a => ({ ...a, newBudget: a.budget })))
 
   return (
     <div>

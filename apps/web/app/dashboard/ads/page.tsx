@@ -228,6 +228,7 @@ function buildAdData(raw: any): AdData {
   // Real adsets from per-creative data
   const realAdsets = realCreatives
     ? creatives.map((c: ReturnType<typeof mapRawAdCreative>) => ({
+        id: c.id,
         name: c.name,
         // Real configured budget from Meta; fall back to a spend-based estimate only
         // when Meta returns no budget for that ad.
@@ -933,7 +934,7 @@ export default function AdsPage() {
               />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
               {active === 'time' && <BestTimeSection data={adData} />}
-              {active === 'budget' && <BudgetSection data={adData} />}
+              {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} />}
             </>
           )}
         </main>
