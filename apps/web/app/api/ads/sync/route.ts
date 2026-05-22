@@ -60,18 +60,22 @@ export async function POST(req: NextRequest) {
   // Using /{pageId}/adaccounts can return a different (empty) account than the shared account
   // that actually contains the campaigns for both D67 and Legacy pages.
   const accountsUrl = new URL(`${BASE}/me/adaccounts`)
-  accountsUrl.searchParams.set('fields', 'id,name')
+  accountsUrl.searchParams.set('fields', 'id,name,currency')
   accountsUrl.searchParams.set('access_token', userAccessToken)
   const accountsRes = await fetch(accountsUrl)
   const accountsData = await accountsRes.json()
   if (!accountsRes.ok || accountsData.error) {
     return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
   }
-  const accounts: { id: string; name: string }[] = accountsData.data ?? []
+  const accounts: { id: string; name: string; currency?: string }[] = accountsData.data ?? []
   if (!accounts.length) {
     return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
   }
   const adAccountId = accounts[0].id
+  // Meta returns budgets in the currency's minor unit. Most currencies divide by
+  // 100; a known set are zero-decimal (no division). TWD = 100.
+  const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'BIF', 'DJF', 'GNF', 'ISK', 'KMF', 'PYG', 'RWF', 'UGX', 'VUV', 'XAF', 'XOF', 'XPF', 'MGA'])
+  const budgetDivisor = ZERO_DECIMAL.has(accounts[0].currency ?? '') ? 1 : 100
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 
@@ -100,7 +104,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,daily_budget,lifetime_budget},adset{daily_budget,lifetime_budget},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -207,7 +211,17 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; daily_budget?: string; lifetime_budget?: string }; adset?: { daily_budget?: string; lifetime_budget?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
+
+  // Per-ad configured budget (major currency unit). Boosted posts carry the budget
+  // at campaign level (lifetime for fixed-duration boosts); fall back to adset.
+  const adIdToBudget = new Map<string, number>()
+  for (const ad of adsList) {
+    const raw = ad.campaign?.lifetime_budget ?? ad.campaign?.daily_budget
+      ?? ad.adset?.lifetime_budget ?? ad.adset?.daily_budget
+    const minor = raw != null ? parseFloat(raw) : 0
+    if (ad.id && minor > 0) adIdToBudget.set(ad.id, minor / budgetDivisor)
+  }
   const adIdToStoryId = new Map<string, string>()
   const adIdToIgStoryId = new Map<string, string>()
   for (const ad of adsList) {
@@ -237,7 +251,8 @@ export async function POST(req: NextRequest) {
         // Ensure campaign_name is always set — insights data has it directly;
         // fallback to ads-list campaign{name} for zero-spend ads with no insights row.
         const campaignName = (item.campaign_name as string | undefined) ?? ad.campaign?.name
-        return { ...item, effective_status: ad.effective_status, campaign_name: campaignName }
+        const budget = adIdToBudget.get(ad.id) ?? 0
+        return { ...item, effective_status: ad.effective_status, campaign_name: campaignName, budget }
       })
     : (adLevelData.data ?? [])
 

@@ -146,6 +146,7 @@ function mapRawAdCreative(c: any, idx: number) {
     cpc: linkClicks > 0 ? parseFloat((spend / linkClicks).toFixed(2)) : 0,
     adName: c.ad_name ?? '',
     campaignName: c.campaign_name ?? '',
+    budget: typeof c.budget === 'number' ? c.budget : 0,
   }
 }
 
@@ -228,7 +229,9 @@ function buildAdData(raw: any): AdData {
   const realAdsets = realCreatives
     ? creatives.map((c: ReturnType<typeof mapRawAdCreative>) => ({
         name: c.name,
-        budget: c.spend > 0 ? Math.round(c.spend / 0.8) : 1000,
+        // Real configured budget from Meta; fall back to a spend-based estimate only
+        // when Meta returns no budget for that ad.
+        budget: c.budget > 0 ? Math.round(c.budget) : (c.spend > 0 ? Math.round(c.spend / 0.8) : 1000),
         spent: Math.round(c.spend),
         roas: c.roas,
         cpa: Math.round(c.cpa),

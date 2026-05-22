@@ -46,6 +46,7 @@ export interface Creative {
   cpc?: number
   adName?: string
   campaignName?: string
+  budget?: number
 }
 
 export interface DiagItem {
