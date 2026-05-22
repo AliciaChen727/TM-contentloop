@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Icon } from '../Icon'
 import type { AdData, Adset, LabelEntry, Experiment } from '../types'
 
@@ -46,7 +46,8 @@ function renderAdName(name: string) {
   )
 }
 
-type AdsetRow = Adset & { newBudget: number }
+type MergedAdset = Adset & { members?: Adset[] }
+type AdsetRow = MergedAdset & { newBudget: number }
 
 export function BudgetSection({ data, creativeLabels, experiments }: {
   data: AdData
@@ -60,7 +61,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
 
   // Merge ads tagged in the same A/B experiment into one combined row (budget/spent
   // summed, ROAS/CPA spend-weighted). Untagged ads stay individual.
-  const baseAdsets = useMemo<Adset[]>(() => {
+  const baseAdsets = useMemo<MergedAdset[]>(() => {
     const labels = creativeLabels ?? {}
     const expName = new Map((experiments ?? []).map(e => [e.id, e.name]))
     const groups = new Map<string, Adset[]>()
@@ -75,7 +76,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
         singles.push(a)
       }
     }
-    const merged: Adset[] = []
+    const merged: MergedAdset[] = []
     for (const [expId, members] of Array.from(groups.entries())) {
       if (members.length < 2) { merged.push(members[0]); continue }
       const budget = members.reduce((s, m) => s + m.budget, 0)
@@ -88,10 +89,18 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
         id: `exp:${expId}`,
         name: `🧪 ${expName.get(expId) || '實驗'}（A/B 合併 ${members.length} 組）`,
         budget, spent, roas: Number(roas.toFixed(2)), cpa: Math.round(cpa),
+        members,
       })
     }
     return [...merged, ...singles]
   }, [data.budget.adsets, creativeLabels, experiments])
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpand = (id: string) => setExpanded(p => {
+    const n = new Set(p)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
 
   const [adsets, setAdsets] = useState<AdsetRow[]>(baseAdsets.map(a => ({ ...a, newBudget: a.budget })))
   useEffect(() => { setAdsets(baseAdsets.map(a => ({ ...a, newBudget: a.budget }))) }, [baseAdsets])
@@ -150,29 +159,63 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
           <tbody>
             {adsets.map((a, i) => {
               const pct = (a.spent / a.budget) * 100
+              const rowId = a.id ?? String(i)
+              const isMerged = (a.members?.length ?? 0) > 1
+              const isOpen = expanded.has(rowId)
               return (
-                <tr key={i}>
-                  <td style={{ fontWeight: 500, lineHeight: 1.4 }}>{renderAdName(a.name)}</td>
-                  <td><span style={{ fontFamily: 'var(--font-dm-mono)' }}>{fmtK(a.budget)}</span></td>
-                  <td>
-                    <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 3 }}>{fmtK(a.spent)} ({pct.toFixed(0)}%)</div>
-                    <div className="ads-prog-bar">
-                      <div className="ads-prog-fill" style={{ width: `${Math.min(pct, 100)}%`, background: pct > 90 ? 'var(--ad-orange)' : 'var(--ad-blue)' }} />
-                    </div>
-                  </td>
-                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: a.roas > 0 ? roasColor(a.roas) : 'var(--ad-text3)' }}>{a.roas > 0 ? `${a.roas.toFixed(1)}${isVideoBased || isClickBased ? '' : 'x'}` : '–'}</span></td>
-                  <td><span style={{ fontFamily: 'var(--font-dm-mono)', color: a.cpa > 0 ? 'var(--ad-text)' : 'var(--ad-text3)' }}>{a.cpa > 0 ? `$${a.cpa}` : '–'}</span></td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input type="range" min={0} max={sliderMax} step={sliderStep} value={a.newBudget}
-                        onChange={e => update(i, Number(e.target.value))}
-                        style={{ width: 88, accentColor: 'var(--ad-blue)' }} />
-                      <span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, fontWeight: 600, minWidth: 50, color: a.newBudget > a.budget ? 'var(--ad-green)' : a.newBudget < a.budget ? 'var(--ad-red)' : 'var(--ad-text)' }}>
-                        {fmtK(a.newBudget)}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
+                <Fragment key={rowId}>
+                  <tr>
+                    <td style={{ fontWeight: 500, lineHeight: 1.4 }}>
+                      {isMerged && (
+                        <button
+                          onClick={() => toggleExpand(rowId)}
+                          title={isOpen ? '收合個別廣告' : '展開個別廣告'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ad-text3)', fontSize: 11, marginRight: 4, padding: 0 }}
+                        >
+                          {isOpen ? '▾' : '▸'}
+                        </button>
+                      )}
+                      {renderAdName(a.name)}
+                    </td>
+                    <td><span style={{ fontFamily: 'var(--font-dm-mono)' }}>{fmtK(a.budget)}</span></td>
+                    <td>
+                      <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 3 }}>{fmtK(a.spent)} ({pct.toFixed(0)}%)</div>
+                      <div className="ads-prog-bar">
+                        <div className="ads-prog-fill" style={{ width: `${Math.min(pct, 100)}%`, background: pct > 90 ? 'var(--ad-orange)' : 'var(--ad-blue)' }} />
+                      </div>
+                    </td>
+                    <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: a.roas > 0 ? roasColor(a.roas) : 'var(--ad-text3)' }}>{a.roas > 0 ? `${a.roas.toFixed(1)}${isVideoBased || isClickBased ? '' : 'x'}` : '–'}</span></td>
+                    <td><span style={{ fontFamily: 'var(--font-dm-mono)', color: a.cpa > 0 ? 'var(--ad-text)' : 'var(--ad-text3)' }}>{a.cpa > 0 ? `$${a.cpa}` : '–'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input type="range" min={0} max={sliderMax} step={sliderStep} value={a.newBudget}
+                          onChange={e => update(i, Number(e.target.value))}
+                          style={{ width: 88, accentColor: 'var(--ad-blue)' }} />
+                        <span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, fontWeight: 600, minWidth: 50, color: a.newBudget > a.budget ? 'var(--ad-green)' : a.newBudget < a.budget ? 'var(--ad-red)' : 'var(--ad-text)' }}>
+                          {fmtK(a.newBudget)}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  {isMerged && isOpen && a.members!.map((m, mi) => {
+                    const mpct = m.budget > 0 ? (m.spent / m.budget) * 100 : 0
+                    return (
+                      <tr key={`${rowId}-m${mi}`} style={{ background: 'var(--ad-surface2)' }}>
+                        <td style={{ paddingLeft: 28, fontSize: 12.5, color: 'var(--ad-text2)', lineHeight: 1.4 }}>{renderAdName(m.name)}</td>
+                        <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, color: 'var(--ad-text2)' }}>{fmtK(m.budget)}</span></td>
+                        <td>
+                          <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 3 }}>{fmtK(m.spent)} ({mpct.toFixed(0)}%)</div>
+                          <div className="ads-prog-bar">
+                            <div className="ads-prog-fill" style={{ width: `${Math.min(mpct, 100)}%`, background: mpct > 90 ? 'var(--ad-orange)' : 'var(--ad-blue)' }} />
+                          </div>
+                        </td>
+                        <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, color: m.roas > 0 ? roasColor(m.roas) : 'var(--ad-text3)' }}>{m.roas > 0 ? `${m.roas.toFixed(1)}${isVideoBased || isClickBased ? '' : 'x'}` : '–'}</span></td>
+                        <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, color: m.cpa > 0 ? 'var(--ad-text2)' : 'var(--ad-text3)' }}>{m.cpa > 0 ? `$${m.cpa}` : '–'}</span></td>
+                        <td><span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>—</span></td>
+                      </tr>
+                    )
+                  })}
+                </Fragment>
               )
             })}
           </tbody>
