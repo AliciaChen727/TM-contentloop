@@ -44,6 +44,7 @@ export interface Creative {
   status: 'top' | 'good' | 'ok' | 'bad'
   linkClicks?: number
   cpc?: number
+  adName?: string
 }
 
 export interface DiagItem {

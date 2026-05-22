@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
         if (storyId && !item.effective_object_story_id) {
           item = { ...item, effective_object_story_id: storyId }
         }
-        return item
+        return { ...item, effective_status: ad.effective_status }
       })
     : (adLevelData.data ?? [])
 
@@ -283,7 +283,7 @@ export async function POST(req: NextRequest) {
     return igMediaIdSet.has(postId)
   }
 
-  const adCreatives = pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
+  const adCreatives = (pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
     ? allAdCreatives.filter(c => {
         const sid = c.effective_object_story_id as string | undefined
         const igId = adIdToIgStoryId.get(c.ad_id as string)
@@ -291,6 +291,10 @@ export async function POST(req: NextRequest) {
         return matchesPage(sid) || matchesIg(sid) || (igId ? matchesIg(igId) : false)
       })
     : allAdCreatives
+  ).filter(c => {
+    const s = c.effective_status as string | undefined
+    return !s || s === 'ACTIVE' || s === 'IN_PROCESS' || s === 'WITH_ISSUES'
+  })
 
   // Use dailyAdLevelData as single source of truth for both charts and KPI summary.
   // adLevelData (aggregate, no time_increment) can silently fail; dailyAdLevelData is more reliable.
