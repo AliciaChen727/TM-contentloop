@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '../Icon'
 import type { AdData, Variant, LabelEntry, Experiment } from '../types'
 
@@ -85,7 +86,9 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string>('')
   const [editName, setEditName] = useState('')
+  const [coords, setCoords] = useState<{ top: number; left: number; maxHeight: number }>({ top: 0, left: 0, maxHeight: 360 })
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   function saveRename(id: string) {
     const name = editName.trim()
@@ -94,14 +97,41 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
     setEditName('')
   }
 
+  function openMenu() {
+    const rect = ref.current?.getBoundingClientRect()
+    if (rect) {
+      const WIDTH = 200
+      const GAP = 4
+      const spaceBelow = window.innerHeight - rect.bottom - 8
+      const spaceAbove = rect.top - 8
+      const openUp = spaceBelow < 240 && spaceAbove > spaceBelow
+      const maxHeight = Math.min(360, openUp ? spaceAbove : spaceBelow)
+      const left = Math.max(8, Math.min(rect.right - WIDTH, window.innerWidth - WIDTH - 8))
+      const top = openUp ? Math.max(8, rect.top - GAP - maxHeight) : rect.bottom + GAP
+      setCoords({ top, left, maxHeight })
+    }
+    setOpen(true)
+  }
+
   useEffect(() => { setSelectedExp(label?.experimentId ?? '') }, [label?.experimentId])
 
   useEffect(() => {
+    if (!open) return
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setCreating(false) }
+      const t = e.target as Node
+      if (ref.current?.contains(t)) return
+      if (menuRef.current?.contains(t)) return
+      setOpen(false); setCreating(false)
     }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    function handleClose() { setOpen(false); setCreating(false) }
+    document.addEventListener('mousedown', handleClick)
+    window.addEventListener('scroll', handleClose, true)
+    window.addEventListener('resize', handleClose)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      window.removeEventListener('scroll', handleClose, true)
+      window.removeEventListener('resize', handleClose)
+    }
   }, [open])
 
   const currentExp = experiments.find(e => e.id === label?.experimentId)
@@ -125,7 +155,7 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (open) { setOpen(false); setCreating(false) } else openMenu() }}
         title="設定 A/B 測試標籤"
         style={{
           fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', border: 'none',
@@ -136,8 +166,8 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
       >
         {badgeText}
       </button>
-      {open && (
-        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 180, overflow: 'hidden', padding: '6px 0' }}>
+      {open && createPortal(
+        <div ref={menuRef} style={{ position: 'fixed', top: coords.top, left: coords.left, width: 200, maxHeight: coords.maxHeight, overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 1000, padding: '6px 0' }}>
           <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>實驗</div>
           {experiments.length === 0 && !creating && (
             <div style={{ padding: '4px 12px', fontSize: 11, color: '#cbd5e1' }}>尚無實驗，請新增</div>
@@ -150,6 +180,7 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
                   value={editName}
                   onChange={ev => setEditName(ev.target.value)}
                   onKeyDown={ev => { if (ev.key === 'Enter') saveRename(e.id) }}
+                  onBlur={() => saveRename(e.id)}
                   style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '4px 6px', border: '1px solid #bfdbfe', borderRadius: 6, fontFamily: 'inherit' }}
                 />
                 <button onClick={() => saveRename(e.id)} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>確認</button>
@@ -229,7 +260,8 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
               </button>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
