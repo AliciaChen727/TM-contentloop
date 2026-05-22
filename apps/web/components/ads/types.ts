@@ -45,6 +45,7 @@ export interface Creative {
   linkClicks?: number
   cpc?: number
   adName?: string
+  campaignName?: string
 }
 
 export interface DiagItem {

@@ -145,6 +145,7 @@ function mapRawAdCreative(c: any, idx: number) {
     linkClicks: linkClicks > 0 ? linkClicks : 0,
     cpc: linkClicks > 0 ? parseFloat((spend / linkClicks).toFixed(2)) : 0,
     adName: c.ad_name ?? '',
+    campaignName: c.campaign_name ?? '',
   }
 }
 

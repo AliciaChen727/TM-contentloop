@@ -537,7 +537,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, onLabelChange, 
               <span style={{ opacity: 0.5 }}>{c.type} · {c.channel}</span>
             </div>
             <div className="ads-creative-info">
-              <div className="ads-creative-name" title={c.adName || c.name}>{renderAdName(c.name)}</div>
+              <div className="ads-creative-name" title={[c.campaignName, c.adName || c.name].filter(Boolean).join(' › ')}>{renderAdName(c.name)}</div>
               <div className="ads-creative-meta">
                 {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPC', '$' + (c.cpc ?? c.cpa)]].map(([k, v]) => (
                   <div key={k} className="ads-creative-kv">

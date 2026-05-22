@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     })),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/insights`)
-      url.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,clicks,ctr,actions,action_values,effective_object_story_id')
+      url.searchParams.set('fields', 'ad_id,ad_name,campaign_name,spend,reach,impressions,clicks,ctr,actions,action_values,effective_object_story_id')
       Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     })),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/insights`)
-      url.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,ctr,actions,action_values')
+      url.searchParams.set('fields', 'ad_id,ad_name,campaign_name,spend,reach,impressions,ctr,actions,action_values')
       url.searchParams.set('date_preset', 'maximum')
       url.searchParams.set('level', 'ad')
       url.searchParams.set('limit', '200')
