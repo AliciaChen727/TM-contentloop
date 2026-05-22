@@ -108,9 +108,21 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
   const sliderMax = Math.max(...baseAdsets.map(a => a.budget)) * 3 || 200000
   const sliderStep = sliderMax > 50000 ? 5000 : 100
 
+  // Diminishing-returns model: efficiency drops / CPC rises as you pour in more
+  // budget (and vice-versa). simEff = roas × ratio^-DR, simCpc = cpc × ratio^DR.
+  const DR = 0.15
+  const simMetrics = (a: AdsetRow) => {
+    const ratio = a.budget > 0 && a.newBudget > 0 ? a.newBudget / a.budget : 1
+    const f = Math.pow(ratio, DR)
+    return {
+      roas: a.roas > 0 ? a.roas / f : 0,
+      cpc: a.cpa > 0 ? a.cpa * f : 0,
+    }
+  }
+
   const totalNew = adsets.reduce((s, a) => s + a.newBudget, 0)
   const totalOrig = adsets.reduce((s, a) => s + a.budget, 0)
-  const projRoas = adsets.reduce((s, a) => s + a.roas * a.newBudget, 0) / totalNew
+  const projRoas = totalNew > 0 ? adsets.reduce((s, a) => s + simMetrics(a).roas * a.newBudget, 0) / totalNew : 0
   const hasRoasData = adsets.some(a => a.roas > 0)
 
   const update = (i: number, v: number) => setAdsets(p => p.map((a, j) => j === i ? { ...a, newBudget: Math.max(0, v) } : a))
@@ -153,7 +165,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
         <table className="ads-budget-table">
           <thead>
             <tr>
-              <th>廣告組合</th><th>原始預算</th><th>花費進度</th><th>{isVideoBased ? '觀看效益' : isClickBased ? '效益指數' : 'ROAS'}</th><th>{isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'}</th><th>模擬預算</th>
+              <th>廣告組合</th><th>原始預算</th><th>花費進度</th><th>{isVideoBased ? '觀看效益' : isClickBased ? '效益指數' : 'ROAS'}</th><th>{isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'}</th><th>模擬預算</th><th>{isVideoBased ? '模擬觀看效益' : isClickBased ? '模擬效益指數' : '模擬ROAS'}</th><th>{isVideoBased ? '模擬CPV' : isClickBased ? '模擬CPC' : '模擬CPA'}</th>
             </tr>
           </thead>
           <tbody>
@@ -196,6 +208,17 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
                         </span>
                       </div>
                     </td>
+                    {(() => {
+                      const sim = simMetrics(a)
+                      const effUp = sim.roas >= a.roas
+                      const cpcDown = sim.cpc <= a.cpa
+                      return (
+                        <>
+                          <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 600, color: sim.roas > 0 ? (effUp ? 'var(--ad-green)' : 'var(--ad-red)') : 'var(--ad-text3)' }}>{sim.roas > 0 ? `${sim.roas.toFixed(1)}${isVideoBased || isClickBased ? '' : 'x'}` : '–'}</span></td>
+                          <td><span style={{ fontFamily: 'var(--font-dm-mono)', color: sim.cpc > 0 ? (cpcDown ? 'var(--ad-green)' : 'var(--ad-red)') : 'var(--ad-text3)' }}>{sim.cpc > 0 ? `$${sim.cpc.toFixed(1)}` : '–'}</span></td>
+                        </>
+                      )
+                    })()}
                   </tr>
                   {isMerged && isOpen && a.members!.map((m, mi) => {
                     const mpct = m.budget > 0 ? (m.spent / m.budget) * 100 : 0
@@ -211,6 +234,8 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
                         </td>
                         <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, color: m.roas > 0 ? roasColor(m.roas) : 'var(--ad-text3)' }}>{m.roas > 0 ? `${m.roas.toFixed(1)}${isVideoBased || isClickBased ? '' : 'x'}` : '–'}</span></td>
                         <td><span style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 12.5, color: m.cpa > 0 ? 'var(--ad-text2)' : 'var(--ad-text3)' }}>{m.cpa > 0 ? `$${m.cpa}` : '–'}</span></td>
+                        <td><span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>—</span></td>
+                        <td><span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>—</span></td>
                         <td><span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>—</span></td>
                       </tr>
                     )
