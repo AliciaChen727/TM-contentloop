@@ -71,18 +71,28 @@ function renderAdName(name: string) {
 
 // Two-step badge: first pick (or create) an experiment, then pick the variant.
 // An ad belongs to exactly one experiment, so the badge shows "{experiment}·{variant}".
-function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExperiment }: {
+function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExperiment, onExperimentUpdate }: {
   adId: string
   label: LabelEntry | undefined
   experiments: Experiment[]
   onLabelChange: (adId: string, variant: Variant | null, experimentId?: string) => void
   onCreateExperiment: (name: string) => Promise<string>
+  onExperimentUpdate?: (experimentId: string, update: ExperimentUpdate) => void
 }) {
   const [open, setOpen] = useState(false)
   const [selectedExp, setSelectedExp] = useState<string>(label?.experimentId ?? '')
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [editingId, setEditingId] = useState<string>('')
+  const [editName, setEditName] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+
+  function saveRename(id: string) {
+    const name = editName.trim()
+    if (name && onExperimentUpdate) onExperimentUpdate(id, { name })
+    setEditingId('')
+    setEditName('')
+  }
 
   useEffect(() => { setSelectedExp(label?.experimentId ?? '') }, [label?.experimentId])
 
@@ -133,18 +143,41 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
             <div style={{ padding: '4px 12px', fontSize: 11, color: '#cbd5e1' }}>尚無實驗，請新增</div>
           )}
           {experiments.map(e => (
-            <button
-              key={e.id}
-              onClick={() => setSelectedExp(e.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12,
-                background: selectedExp === e.id ? '#eff6ff' : 'none', border: 'none', cursor: 'pointer',
-                color: selectedExp === e.id ? '#1d4ed8' : '#1e293b', fontWeight: selectedExp === e.id ? 600 : 400, fontFamily: 'inherit',
-              }}
-            >
-              <span style={{ width: 8 }}>{selectedExp === e.id ? '✓' : ''}</span>
-              {e.name || '(未命名)'}
-            </button>
+            editingId === e.id ? (
+              <div key={e.id} style={{ display: 'flex', gap: 4, padding: '6px 12px', boxSizing: 'border-box' }}>
+                <input
+                  autoFocus
+                  value={editName}
+                  onChange={ev => setEditName(ev.target.value)}
+                  onKeyDown={ev => { if (ev.key === 'Enter') saveRename(e.id) }}
+                  style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '4px 6px', border: '1px solid #bfdbfe', borderRadius: 6, fontFamily: 'inherit' }}
+                />
+                <button onClick={() => saveRename(e.id)} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>確認</button>
+              </div>
+            ) : (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'center' }}>
+                <button
+                  onClick={() => setSelectedExp(e.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left', padding: '7px 12px', fontSize: 12,
+                    background: selectedExp === e.id ? '#eff6ff' : 'none', border: 'none', cursor: 'pointer',
+                    color: selectedExp === e.id ? '#1d4ed8' : '#1e293b', fontWeight: selectedExp === e.id ? 600 : 400, fontFamily: 'inherit',
+                  }}
+                >
+                  <span style={{ width: 8 }}>{selectedExp === e.id ? '✓' : ''}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '(未命名)'}</span>
+                </button>
+                {onExperimentUpdate && (
+                  <button
+                    onClick={() => { setEditingId(e.id); setEditName(e.name || '') }}
+                    title="重新命名"
+                    style={{ padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, fontFamily: 'inherit' }}
+                  >
+                    ✎
+                  </button>
+                )}
+              </div>
+            )
           ))}
           {creating ? (
             <div style={{ display: 'flex', gap: 4, padding: '6px 12px' }}>
@@ -617,7 +650,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
             <div key={c.id} className="ads-creative-card" style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, display: 'flex', gap: 4, alignItems: 'center' }}>
                 {onLabelChange && onCreateExperiment && (
-                  <ExperimentBadge adId={c.id} label={label} experiments={exps} onLabelChange={onLabelChange} onCreateExperiment={onCreateExperiment} />
+                  <ExperimentBadge adId={c.id} label={label} experiments={exps} onLabelChange={onLabelChange} onCreateExperiment={onCreateExperiment} onExperimentUpdate={onExperimentUpdate} />
                 )}
                 {onAskAI && <button
                   title="用 AI 分析此素材"
