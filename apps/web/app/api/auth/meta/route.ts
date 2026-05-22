@@ -46,9 +46,11 @@ export async function POST(req: NextRequest) {
       if (configured) pageMap.set(configured.pageId, configured)
     }
 
-    const pages: PageToken[] = Array.from(pageMap.values())
+    // Defensive: drop any page without a usable access token so Firestore never
+    // receives an undefined value (Business-Manager pages can omit access_token).
+    const pages: PageToken[] = Array.from(pageMap.values()).filter(p => !!p.accessToken)
     if (pages.length === 0) {
-      throw new Error('找不到你管理的粉絲專頁。請確認授權時有勾選你的粉專，且你是該粉專的管理員（Admin）。')
+      throw new Error('找不到可連接的粉絲專頁，或無法取得粉專存取權杖。請確認你是該粉專的管理員（Admin），且授權時有勾選此粉專。')
     }
 
     const userRef = adminDb.collection('users').doc(uid)

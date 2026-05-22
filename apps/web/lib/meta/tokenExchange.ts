@@ -43,6 +43,18 @@ async function fetchIgUserId(pageId: string, token: string): Promise<string | nu
   }
 }
 
+// Business-Manager-managed pages from /me/businesses{owned_pages} often come back
+// WITHOUT an access_token. Fetch it directly so we don't store an undefined token.
+async function fetchPageAccessToken(pageId: string, userToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/${pageId}?fields=access_token&access_token=${userToken}`)
+    const data = await res.json()
+    return (data.access_token as string | undefined) ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function getAllManagedPages(userToken: string): Promise<PageToken[]> {
   const pageMap = new Map<string, PageToken>()
   // instagram_business_account requires pages_read_engagement — fetched separately so
@@ -54,11 +66,13 @@ export async function getAllManagedPages(userToken: string): Promise<PageToken[]
   const accData = await accRes.json()
   for (const p of (accData.data ?? []) as Record<string, unknown>[]) {
     const id = p.id as string
+    const accessToken = (p.access_token as string | undefined) ?? await fetchPageAccessToken(id, userToken)
+    if (!accessToken) continue // skip pages we cannot obtain a token for
     const igUserId = await fetchIgUserId(id, userToken)
     pageMap.set(id, {
       pageId: id,
-      pageName: p.name as string,
-      accessToken: p.access_token as string,
+      pageName: (p.name as string) ?? id,
+      accessToken,
       igUserId,
     })
   }
@@ -71,15 +85,17 @@ export async function getAllManagedPages(userToken: string): Promise<PageToken[]
       const ownedPages = (biz.owned_pages as { data?: Record<string, unknown>[] } | undefined)?.data ?? []
       for (const p of ownedPages) {
         const id = p.id as string
-        if (!pageMap.has(id)) {
-          const igUserId = await fetchIgUserId(id, userToken)
-          pageMap.set(id, {
-            pageId: id,
-            pageName: p.name as string,
-            accessToken: p.access_token as string,
-            igUserId,
-          })
-        }
+        if (pageMap.has(id)) continue
+        // owned_pages usually omits access_token — fetch it directly
+        const accessToken = (p.access_token as string | undefined) ?? await fetchPageAccessToken(id, userToken)
+        if (!accessToken) continue
+        const igUserId = await fetchIgUserId(id, userToken)
+        pageMap.set(id, {
+          pageId: id,
+          pageName: (p.name as string) ?? id,
+          accessToken,
+          igUserId,
+        })
       }
     }
   } catch {
