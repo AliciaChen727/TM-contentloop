@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [fbPosts, setFbPosts] = useState<FbPost[]>([])
   const [igPosts, setIgPosts] = useState<IgPost[]>([])
+  const [followerStats, setFollowerStats] = useState<{ date: string; total: number; net: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('combined')
   const [typeFilter, setTypeFilter] = useState<'all' | 'post' | 'reels'>('all')
@@ -83,7 +84,7 @@ export default function DashboardPage() {
       fetch(`/api/insights/fb${qs}`, { headers }),
       fetch(`/api/insights/ig${qs}`, { headers }),
     ])
-    if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())) }
+    if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())); setFollowerStats(d.followerStats ?? []) }
     if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
   }, [])
 
@@ -178,19 +179,35 @@ export default function DashboardPage() {
       const e = byDate.get(d) ?? { reach: 0, likes: 0, comments: 0, shares: 0 }
       byDate.set(d, { ...e, reach: e.reach + (ig.insights?.reach ?? 0), likes: e.likes + (ig.insights?.likes ?? 0), comments: e.comments + (ig.insights?.comments ?? 0), shares: e.shares + (ig.insights?.shares ?? 0) })
     }
+    // Union follower-stat dates so the follower trend shows even on days without posts
+    const followerByDate = new Map(followerStats.map(s => [s.date, s]))
+    for (const s of followerStats) {
+      if (!byDate.has(s.date)) byDate.set(s.date, { reach: 0, likes: 0, comments: 0, shares: 0 })
+    }
+
+    let lastTotal = 0 // carry forward last known follower total across gap days
     return Array.from(byDate.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .filter(([fullDate]) => fullDate >= dateBounds.start && fullDate <= dateBounds.end)
-      .map(([fullDate, d]) => ({
-        date: fullDate.slice(5).replace('-', '/'),
-        fullDate,
-        reach: d.reach,
-        likes: d.likes,
-        comments: d.comments,
-        shares: d.shares,
-        engRate: d.reach > 0 ? Number(((d.likes + d.comments + d.shares) / d.reach * 100).toFixed(2)) : 0,
-      }))
-  }, [fbPosts, igPosts, dateBounds])
+      .map(([fullDate, d]) => {
+        const fs = followerByDate.get(fullDate)
+        const total = fs?.total ?? lastTotal
+        const net = fs?.net ?? 0
+        if (fs?.total) lastTotal = fs.total
+        const prevTotal = total - net
+        return {
+          fullDate,
+          date: fullDate.slice(5).replace('-', '/'),
+          reach: d.reach,
+          likes: d.likes,
+          comments: d.comments,
+          shares: d.shares,
+          engRate: d.reach > 0 ? Number(((d.likes + d.comments + d.shares) / d.reach * 100).toFixed(2)) : 0,
+          followers: total,
+          followerGrowth: prevTotal > 0 ? Number((net / prevTotal * 100).toFixed(2)) : 0,
+        }
+      })
+      .filter(p => p.fullDate >= dateBounds.start && p.fullDate <= dateBounds.end)
+  }, [fbPosts, igPosts, followerStats, dateBounds])
 
   // Table-filtered posts (type + search, independent of date range)
   const filteredFb = useMemo(() => {

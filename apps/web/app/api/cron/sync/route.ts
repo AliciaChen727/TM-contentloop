@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -90,6 +91,20 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
     storySnap.docs.forEach(d => storyBatch.delete(d.ref))
     await storyBatch.commit()
   }
+
+  // Page-level follower stats (daily time series). Best-effort, never blocks post sync.
+  try {
+    const stats = await fetchPageFollowerStats(pageId, accessToken)
+    if (stats.length > 0) {
+      const statsCol = userRef.collection('pages').doc(pageId).collection('pageStats')
+      const statsBatch = adminDb.batch()
+      const now = Timestamp.now()
+      for (const s of stats) {
+        statsBatch.set(statsCol.doc(s.date), { ...s, snapshotAt: now }, { merge: true })
+      }
+      await statsBatch.commit()
+    }
+  } catch { /* follower stats are best-effort */ }
 
   return { synced: posts.length }
 }

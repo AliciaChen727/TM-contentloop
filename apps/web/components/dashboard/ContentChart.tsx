@@ -12,6 +12,8 @@ export interface DailyPoint {
   comments: number
   shares: number
   engRate: number
+  followers: number
+  followerGrowth: number
 }
 
 const METRICS = [
@@ -19,8 +21,8 @@ const METRICS = [
   { key: 'likes',          label: '總按讚',      color: '#2E8B57', isInt: true,  disabled: false },
   { key: 'comments',       label: '留言',        color: '#C96A1A', isInt: true,  disabled: false },
   { key: 'engRate',        label: '互動率%',     color: '#7C3AED', isInt: false, disabled: false },
-  { key: 'followers',      label: '追蹤數',      color: '#E91E63', isInt: true,  disabled: true  },
-  { key: 'followerGrowth', label: '追蹤成長率%', color: '#FF5722', isInt: false, disabled: true  },
+  { key: 'followers',      label: '追蹤數',      color: '#E91E63', isInt: true,  disabled: false },
+  { key: 'followerGrowth', label: '追蹤成長率%', color: '#FF5722', isInt: false, disabled: false },
 ]
 
 // data is already date-filtered by page.tsx

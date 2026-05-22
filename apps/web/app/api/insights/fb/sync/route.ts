@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -86,7 +87,23 @@ export async function POST(req: NextRequest) {
     }
 
     await batch.commit()
-    return NextResponse.json({ success: true, synced: posts.length })
+
+    // Page-level follower stats (daily time series). Non-fatal — never block post sync.
+    let followerDays = 0
+    try {
+      const stats = await fetchPageFollowerStats(pageId, accessToken)
+      if (stats.length > 0) {
+        const statsCol = adminDb.collection('users').doc(uid).collection('pages').doc(pageId).collection('pageStats')
+        const statsBatch = adminDb.batch()
+        for (const s of stats) {
+          statsBatch.set(statsCol.doc(s.date), { ...s, snapshotAt: now }, { merge: true })
+        }
+        await statsBatch.commit()
+        followerDays = stats.length
+      }
+    } catch { /* follower stats are best-effort */ }
+
+    return NextResponse.json({ success: true, synced: posts.length, followerDays })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'FB sync failed' }, { status: 500 })
   }

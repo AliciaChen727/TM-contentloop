@@ -65,5 +65,17 @@ export async function GET(req: NextRequest) {
       !post.message.startsWith('這則貼文沒有文字')
     )
 
-  return NextResponse.json({ posts })
+  // Page-level follower time series (only meaningful when scoped to a page)
+  let followerStats: { date: string; total: number; net: number }[] = []
+  if (pageId) {
+    const statsSnap = await userRef.collection('pages').doc(pageId).collection('pageStats').get()
+    followerStats = statsSnap.docs
+      .map(d => {
+        const v = d.data() as { date?: string; total?: number; net?: number }
+        return { date: v.date ?? d.id, total: v.total ?? 0, net: v.net ?? 0 }
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }
+
+  return NextResponse.json({ posts, followerStats })
 }
