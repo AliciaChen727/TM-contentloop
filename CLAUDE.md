@@ -108,6 +108,21 @@ Firestore 有兩層 post 資料路徑：
 
 > 跨頁資料洩漏屬於嚴重問題，新增任何粉專相關功能時，隔離測試是 release 前的必要關卡。
 
+### 🚨 隔離適用於「每一個 admin」，不只跨使用者
+
+跨頁隔離**不是只防「A 使用者看到 B 使用者的粉專」**。最容易被忽略的情境是：
+
+> **同一個 admin 同時管理多個粉專（例如同時是 D67 + Legacy 的 Admin），他自己登入時，名下各粉專的數據也絕對不可以混在一起。**
+
+只要請求帶了 `pageId`（或從 token 解析得到 `pageId`），**所有讀取貼文 / 洞察 / 廣告的程式碼都必須以該 `pageId` 為界**，回傳的資料只能屬於這一個粉專。這條規則對 **viewer、admin、owner、super-admin 一律適用**，沒有例外。
+
+具體做法：
+
+1. **有 `pageId` 就走 page-scoped path**：`users/{uid}/pages/{pageId}/fbPosts`、`.../igPosts`，不要直接讀無 page 區隔的 `users/{uid}/fbPosts` / `igPosts`。
+2. **必須讀 legacy collection（fallback）時**：FB 一定加 `` `${pageId}_` `` 前綴過濾；IG legacy 無前綴，已知 `pageId` 時**完全不讀** legacy，只讀 page-scoped。
+3. **debug / 診斷 / 匯出等「非主流程」端點同樣適用**——它們最常被遺漏。`/api/debug` 曾因直接讀 `users/{uid}/fbPosts`（未加 pageId 過濾），導致管理多粉專的 admin 看到跨頁混合資料，已於修正中改為 page-scoped。
+4. **新功能驗收**：用「一個同時管理 A、B 兩粉專的 admin 帳號」登入，切到 A 不可看到任何 B 的貼文 / 廣告 / 數據，反之亦然。
+
 ## 🔑 OAuth 連接架構：User-Centric（多粉專 Admin 必讀）
 
 **核心原則**：連接流程一律抓「**連接者自己管理的粉專**」，**絕不寫死單一粉專**。

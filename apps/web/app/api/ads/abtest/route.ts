@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { isSuperAdmin } from '@/lib/auth/superadmin'
 
 async function hasPageAccess(uid: string, pageId: string): Promise<boolean> {
+  if (isSuperAdmin(uid)) return true
   const memberSnap = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
   if (memberSnap.exists) return true
   const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()

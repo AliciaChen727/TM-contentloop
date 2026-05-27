@@ -21,15 +21,26 @@ export async function GET(req: NextRequest) {
     pageId: string; accessToken: string; igUserId: string; userAccessToken?: string
   }
 
-  // 取第一篇 FB 貼文
-  const fbPostsSnap = await adminDb
-    .collection('users').doc(uid).collection('fbPosts')
-    .orderBy('createdTime', 'desc').limit(1).get()
-  const firstFbPostId = fbPostsSnap.docs[0]?.id
+  // 取第一篇 FB 貼文 —— 一律以 pageId 為界，避免同時管理多個粉專時跨頁混合。
+  // 先讀 page-scoped path；若還在 legacy collection，用 `${pageId}_` 前綴過濾。
+  let firstFbPostId: string | undefined
+  {
+    const scopedSnap = await adminDb
+      .collection('users').doc(uid).collection('pages').doc(pageId).collection('fbPosts')
+      .orderBy('createdTime', 'desc').limit(1).get()
+    if (!scopedSnap.empty) {
+      firstFbPostId = scopedSnap.docs[0].id
+    } else {
+      const legacySnap = await adminDb
+        .collection('users').doc(uid).collection('fbPosts')
+        .orderBy('createdTime', 'desc').limit(50).get()
+      firstFbPostId = legacySnap.docs.find(d => d.id.startsWith(`${pageId}_`))?.id
+    }
+  }
 
-  // 取第一篇 IG 貼文
+  // 取第一篇 IG 貼文 —— IG legacy 無 page 前綴，已知 pageId 時只讀 page-scoped path。
   const igPostsSnap = await adminDb
-    .collection('users').doc(uid).collection('igPosts')
+    .collection('users').doc(uid).collection('pages').doc(pageId).collection('igPosts')
     .orderBy('timestamp', 'desc').limit(1).get()
   const firstIgMediaId = igPostsSnap.docs[0]?.id
 
