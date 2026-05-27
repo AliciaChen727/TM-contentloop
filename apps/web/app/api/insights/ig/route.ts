@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -23,12 +24,13 @@ export async function GET(req: NextRequest) {
     if (!ownTokenSnap.exists) {
       const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
       const viewerPages: { pageId: string }[] = viewerSnap.data()?.pages ?? []
-      if (!viewerPages.some(p => p.pageId === pageId)) {
+      const allowed = viewerPages.some(p => p.pageId === pageId) || isSuperAdmin(uid)
+      if (!allowed) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
-      const adminsSnap = await adminDb.collection('pages').doc(pageId).collection('admins').limit(1).get()
-      if (adminsSnap.empty) return NextResponse.json({ posts: [] })
-      dataOwnerUid = adminsSnap.docs[0].id
+      const ownerUid = await resolvePageOwnerUid(pageId)
+      if (!ownerUid) return NextResponse.json({ posts: [] })
+      dataOwnerUid = ownerUid
     }
   }
   const userRef = adminDb.collection('users').doc(dataOwnerUid)

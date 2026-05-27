@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin } from '@/lib/auth/superadmin'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 
@@ -8,6 +9,7 @@ async function verifyAdmin(idToken: string, pageId: string): Promise<string | nu
   try {
     const decoded = await adminAuth.verifyIdToken(idToken)
     const uid = decoded.uid
+    if (isSuperAdmin(uid)) return uid
     const tokensSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
     const adminPageIds = new Set(
       tokensSnap.docs.filter(d => d.id !== 'userToken').map(d => d.id === 'page' ? d.data().pageId : d.id).filter(Boolean)

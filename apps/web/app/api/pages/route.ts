@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin, listAllPages } from '@/lib/auth/superadmin'
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -12,6 +13,12 @@ export async function GET(req: NextRequest) {
     uid = decoded.uid
   } catch {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+
+  // Super-admin: return every page in the system as owner-level access.
+  if (isSuperAdmin(uid)) {
+    const allPages = await listAllPages()
+    return NextResponse.json({ pages: allPages, isOwner: true })
   }
 
   interface PageEntry { pageId: string; pageName: string; igUserId: string | null; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }

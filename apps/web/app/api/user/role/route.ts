@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin } from '@/lib/auth/superadmin'
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -9,6 +10,8 @@ export async function GET(req: NextRequest) {
   let uid: string
   try { uid = (await adminAuth.verifyIdToken(idToken)).uid }
   catch { return NextResponse.json({ error: 'Invalid token' }, { status: 401 }) }
+
+  if (isSuperAdmin(uid)) return NextResponse.json({ isOwner: true, isAdmin: true })
 
   const pageId = req.nextUrl.searchParams.get('pageId')
   if (!pageId) return NextResponse.json({ isOwner: false, isAdmin: false })

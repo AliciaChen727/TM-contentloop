@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin, listAllPages } from '@/lib/auth/superadmin'
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -12,6 +13,12 @@ export async function GET(req: NextRequest) {
     uid = decoded.uid
   } catch {
     return NextResponse.json({ authorized: false }, { status: 401 })
+  }
+
+  // Super-admin: authorized for every page in the system.
+  if (isSuperAdmin(uid)) {
+    const all = await listAllPages()
+    return NextResponse.json({ authorized: true, authorizedPageIds: all.map(p => p.pageId) })
   }
 
   const tokensSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()

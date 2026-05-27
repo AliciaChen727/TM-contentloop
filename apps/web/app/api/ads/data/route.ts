@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 function serializeSnap(raw: FirebaseFirestore.DocumentData): Record<string, unknown> {
   return { ...raw, syncedAt: raw.syncedAt?.toDate?.()?.toISOString() ?? null }
@@ -57,6 +58,17 @@ export async function GET(req: NextRequest) {
     if (viewerPage?.permissions?.ads) {
       const sharedSnap = await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
       if (sharedSnap.exists) return NextResponse.json({ data: serializeSnap(sharedSnap.data()!) })
+    }
+
+    // Super-admin: read shared insights, falling back to the owner's own latest snapshot.
+    if (isSuperAdmin(uid)) {
+      const sharedSnap = await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
+      if (sharedSnap.exists) return NextResponse.json({ data: serializeSnap(sharedSnap.data()!) })
+      const ownerUid = await resolvePageOwnerUid(pageId)
+      if (ownerUid) {
+        const ownerSnap = await adminDb.collection('users').doc(ownerUid).collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
+        if (ownerSnap.exists) return NextResponse.json({ data: serializeSnap(ownerSnap.data()!) })
+      }
     }
 
     return NextResponse.json({ data: null })
