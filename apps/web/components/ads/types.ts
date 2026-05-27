@@ -108,9 +108,27 @@ export interface AdData {
     projectedSpend: number
     adsets: Adset[]
   }
+  creativeTrends?: CreativeTrend[]
 }
 
-export type NavId = 'overview' | 'diagnosis' | 'creative' | 'posts' | 'time' | 'budget'
+export interface CreativeTrendDaily {
+  date: string
+  spend: number
+  reach: number
+  impressions: number
+  clicks: number
+  ctr: number
+}
+
+export interface CreativeTrend {
+  adId: string
+  name: string
+  thumbnailUrl: string | null
+  storyId: string | null
+  daily: CreativeTrendDaily[]
+}
+
+export type NavId = 'overview' | 'diagnosis' | 'creative' | 'posts' | 'time' | 'budget' | 'trends'
 
 export type Variant = 'A' | 'B' | 'control'
 

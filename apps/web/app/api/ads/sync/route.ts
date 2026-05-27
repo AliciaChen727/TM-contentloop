@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id,thumbnail_url}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string; thumbnail_url?: string } }[] = (adsListData.data ?? []) as any
 
   // Per-ad WHOLE-RUN budget (major currency unit). Meta stores boosts/A-B tests as
   // a daily_budget (e.g. NT$96/day); the user thinks in total terms (e.g. ~NT$500).
@@ -352,6 +352,39 @@ export async function POST(req: NextRequest) {
   // Aggregate over ALL page-matched ads (any status) so finished-ad spend still counts.
   const filteredAdIds = new Set(pageMatchedCreatives.map(c => c.ad_id as string).filter(Boolean))
   const filteredDailyAds = dailyAdLevelData.filter(c => filteredAdIds.has(c.ad_id as string))
+
+  // Per-creative daily time series (Creative Performance Trends). Built from the
+  // already-fetched per-ad daily data — no extra Meta calls. Only page-matched ads.
+  const trendByAd = new Map<string, { date: string; spend: number; reach: number; impressions: number; clicks: number; ctr: number }[]>()
+  for (const c of filteredDailyAds) {
+    const adId = c.ad_id as string
+    const date = c.date_start as string
+    if (!adId || !date) continue
+    const imp = parseInt((c.impressions as string) ?? '0')
+    const clk = parseInt((c.clicks as string) ?? '0')
+    const arr = trendByAd.get(adId) ?? []
+    arr.push({
+      date,
+      spend: parseFloat((c.spend as string) ?? '0'),
+      reach: parseInt((c.reach as string) ?? '0'),
+      impressions: imp,
+      clicks: clk,
+      ctr: imp > 0 ? parseFloat((clk / imp * 100).toFixed(4)) : 0,
+    })
+    trendByAd.set(adId, arr)
+  }
+  const adMeta = new Map<string, { name: string; thumbnailUrl: string | null }>()
+  for (const ad of adsList) adMeta.set(ad.id, { name: ad.name, thumbnailUrl: ad.creative?.thumbnail_url ?? null })
+  const creativeTrends = Array.from(trendByAd.entries())
+    .map(([adId, daily]) => ({
+      adId,
+      name: adMeta.get(adId)?.name ?? adId,
+      thumbnailUrl: adMeta.get(adId)?.thumbnailUrl ?? null,
+      storyId: adIdToStoryId.get(adId) ?? null,
+      daily: daily.sort((a, b) => a.date.localeCompare(b.date)),
+    }))
+    .filter(t => t.daily.some(d => d.spend > 0 || d.impressions > 0))
+    .sort((a, b) => b.daily.reduce((s, d) => s + d.spend, 0) - a.daily.reduce((s, d) => s + d.spend, 0))
   const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
   for (const c of filteredDailyAds) {
     const date = c.date_start as string
@@ -564,6 +597,7 @@ export async function POST(req: NextRequest) {
     summary: { spend: pageSpend, reach: pageReach, impressions: pageImpressions, clicks: pageClicks, ctr: pageCtr, cpm: pageCpm, frequency: pageFrequency, conversions: pageConversions, revenue: pageRevenue, roas: pageRoas, cpa: pageCpa },
     daily: pageFilteredDaily,
     adCreatives: adCreativesWithTitle,
+    creativeTrends,
     adPostIds,
     adPostMetrics,
     igPostIds,
@@ -592,6 +626,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
       syncedAt: Timestamp.now(),
       adCreatives: adCreativesWithTitle,
+      creativeTrends,
       adPostIds,
       adPostMetrics,
       igPostIds,

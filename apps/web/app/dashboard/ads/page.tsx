@@ -10,6 +10,7 @@ import { AiSidekick } from '@/components/ads/AiSidekick'
 import { OverviewSection } from '@/components/ads/sections/OverviewSection'
 import { DiagnosisSection } from '@/components/ads/sections/DiagnosisSection'
 import { CreativeSection } from '@/components/ads/sections/CreativeSection'
+import { CreativeTrendsSection } from '@/components/ads/sections/CreativeTrendsSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
@@ -19,13 +20,14 @@ const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
   { id: 'diagnosis', label: '診斷建議', icon: 'alert' },
   { id: 'creative', label: '素材庫', icon: 'creative' },
+  { id: 'trends', label: '成效趨勢', icon: 'chart' },
   { id: 'posts', label: '內容表現', icon: 'calendar' },
   { id: 'time', label: '最佳時段', icon: 'clock' },
   { id: 'budget', label: '預算模擬', icon: 'budget' },
 ]
 
 const NAV_LABELS: Record<NavId, string> = {
-  overview: '總覽', diagnosis: '診斷建議', creative: '素材庫',
+  overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', trends: '成效趨勢',
   posts: '內容表現', time: '最佳時段', budget: '預算模擬',
 }
 
@@ -274,6 +276,7 @@ function buildAdData(raw: any): AdData {
     creatives,
     diagnosis,
     conversionType,
+    creativeTrends: Array.isArray(raw.creativeTrends) ? raw.creativeTrends : [],
     budget: { ...MOCK_DATA.budget, adsets: realAdsets },
     bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly, hourly: realHourly },
     overview: {
@@ -931,6 +934,7 @@ export default function AdsPage() {
                   await fetch('/api/ads/experiments', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, action: 'delete', experimentId }) })
                 } : undefined}
               />}
+              {active === 'trends' && <CreativeTrendsSection trends={adData.creativeTrends ?? []} dateFrom={dateFrom} dateTo={dateTo} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} />}
