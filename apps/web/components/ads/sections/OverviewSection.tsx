@@ -9,6 +9,31 @@ const fmt = (n: number, d = 0) => n == null ? '–' : Number(n).toLocaleString('
 const fmtK = (n: number) => n >= 10000 ? `$${fmt(Math.round(n / 1000))}K` : `$${fmt(n)}`
 const fmtCount = (n: number) => n >= 10000 ? `${(n / 10000).toFixed(1)}萬` : n >= 1000 ? `${(n / 1000).toFixed(1)}千` : `${fmt(n)}`
 
+// Platform source (FB / IG) — moved here from the audience-analysis tab.
+const PLATFORM_ORDER = ['facebook', 'instagram']
+const PLATFORM_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram' }
+type PlatCell = { key: string; label: string; kind: 'currency' | 'int' | 'percent' | 'ratio' }
+const platCols = (hasPurchase: boolean): PlatCell[] => {
+  const base: PlatCell[] = [
+    { key: 'spend', label: '花費', kind: 'currency' },
+    { key: 'clicks', label: '點擊', kind: 'int' },
+    { key: 'ctr', label: 'CTR', kind: 'percent' },
+    { key: 'cpc', label: 'CPC', kind: 'currency' },
+    { key: 'roas', label: 'ROAS', kind: 'ratio' },
+  ]
+  if (hasPurchase) base.push(
+    { key: 'revenue', label: 'Revenue', kind: 'currency' },
+    { key: 'conversions', label: '轉換', kind: 'int' },
+    { key: 'cpp', label: 'Cost / Purchase', kind: 'currency' },
+  )
+  return base
+}
+const fmtPlat = (v: number, kind: PlatCell['kind']) =>
+  kind === 'currency' ? `$${Math.round(v).toLocaleString('zh-TW')}`
+  : kind === 'percent' ? `${v.toFixed(2)}%`
+  : kind === 'ratio' ? v.toFixed(2)
+  : Math.round(v).toLocaleString('zh-TW')
+
 export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskAI?: (q: string) => void; posts?: Post[] | null }) {
   const s = data.overview.summary
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,6 +61,22 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
     { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
     { label: '頻率', value: frequency.toFixed(2), meta: '建議 < 3.5', color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? '⚠ 偏高' : '正常', dir: frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
   ]
+
+  const hasPurchase = convType === 'purchase'
+  const platformCols = platCols(hasPurchase)
+  const platformRows = PLATFORM_ORDER
+    .map(platform => {
+      const p = (data.platformBreakdown ?? []).find(x => x.platform === platform)
+      const spend = p?.spend ?? 0, clicks = p?.clicks ?? 0, impressions = p?.impressions ?? 0, conversions = p?.conversions ?? 0, revenue = p?.revenue ?? 0
+      return {
+        label: PLATFORM_LABEL[platform] ?? platform, spend, clicks, impressions, conversions, revenue,
+        ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+        cpc: clicks > 0 ? spend / clicks : 0,
+        roas: spend > 0 ? (hasPurchase ? revenue / spend : (conversions / spend) * 100) : 0,
+        cpp: conversions > 0 ? spend / conversions : 0,
+      }
+    })
+    .filter(r => r.spend > 0 || r.impressions > 0)
 
   const postsSource = posts ?? POSTS_DATA
   const adPosts = postsSource.filter(p => p.hasAd)
@@ -92,6 +133,40 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
           <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: isClickBased ? '點擊效益' : 'CPA', color: '#3B6FD4' }]} />
         </div>
       </div>
+
+      {platformRows.length > 0 && (
+        <div className="ads-card" style={{ overflow: 'hidden', marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)', flexWrap: 'wrap', gap: 6 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>平台來源（FB / IG）</span>
+            <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>依 publisher_platform 拆分(Meta 限制:無法與年齡×性別交叉同表)</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--ad-border)' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>平台</th>
+                  {platformCols.map(c => (
+                    <th key={c.key} style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {platformRows.map((row, ri) => {
+                  const vals = row as unknown as Record<string, number>
+                  return (
+                    <tr key={row.label} style={{ borderBottom: ri < platformRows.length - 1 ? '1px solid var(--ad-border)' : 'none' }}>
+                      <td style={{ padding: '10px 16px', fontWeight: 500, whiteSpace: 'nowrap' }}>{row.label}</td>
+                      {platformCols.map(c => (
+                        <td key={c.key} style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtPlat(vals[c.key] ?? 0, c.kind)}</td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>

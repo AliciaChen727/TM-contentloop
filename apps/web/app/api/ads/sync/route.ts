@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,objective,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id,thumbnail_url}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,objective,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time,targeting{custom_audiences}},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id,thumbnail_url}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; objective?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string; thumbnail_url?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; objective?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string; targeting?: { custom_audiences?: { id: string; name?: string }[] } }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string; thumbnail_url?: string } }[] = (adsListData.data ?? []) as any
 
   // Per-ad WHOLE-RUN budget (major currency unit). Meta stores boosts/A-B tests as
   // a daily_budget (e.g. NT$96/day); the user thinks in total terms (e.g. ~NT$500).
@@ -395,16 +395,46 @@ export async function POST(req: NextRequest) {
     .filter(t => t.daily.some(d => d.spend > 0 || d.impressions > 0))
     .sort((a, b) => b.daily.reduce((s, d) => s + d.spend, 0) - a.daily.reduce((s, d) => s + d.spend, 0))
 
-  // ── Funnel stage breakdown (approximated from campaign objective) ──────────
-  const funnelStageOf = (objective?: string): string => {
-    const o = (objective ?? '').toUpperCase()
-    if (/ENGAGEMENT|POST_ENGAGEMENT|PAGE_LIKES|MESSAGES/.test(o)) return 'Acquisition Re-Engagement'
-    if (/SALES|CONVERSIONS|CATALOG|PRODUCT/.test(o)) return 'Retargeting'
-    return 'Acquisition Prospecting' // awareness / reach / traffic / leads / video / default
+  // ── Funnel stage breakdown (by ad set audience type, not campaign objective) ──
+  // The funnel stage depends on WHO an ad targets, which lives in the ad set's
+  // custom_audiences — so we resolve each audience's `subtype` and classify:
+  //   customer/contact list           → Retention  (existing members/customers)
+  //   engagement/website/video/app     → Retargeting (warm: interacted before)
+  //   lookalike / none (interest/broad) → Prospecting (cold)
+  const audienceIds = new Set<string>()
+  for (const ad of adsList) for (const ca of ad.adset?.targeting?.custom_audiences ?? []) if (ca.id) audienceIds.add(ca.id)
+  // Batch-read subtypes (≤50 ids per call).
+  const subtypeMap = new Map<string, string>()
+  const idChunks: string[][] = []
+  const idArr = Array.from(audienceIds)
+  for (let i = 0; i < idArr.length; i += 50) idChunks.push(idArr.slice(i, i + 50))
+  await Promise.all(idChunks.map(async chunk => {
+    try {
+      const url = new URL(`${BASE}/`)
+      url.searchParams.set('ids', chunk.join(','))
+      url.searchParams.set('fields', 'subtype,name')
+      url.searchParams.set('access_token', userAccessToken)
+      const res = await fetch(url)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json: any = await res.json()
+      for (const id of chunk) if (json?.[id]?.subtype) subtypeMap.set(id, String(json[id].subtype).toUpperCase())
+    } catch { /* leave unresolved — handled as warm below */ }
+  }))
+  const RETENTION_SUBTYPES = new Set(['CUSTOM', 'CONTACTS', 'OFFLINE_CONVERSION', 'CLAIM'])
+  const RETARGETING_SUBTYPES = new Set(['ENGAGEMENT', 'WEBSITE', 'VIDEO', 'APP', 'MOBILE_APP_CUSTOM', 'IG_BUSINESS', 'STUDY_RULE_AUDIENCE', 'FOX'])
+  const funnelStageOf = (ad: typeof adsList[number]): string => {
+    const cas = ad.adset?.targeting?.custom_audiences ?? []
+    if (cas.length === 0) return 'Acquisition Prospecting' // no custom audience = cold
+    const subtypes = cas.map(ca => subtypeMap.get(ca.id))
+    if (subtypes.some(s => s && RETENTION_SUBTYPES.has(s))) return 'Retention'
+    // Warm if it's a known retargeting subtype, OR a non-lookalike audience we
+    // couldn't resolve (presence of a custom audience ⇒ not pure prospecting).
+    if (subtypes.some(s => (s && RETARGETING_SUBTYPES.has(s)) || (s !== 'LOOKALIKE' && s !== 'LOOKALIKE_PLATFORM'))) return 'Retargeting'
+    return 'Acquisition Prospecting' // only lookalikes ⇒ still prospecting
   }
   const adStageMap = new Map<string, string>()
-  for (const ad of adsList) adStageMap.set(ad.id, funnelStageOf(ad.campaign?.objective))
-  const FUNNEL_STAGES = ['Acquisition Prospecting', 'Acquisition Re-Engagement', 'Retargeting', 'Retention']
+  for (const ad of adsList) adStageMap.set(ad.id, funnelStageOf(ad))
+  const FUNNEL_STAGES = ['Acquisition Prospecting', 'Retargeting', 'Retention']
   const stageAgg = new Map<string, { stage: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }>()
   for (const st of FUNNEL_STAGES) stageAgg.set(st, { stage: st, spend: 0, clicks: 0, impressions: 0, conversions: 0, revenue: 0 })
   for (const c of filteredDailyAds) {
