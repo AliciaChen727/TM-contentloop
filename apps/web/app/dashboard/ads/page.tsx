@@ -466,12 +466,11 @@ export default function AdsPage() {
   }, [adData.overview.dateRange])
 
   async function handleSync(since?: string, until?: string) {
+    // Respect the user's selected range exactly — do NOT force the end date to today.
     const syncFrom = since ?? dateFrom
-    const today = new Date().toISOString().slice(0, 10)
-    const syncTo = until ?? (dateTo < today ? today : dateTo)
+    const syncTo = until ?? dateTo
     if (since) setDateFrom(since)
     if (until) setDateTo(until)
-    else if (dateTo < today) setDateTo(today)
     setSyncing(true)
     setSyncError(null)
     try {
