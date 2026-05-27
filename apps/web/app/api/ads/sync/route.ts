@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -29,16 +30,25 @@ export async function POST(req: NextRequest) {
   const since: string | undefined = body.since
   const until: string | undefined = body.until
 
-  // Sync requires the user's own Meta token — only page admins (not viewers) can sync.
-  // Check that the user actually owns this page before proceeding.
+  // Sync requires a Meta token — only page admins (not viewers) can sync with their own.
+  // Super-admins may sync on behalf of the page owner: act fully AS the owner so the
+  // owner's stored token is used and ALL reads/writes stay in the owner's page-scoped
+  // space (never the super-admin's own space → no cross-page / cross-user leakage).
+  let dataUid = uid
   if (pageId) {
     const ownTokenSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
     if (!ownTokenSnap.exists) {
-      return NextResponse.json({ error: 'Sync requires page admin access.' }, { status: 403 })
+      if (isSuperAdmin(uid)) {
+        const ownerUid = await resolvePageOwnerUid(pageId)
+        if (!ownerUid) return NextResponse.json({ error: 'No page owner found to sync on behalf of.' }, { status: 404 })
+        dataUid = ownerUid
+      } else {
+        return NextResponse.json({ error: 'Sync requires page admin access.' }, { status: 403 })
+      }
     }
   }
 
-  const userRef = adminDb.collection('users').doc(uid)
+  const userRef = adminDb.collection('users').doc(dataUid)
   // Try new per-page token doc, fallback to legacy 'page' doc
   const tokenDocRef = pageId
     ? userRef.collection('metaTokens').doc(pageId)
