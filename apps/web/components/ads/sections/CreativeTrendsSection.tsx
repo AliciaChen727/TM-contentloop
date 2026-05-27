@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { CreativeTrend, CreativeTrendDaily } from '../types'
+import type { CreativeTrend, CreativeTrendDaily, Experiment, LabelEntry, Variant } from '../types'
 import { SvgChart } from '../SvgCharts'
 
 // Color palette for per-creative lines (reused for legend dots).
@@ -47,9 +47,17 @@ function weekBuckets(from: string, to: string): { label: string; start: string; 
   return buckets
 }
 
-export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType }: { trends: CreativeTrend[]; dateFrom: string; dateTo: string; conversionType?: string }) {
+export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType, experiments = [], creativeLabels = {} }: {
+  trends: CreativeTrend[]
+  dateFrom: string
+  dateTo: string
+  conversionType?: string
+  experiments?: Experiment[]
+  creativeLabels?: Record<string, LabelEntry>
+}) {
   const hasPurchase = conversionType === 'purchase'
   const [metric, setMetric] = useState<MetricKey>('spend')
+  const [expId, setExpId] = useState<string>('')
   // Default-select up to the top 3 creatives (already sorted by spend in the API).
   const [selected, setSelected] = useState<Set<string>>(() => new Set(trends.slice(0, 3).map(t => t.adId)))
 
@@ -115,6 +123,44 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
     }
   }), [weeks, selectedTrends, trendMap, hasPurchase])
 
+  // ── A/B testing ─────────────────────────────────────────────────────────
+  const trendAdIds = useMemo(() => new Set(trends.map(t => t.adId)), [trends])
+  const labeledExperiments = useMemo(() => {
+    const withData = new Set<string>()
+    for (const [adId, entry] of Object.entries(creativeLabels)) {
+      if (entry.experimentId && trendAdIds.has(adId)) withData.add(entry.experimentId)
+    }
+    return experiments.filter(e => withData.has(e.id))
+  }, [experiments, creativeLabels, trendAdIds])
+
+  const aggregateRange = (adIds: string[]) => {
+    let spend = 0, reach = 0, impressions = 0, clicks = 0, conv = 0, rev = 0
+    for (const id of adIds) for (const d of Array.from(trendMap.get(id)?.values() ?? [])) {
+      spend += d.spend; reach += d.reach; impressions += d.impressions; clicks += d.clicks; conv += d.conversions; rev += d.revenue
+    }
+    return {
+      spend, reach, impressions, clicks,
+      ctr: impressions > 0 ? clicks / impressions * 100 : 0,
+      cpc: clicks > 0 ? spend / clicks : 0,
+      cpm: impressions > 0 ? spend / impressions * 1000 : 0,
+      roas: spend > 0 && conv > 0 ? (hasPurchase ? rev / spend : conv / spend * 100) : 0,
+    }
+  }
+
+  const VARIANTS: Variant[] = ['A', 'B', 'control']
+  const VARIANT_LABEL: Record<Variant, string> = { A: 'A', B: 'B', control: '對照組' }
+  const abData = useMemo(() => {
+    if (!expId) return null
+    const groups: Record<Variant, string[]> = { A: [], B: [], control: [] }
+    for (const [adId, entry] of Object.entries(creativeLabels)) {
+      if (entry.experimentId === expId && trendAdIds.has(adId)) groups[entry.variant].push(adId)
+    }
+    return VARIANTS.filter(v => groups[v].length > 0).map(v => ({ variant: v, adIds: groups[v], agg: aggregateRange(groups[v]) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expId, creativeLabels, trendAdIds, trendMap, hasPurchase])
+
+  const selectedExp = labeledExperiments.find(e => e.id === expId)
+
   const toggle = (adId: string) => setSelected(prev => {
     const n = new Set(prev)
     if (n.has(adId)) n.delete(adId); else n.add(adId)
@@ -147,14 +193,77 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
       {/* Header: title + metric selector */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>素材成效趨勢</h2>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#5C5750' }}>
-          指標
-          <select value={metric} onChange={e => setMetric(e.target.value as MetricKey)}
-            style={{ padding: '6px 10px', fontSize: 13, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, background: 'white', cursor: 'pointer' }}>
-            {METRIC_ORDER.map(k => <option key={k} value={k}>{METRICS[k].label}</option>)}
-          </select>
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          {labeledExperiments.length > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#5C5750' }}>
+              A/B 實驗
+              <select value={expId} onChange={e => setExpId(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: 13, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, background: 'white', cursor: 'pointer', maxWidth: 200 }}>
+                <option value="">— 不比較 —</option>
+                {labeledExperiments.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </label>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#5C5750' }}>
+            指標
+            <select value={metric} onChange={e => setMetric(e.target.value as MetricKey)}
+              style={{ padding: '6px 10px', fontSize: 13, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, background: 'white', cursor: 'pointer' }}>
+              {METRIC_ORDER.map(k => <option key={k} value={k}>{METRICS[k].label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
+
+      {/* A/B testing comparison panel */}
+      {abData && selectedExp && (
+        <div style={{ marginBottom: 20, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#2A2722' }}>
+              A/B 實驗比較：{selectedExp.name}
+              {selectedExp.winner && selectedExp.winner !== 'pending' && (
+                <span style={{ marginLeft: 10, fontSize: 11.5, color: '#2E9E6B', background: '#E7F5EE', padding: '2px 8px', borderRadius: 999 }}>勝出：{selectedExp.winner}</span>
+              )}
+            </div>
+            <button onClick={() => setSelected(new Set(abData.flatMap(g => g.adIds)))}
+              style={{ background: 'none', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, padding: '5px 10px', fontSize: 12, color: '#3B6FD4', cursor: 'pointer' }}>
+              在圖表中比較這些素材
+            </button>
+          </div>
+          {abData.length === 0
+            ? <div style={{ color: '#9A9490', fontSize: 12.5 }}>此實驗在所選區間內沒有素材資料。</div>
+            : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #E2DED8', color: '#9A9490', fontSize: 11.5 }}>
+                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>Variant</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>素材數</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>花費</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>點擊</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>CTR</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>CPC</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>ROAS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {abData.map(g => {
+                    const isWinner = selectedExp.winner === g.variant
+                    return (
+                      <tr key={g.variant} style={{ borderBottom: '1px solid #F0EDE8', background: isWinner ? '#E7F5EE' : 'transparent' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{VARIANT_LABEL[g.variant]}{isWinner && ' 🏆'}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#9A9490' }}>{g.adIds.length}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtVal(g.agg.spend, 'currency')}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtVal(g.agg.clicks, 'int')}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtVal(g.agg.ctr, 'percent')}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtVal(g.agg.cpc, 'currency')}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtVal(g.agg.roas, 'ratio')}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+        </div>
+      )}
 
       {/* Chart + legend */}
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
