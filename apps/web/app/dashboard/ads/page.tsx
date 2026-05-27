@@ -11,6 +11,7 @@ import { OverviewSection } from '@/components/ads/sections/OverviewSection'
 import { DiagnosisSection } from '@/components/ads/sections/DiagnosisSection'
 import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { CreativeTrendsSection } from '@/components/ads/sections/CreativeTrendsSection'
+import { AudienceSection } from '@/components/ads/sections/AudienceSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
@@ -21,6 +22,7 @@ const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'diagnosis', label: '診斷建議', icon: 'alert' },
   { id: 'creative', label: '素材庫', icon: 'creative' },
   { id: 'trends', label: '成效趨勢', icon: 'chart' },
+  { id: 'audience', label: '受眾分析', icon: 'chart' },
   { id: 'posts', label: '內容表現', icon: 'calendar' },
   { id: 'time', label: '最佳時段', icon: 'clock' },
   { id: 'budget', label: '預算模擬', icon: 'budget' },
@@ -28,7 +30,7 @@ const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
 
 const NAV_LABELS: Record<NavId, string> = {
   overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', trends: '成效趨勢',
-  posts: '內容表現', time: '最佳時段', budget: '預算模擬',
+  audience: '受眾分析', posts: '內容表現', time: '最佳時段', budget: '預算模擬',
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -277,6 +279,8 @@ function buildAdData(raw: any): AdData {
     diagnosis,
     conversionType,
     creativeTrends: Array.isArray(raw.creativeTrends) ? raw.creativeTrends : [],
+    demographics: Array.isArray(raw.demographics) ? raw.demographics : [],
+    funnelStages: Array.isArray(raw.funnelStages) ? raw.funnelStages : [],
     budget: { ...MOCK_DATA.budget, adsets: realAdsets },
     bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly, hourly: realHourly },
     overview: {
@@ -935,6 +939,7 @@ export default function AdsPage() {
                 } : undefined}
               />}
               {active === 'trends' && <CreativeTrendsSection trends={adData.creativeTrends ?? []} dateFrom={dateFrom} dateTo={dateTo} conversionType={adData.conversionType} experiments={experiments} creativeLabels={creativeLabels} />}
+              {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} conversionType={adData.conversionType} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} />}

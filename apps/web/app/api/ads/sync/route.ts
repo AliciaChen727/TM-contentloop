@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     Promise.all([fetch(summaryUrl), fetch(dailyUrl)]),
     Promise.all(accounts.map(account => {
       const url = new URL(`${BASE}/${account.id}/ads`)
-      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id,thumbnail_url}')
+      url.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,campaign{name,objective,daily_budget,lifetime_budget,start_time,stop_time},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_story_id,source_instagram_media_id,thumbnail_url}')
       url.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]')
       url.searchParams.set('limit', '100')
       url.searchParams.set('access_token', userAccessToken)
@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
     if (typeof item.ad_id === 'string') allTimeByAdId.set(item.ad_id as string, item)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string; thumbnail_url?: string } }[] = (adsListData.data ?? []) as any
+  const adsList: { id: string; name: string; effective_status: string; effective_object_story_id?: string; campaign?: { name?: string; objective?: string; daily_budget?: string; lifetime_budget?: string; start_time?: string; stop_time?: string }; adset?: { daily_budget?: string; lifetime_budget?: string; start_time?: string; end_time?: string }; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_story_id?: string; source_instagram_media_id?: string; thumbnail_url?: string } }[] = (adsListData.data ?? []) as any
 
   // Per-ad WHOLE-RUN budget (major currency unit). Meta stores boosts/A-B tests as
   // a daily_budget (e.g. NT$96/day); the user thinks in total terms (e.g. ~NT$500).
@@ -394,6 +394,59 @@ export async function POST(req: NextRequest) {
     }))
     .filter(t => t.daily.some(d => d.spend > 0 || d.impressions > 0))
     .sort((a, b) => b.daily.reduce((s, d) => s + d.spend, 0) - a.daily.reduce((s, d) => s + d.spend, 0))
+
+  // ── Funnel stage breakdown (approximated from campaign objective) ──────────
+  const funnelStageOf = (objective?: string): string => {
+    const o = (objective ?? '').toUpperCase()
+    if (/ENGAGEMENT|POST_ENGAGEMENT|PAGE_LIKES|MESSAGES/.test(o)) return 'Acquisition Re-Engagement'
+    if (/SALES|CONVERSIONS|CATALOG|PRODUCT/.test(o)) return 'Retargeting'
+    return 'Acquisition Prospecting' // awareness / reach / traffic / leads / video / default
+  }
+  const adStageMap = new Map<string, string>()
+  for (const ad of adsList) adStageMap.set(ad.id, funnelStageOf(ad.campaign?.objective))
+  const FUNNEL_STAGES = ['Acquisition Prospecting', 'Acquisition Re-Engagement', 'Retargeting', 'Retention']
+  const stageAgg = new Map<string, { stage: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }>()
+  for (const st of FUNNEL_STAGES) stageAgg.set(st, { stage: st, spend: 0, clicks: 0, impressions: 0, conversions: 0, revenue: 0 })
+  for (const c of filteredDailyAds) {
+    const st = adStageMap.get(c.ad_id as string) ?? 'Acquisition Prospecting'
+    const e = stageAgg.get(st)!
+    e.spend += parseFloat((c.spend as string) ?? '0')
+    e.clicks += parseInt((c.clicks as string) ?? '0')
+    e.impressions += parseInt((c.impressions as string) ?? '0')
+    e.conversions += parseActions((c.actions as MetaAction[]) ?? [], conversionType)
+    e.revenue += parseActions((c.action_values as MetaAction[]) ?? [], 'purchase')
+  }
+  const funnelStages = Array.from(stageAgg.values())
+
+  // ── Age × Gender breakdown (page-isolated: ad-level breakdown filtered to this page) ──
+  const demoResArray = await Promise.all(accounts.map(account => {
+    const url = new URL(`${BASE}/${account.id}/insights`)
+    url.searchParams.set('fields', 'ad_id,spend,clicks,impressions,actions,action_values')
+    url.searchParams.set('breakdowns', 'age,gender')
+    Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
+    url.searchParams.set('level', 'ad')
+    url.searchParams.set('limit', '500')
+    url.searchParams.set('access_token', userAccessToken)
+    return fetch(url)
+  }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const demoRows: any[] = (await Promise.all(demoResArray.map(r => r.json()))).flatMap((d: any) => d.data ?? [])
+  const demoAgg = new Map<string, { age: string; gender: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }>()
+  for (const r of demoRows) {
+    if (!filteredAdIds.has(r.ad_id)) continue // page isolation
+    const age = (r.age as string) ?? 'unknown', gender = (r.gender as string) ?? 'unknown'
+    const key = `${age}|${gender}`
+    const e = demoAgg.get(key) ?? { age, gender, spend: 0, clicks: 0, impressions: 0, conversions: 0, revenue: 0 }
+    e.spend += parseFloat((r.spend as string) ?? '0')
+    e.clicks += parseInt((r.clicks as string) ?? '0')
+    e.impressions += parseInt((r.impressions as string) ?? '0')
+    e.conversions += parseActions((r.actions as MetaAction[]) ?? [], conversionType)
+    e.revenue += parseActions((r.action_values as MetaAction[]) ?? [], 'purchase')
+    demoAgg.set(key, e)
+  }
+  const demographics = Array.from(demoAgg.values())
+    .filter(d => d.spend > 0 || d.impressions > 0)
+    .sort((a, b) => b.spend - a.spend)
   const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
   for (const c of filteredDailyAds) {
     const date = c.date_start as string
@@ -607,6 +660,8 @@ export async function POST(req: NextRequest) {
     daily: pageFilteredDaily,
     adCreatives: adCreativesWithTitle,
     creativeTrends,
+    demographics,
+    funnelStages,
     adPostIds,
     adPostMetrics,
     igPostIds,
@@ -636,6 +691,8 @@ export async function POST(req: NextRequest) {
       syncedAt: Timestamp.now(),
       adCreatives: adCreativesWithTitle,
       creativeTrends,
+      demographics,
+      funnelStages,
       adPostIds,
       adPostMetrics,
       igPostIds,

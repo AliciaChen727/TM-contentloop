@@ -109,6 +109,27 @@ export interface AdData {
     adsets: Adset[]
   }
   creativeTrends?: CreativeTrend[]
+  demographics?: DemoBreakdown[]
+  funnelStages?: FunnelStage[]
+}
+
+export interface DemoBreakdown {
+  age: string
+  gender: string
+  spend: number
+  clicks: number
+  impressions: number
+  conversions: number
+  revenue: number
+}
+
+export interface FunnelStage {
+  stage: string
+  spend: number
+  clicks: number
+  impressions: number
+  conversions: number
+  revenue: number
 }
 
 export interface CreativeTrendDaily {
@@ -131,7 +152,7 @@ export interface CreativeTrend {
   daily: CreativeTrendDaily[]
 }
 
-export type NavId = 'overview' | 'diagnosis' | 'creative' | 'posts' | 'time' | 'budget' | 'trends'
+export type NavId = 'overview' | 'diagnosis' | 'creative' | 'posts' | 'time' | 'budget' | 'trends' | 'audience'
 
 export type Variant = 'A' | 'B' | 'control'
 
