@@ -118,6 +118,9 @@ export interface CreativeTrendDaily {
   impressions: number
   clicks: number
   ctr: number
+  conversions: number
+  revenue: number
+  roas: number
 }
 
 export interface CreativeTrend {

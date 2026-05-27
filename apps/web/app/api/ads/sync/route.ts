@@ -355,21 +355,30 @@ export async function POST(req: NextRequest) {
 
   // Per-creative daily time series (Creative Performance Trends). Built from the
   // already-fetched per-ad daily data — no extra Meta calls. Only page-matched ads.
-  const trendByAd = new Map<string, { date: string; spend: number; reach: number; impressions: number; clicks: number; ctr: number }[]>()
+  const trendByAd = new Map<string, { date: string; spend: number; reach: number; impressions: number; clicks: number; ctr: number; conversions: number; revenue: number; roas: number }[]>()
   for (const c of filteredDailyAds) {
     const adId = c.ad_id as string
     const date = c.date_start as string
     if (!adId || !date) continue
     const imp = parseInt((c.impressions as string) ?? '0')
     const clk = parseInt((c.clicks as string) ?? '0')
+    const sp = parseFloat((c.spend as string) ?? '0')
+    const conv = parseActions((c.actions as MetaAction[]) ?? [], conversionType)
+    const rev = parseActions((c.action_values as MetaAction[]) ?? [], 'purchase')
+    // Same ROAS definition as the page summary: revenue/spend for purchase accounts,
+    // otherwise click-efficiency (conversions per 100 spend).
+    const roas = sp > 0 && conv > 0 ? (hasPurchase ? rev / sp : conv / sp * 100) : 0
     const arr = trendByAd.get(adId) ?? []
     arr.push({
       date,
-      spend: parseFloat((c.spend as string) ?? '0'),
+      spend: sp,
       reach: parseInt((c.reach as string) ?? '0'),
       impressions: imp,
       clicks: clk,
       ctr: imp > 0 ? parseFloat((clk / imp * 100).toFixed(4)) : 0,
+      conversions: conv,
+      revenue: rev,
+      roas: parseFloat(roas.toFixed(2)),
     })
     trendByAd.set(adId, arr)
   }

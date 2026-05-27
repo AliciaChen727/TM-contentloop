@@ -7,8 +7,8 @@ import { SvgChart } from '../SvgCharts'
 // Color palette for per-creative lines (reused for legend dots).
 const COLORS = ['#3B6FD4', '#C96A1A', '#2E9E6B', '#B5179E', '#E0A800', '#7048E8', '#E5484D', '#0CA5B0']
 
-type MetricKey = 'spend' | 'reach' | 'impressions' | 'clicks' | 'ctr' | 'cpc' | 'cpm'
-interface MetricDef { label: string; kind: 'currency' | 'int' | 'percent'; perDay: (d: CreativeTrendDaily) => number }
+type MetricKey = 'spend' | 'reach' | 'impressions' | 'clicks' | 'ctr' | 'cpc' | 'cpm' | 'roas'
+interface MetricDef { label: string; kind: 'currency' | 'int' | 'percent' | 'ratio'; perDay: (d: CreativeTrendDaily) => number }
 
 const METRICS: Record<MetricKey, MetricDef> = {
   spend: { label: '花費', kind: 'currency', perDay: d => d.spend },
@@ -18,12 +18,14 @@ const METRICS: Record<MetricKey, MetricDef> = {
   ctr: { label: 'CTR', kind: 'percent', perDay: d => d.ctr },
   cpc: { label: 'CPC', kind: 'currency', perDay: d => (d.clicks > 0 ? d.spend / d.clicks : 0) },
   cpm: { label: 'CPM', kind: 'currency', perDay: d => (d.impressions > 0 ? d.spend / d.impressions * 1000 : 0) },
+  roas: { label: 'ROAS', kind: 'ratio', perDay: d => d.roas },
 }
-const METRIC_ORDER: MetricKey[] = ['spend', 'reach', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm']
+const METRIC_ORDER: MetricKey[] = ['spend', 'reach', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'roas']
 
 const fmtVal = (v: number, kind: MetricDef['kind']) =>
   kind === 'currency' ? `$${Math.round(v).toLocaleString('zh-TW')}`
   : kind === 'percent' ? `${v.toFixed(2)}%`
+  : kind === 'ratio' ? v.toFixed(2)
   : Math.round(v).toLocaleString('zh-TW')
 
 // Inclusive day list between two YYYY-MM-DD dates.
@@ -45,7 +47,8 @@ function weekBuckets(from: string, to: string): { label: string; start: string; 
   return buckets
 }
 
-export function CreativeTrendsSection({ trends, dateFrom, dateTo }: { trends: CreativeTrend[]; dateFrom: string; dateTo: string }) {
+export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType }: { trends: CreativeTrend[]; dateFrom: string; dateTo: string; conversionType?: string }) {
+  const hasPurchase = conversionType === 'purchase'
   const [metric, setMetric] = useState<MetricKey>('spend')
   // Default-select up to the top 3 creatives (already sorted by spend in the API).
   const [selected, setSelected] = useState<Set<string>>(() => new Set(trends.slice(0, 3).map(t => t.adId)))
@@ -92,11 +95,12 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo }: { trends: Cr
   // Weekly table: aggregate selected creatives within each 7-day bucket.
   const weeks = useMemo(() => weekBuckets(dateFrom, dateTo), [dateFrom, dateTo])
   const weeklyAgg = useMemo(() => weeks.map(w => {
-    let spend = 0, reach = 0, impressions = 0, clicks = 0
+    let spend = 0, reach = 0, impressions = 0, clicks = 0, conv = 0, rev = 0
     for (const t of selectedTrends) {
       for (const d of Array.from(trendMap.get(t.adId)?.values() ?? [])) {
         if (d.date >= w.start && d.date <= w.end) {
           spend += d.spend; reach += d.reach; impressions += d.impressions; clicks += d.clicks
+          conv += d.conversions; rev += d.revenue
         }
       }
     }
@@ -105,9 +109,11 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo }: { trends: Cr
       ctr: impressions > 0 ? clicks / impressions * 100 : 0,
       cpc: clicks > 0 ? spend / clicks : 0,
       cpm: impressions > 0 ? spend / impressions * 1000 : 0,
+      // ROAS from aggregated values (revenue/spend for purchase, else click-efficiency)
+      roas: spend > 0 && conv > 0 ? (hasPurchase ? rev / spend : conv / spend * 100) : 0,
       conversions: 0, revenue: 0, // reserved — populated once GA is connected
     }
-  }), [weeks, selectedTrends, trendMap])
+  }), [weeks, selectedTrends, trendMap, hasPurchase])
 
   const toggle = (adId: string) => setSelected(prev => {
     const n = new Set(prev)
@@ -125,6 +131,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo }: { trends: Cr
 
   const ROWS: { key: MetricKey | 'conversions' | 'revenue'; label: string; kind: MetricDef['kind']; reserved?: boolean }[] = [
     { key: 'ctr', label: 'CTR', kind: 'percent' },
+    { key: 'roas', label: 'ROAS', kind: 'ratio' },
     { key: 'clicks', label: '點擊數', kind: 'int' },
     { key: 'impressions', label: '曝光', kind: 'int' },
     { key: 'reach', label: '觸及', kind: 'int' },
