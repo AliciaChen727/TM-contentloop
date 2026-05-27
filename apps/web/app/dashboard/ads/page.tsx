@@ -280,6 +280,7 @@ function buildAdData(raw: any): AdData {
     conversionType,
     creativeTrends: Array.isArray(raw.creativeTrends) ? raw.creativeTrends : [],
     demographics: Array.isArray(raw.demographics) ? raw.demographics : [],
+    platformBreakdown: Array.isArray(raw.platformBreakdown) ? raw.platformBreakdown : [],
     funnelStages: Array.isArray(raw.funnelStages) ? raw.funnelStages : [],
     budget: { ...MOCK_DATA.budget, adsets: realAdsets },
     bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly, hourly: realHourly },
@@ -939,7 +940,7 @@ export default function AdsPage() {
                 } : undefined}
               />}
               {active === 'trends' && <CreativeTrendsSection trends={adData.creativeTrends ?? []} dateFrom={dateFrom} dateTo={dateTo} conversionType={adData.conversionType} experiments={experiments} creativeLabels={creativeLabels} />}
-              {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} conversionType={adData.conversionType} />}
+              {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} platformBreakdown={adData.platformBreakdown ?? []} funnelStages={adData.funnelStages ?? []} conversionType={adData.conversionType} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} />}

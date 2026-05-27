@@ -447,6 +447,37 @@ export async function POST(req: NextRequest) {
   const demographics = Array.from(demoAgg.values())
     .filter(d => d.spend > 0 || d.impressions > 0)
     .sort((a, b) => b.spend - a.spend)
+
+  // ── Platform breakdown FB vs IG (page-isolated). Meta forbids combining
+  // publisher_platform with age/gender in one request, so this is a separate call. ──
+  const platformResArray = await Promise.all(accounts.map(account => {
+    const url = new URL(`${BASE}/${account.id}/insights`)
+    url.searchParams.set('fields', 'ad_id,spend,clicks,impressions,actions,action_values')
+    url.searchParams.set('breakdowns', 'publisher_platform')
+    Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
+    url.searchParams.set('level', 'ad')
+    url.searchParams.set('limit', '500')
+    url.searchParams.set('access_token', userAccessToken)
+    return fetch(url)
+  }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const platformRows: any[] = (await Promise.all(platformResArray.map(r => r.json()))).flatMap((d: any) => d.data ?? [])
+  const PLATFORMS = ['facebook', 'instagram'] // only FB / IG per requirement
+  const platformAgg = new Map<string, { platform: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }>()
+  for (const p of PLATFORMS) platformAgg.set(p, { platform: p, spend: 0, clicks: 0, impressions: 0, conversions: 0, revenue: 0 })
+  for (const r of platformRows) {
+    if (!filteredAdIds.has(r.ad_id)) continue // page isolation
+    const plat = (r.publisher_platform as string) ?? ''
+    const e = platformAgg.get(plat)
+    if (!e) continue // skip audience_network / messenger
+    e.spend += parseFloat((r.spend as string) ?? '0')
+    e.clicks += parseInt((r.clicks as string) ?? '0')
+    e.impressions += parseInt((r.impressions as string) ?? '0')
+    e.conversions += parseActions((r.actions as MetaAction[]) ?? [], conversionType)
+    e.revenue += parseActions((r.action_values as MetaAction[]) ?? [], 'purchase')
+  }
+  const platformBreakdown = Array.from(platformAgg.values()).filter(p => p.spend > 0 || p.impressions > 0)
+
   const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
   for (const c of filteredDailyAds) {
     const date = c.date_start as string
@@ -661,6 +692,7 @@ export async function POST(req: NextRequest) {
     adCreatives: adCreativesWithTitle,
     creativeTrends,
     demographics,
+    platformBreakdown,
     funnelStages,
     adPostIds,
     adPostMetrics,
@@ -692,6 +724,7 @@ export async function POST(req: NextRequest) {
       adCreatives: adCreativesWithTitle,
       creativeTrends,
       demographics,
+      platformBreakdown,
       funnelStages,
       adPostIds,
       adPostMetrics,

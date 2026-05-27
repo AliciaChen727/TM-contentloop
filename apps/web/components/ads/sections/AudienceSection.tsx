@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { DemoBreakdown, FunnelStage } from '../types'
+import type { DemoBreakdown, FunnelStage, PlatformBreakdown } from '../types'
 
 // Funnel stages in canonical order (matches the API's classification).
 const FUNNEL_ORDER = ['Acquisition Prospecting', 'Acquisition Re-Engagement', 'Retargeting', 'Retention']
@@ -14,6 +14,10 @@ const FUNNEL_LABEL: Record<string, string> = {
 
 // Friendlier gender labels; Meta returns male / female / unknown.
 const GENDER_LABEL: Record<string, string> = { male: '男', female: '女', unknown: '未知' }
+
+// Platform source order + labels (only FB / IG surfaced).
+const PLATFORM_ORDER = ['facebook', 'instagram']
+const PLATFORM_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram' }
 
 type Kind = 'currency' | 'int' | 'percent' | 'ratio'
 const fmt = (v: number, kind: Kind) =>
@@ -98,8 +102,9 @@ function MetricTable({ rows, cols, hasPurchase, firstHeader }: {
   )
 }
 
-export function AudienceSection({ demographics = [], funnelStages = [], conversionType }: {
+export function AudienceSection({ demographics = [], platformBreakdown = [], funnelStages = [], conversionType }: {
   demographics?: DemoBreakdown[]
+  platformBreakdown?: PlatformBreakdown[]
   funnelStages?: FunnelStage[]
   conversionType?: string
 }) {
@@ -113,6 +118,17 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
       .sort((a, b) => b.spend - a.spend)
   , [demographics])
 
+  // Platform source: fixed FB → IG order, drop platforms with no spend/impressions.
+  const platformRows: Row[] = useMemo(() => {
+    const byPlatform = new Map(platformBreakdown.map(p => [p.platform, p]))
+    return PLATFORM_ORDER
+      .map(platform => {
+        const p = byPlatform.get(platform)
+        return { label: PLATFORM_LABEL[platform] ?? platform, spend: p?.spend ?? 0, clicks: p?.clicks ?? 0, impressions: p?.impressions ?? 0, conversions: p?.conversions ?? 0, revenue: p?.revenue ?? 0 }
+      })
+      .filter(r => r.spend > 0 || r.impressions > 0)
+  }, [platformBreakdown])
+
   // Funnel: fixed stage order, drop stages with no spend/impressions.
   const funnelRows: Row[] = useMemo(() => {
     const byStage = new Map(funnelStages.map(f => [f.stage, f]))
@@ -124,7 +140,7 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
       .filter(r => r.spend > 0 || r.impressions > 0)
   }, [funnelStages])
 
-  const empty = demoRows.length === 0 && funnelRows.length === 0
+  const empty = demoRows.length === 0 && platformRows.length === 0 && funnelRows.length === 0
   if (empty) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: '#9A9490', fontSize: 13 }}>
@@ -146,6 +162,17 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
         {demoRows.length === 0
           ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>所選區間內沒有人口統計資料。</div>
           : <MetricTable rows={demoRows} cols={cols} hasPurchase={hasPurchase} firstHeader="年齡 · 性別" />}
+      </section>
+
+      {/* Platform source: FB vs IG */}
+      <section>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>平台來源（FB / IG）</h2>
+          <span style={{ fontSize: 11.5, color: '#9A9490' }}>依 publisher_platform 拆分(Meta 限制:無法與年齡×性別交叉同表)</span>
+        </div>
+        {platformRows.length === 0
+          ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>所選區間內沒有平台來源資料。</div>
+          : <MetricTable rows={platformRows} cols={cols} hasPurchase={hasPurchase} firstHeader="平台" />}
       </section>
 
       {/* Funnel stages */}
