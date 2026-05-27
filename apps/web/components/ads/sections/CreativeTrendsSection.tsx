@@ -158,23 +158,34 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo }: { trends: Cr
             : <SvgChart data={chartData} lines={lines} height={220} yFmt={v => fmtVal(v, def.kind)} />}
         </div>
 
-        {/* Creative legend with thumbnails */}
-        <div style={{ flex: '0 0 240px', minWidth: 220 }}>
-          {trends.map(t => {
-            const on = selected.has(t.adId)
-            return (
-              <button key={t.adId} onClick={() => toggle(t.adId)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 6px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE8', cursor: 'pointer', textAlign: 'left', opacity: on ? 1 : 0.5 }}>
-                <input type="checkbox" checked={on} readOnly style={{ accentColor: colorOf(t.adId), cursor: 'pointer' }} />
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: colorOf(t.adId), flexShrink: 0 }} />
-                {t.thumbnailUrl
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={t.thumbnailUrl} alt="" width={34} height={34} style={{ borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
-                  : <span style={{ width: 34, height: 34, borderRadius: 6, background: '#F0EDE8', flexShrink: 0 }} />}
-                <span style={{ fontSize: 12, color: '#2A2722', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-              </button>
-            )
-          })}
+        {/* Creative legend with thumbnails — scrollable so many creatives stay usable */}
+        <div style={{ flex: '0 0 250px', minWidth: 230, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12, overflow: 'hidden', background: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid #F0EDE8', fontSize: 11.5 }}>
+            <span style={{ color: '#5C5750' }}>素材（{selected.size}/{trends.length}）</span>
+            <span style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setSelected(new Set(trends.map(t => t.adId)))}
+                style={{ background: 'none', border: 'none', color: '#3B6FD4', cursor: 'pointer', fontSize: 11.5 }}>全選</button>
+              <button onClick={() => setSelected(new Set())}
+                style={{ background: 'none', border: 'none', color: '#9A9490', cursor: 'pointer', fontSize: 11.5 }}>清除</button>
+            </span>
+          </div>
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+            {trends.map(t => {
+              const on = selected.has(t.adId)
+              return (
+                <button key={t.adId} onClick={() => toggle(t.adId)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE8', cursor: 'pointer', textAlign: 'left', opacity: on ? 1 : 0.5 }}>
+                  <input type="checkbox" checked={on} readOnly style={{ accentColor: colorOf(t.adId), cursor: 'pointer' }} />
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: colorOf(t.adId), flexShrink: 0 }} />
+                  {t.thumbnailUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={t.thumbnailUrl} alt="" width={34} height={34} style={{ borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                    : <span style={{ width: 34, height: 34, borderRadius: 6, background: '#F0EDE8', flexShrink: 0 }} />}
+                  <span style={{ fontSize: 12, color: '#2A2722', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
