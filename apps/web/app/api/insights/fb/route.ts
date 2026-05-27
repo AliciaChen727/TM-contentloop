@@ -3,6 +3,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
+// Combine two insights maps for the SAME post, taking the best (max) value per
+// metric so a real imported number (e.g. reactions 51) beats a live-sync 0.
+function mergeInsights(a: unknown, b: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const src of [a, b]) {
+    if (src && typeof src === 'object') {
+      for (const [k, v] of Object.entries(src as Record<string, unknown>)) {
+        if (typeof v === 'number') out[k] = Math.max(out[k] ?? 0, v)
+      }
+    }
+  }
+  return out
+}
+
+// Firestore Timestamp helpers (tolerant of missing/plain values).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tsMillis = (v: unknown): number => (typeof (v as any)?.toMillis === 'function' ? (v as any).toMillis() : 0)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tsIso = (v: unknown): string | null => (typeof (v as any)?.toDate === 'function' ? (v as any).toDate().toISOString() : null)
+
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -35,31 +55,45 @@ export async function GET(req: NextRequest) {
   }
   const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
-  let rawDocs
+  type RawPost = { id: string; data: Record<string, unknown> }
+  let rawPosts: RawPost[]
   if (pageId) {
     const [newSnap, legacySnap] = await Promise.all([
       userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
       userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
     ])
-    // Legacy fbPosts doc IDs are "{pageId}_{postId}" — filter by prefix to prevent
-    // cross-page leakage when the user is admin of multiple pages.
-    const filteredLegacyDocs = legacySnap.docs.filter(d => d.id.startsWith(`${pageId}_`))
-    const seen = new Set<string>()
-    rawDocs = [...newSnap.docs, ...filteredLegacyDocs]
-      .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
-      .sort((a, b) => (b.data().createdTime?.toMillis?.() ?? 0) - (a.data().createdTime?.toMillis?.() ?? 0))
+    // Page-scoped docs (live fb/sync) are the canonical base.
+    const byId = new Map<string, Record<string, unknown>>()
+    for (const d of newSnap.docs) byId.set(d.id, d.data())
+    // Merge in legacy fbPosts (CSV / MD imports). ISOLATION: legacy doc IDs are
+    // "{pageId}_{postId}", so the `${pageId}_` prefix filter guarantees we only
+    // ever touch THIS page's posts — never another page the admin also manages.
+    // Both inputs are thus this-page-only; merging cannot leak cross-page data.
+    for (const d of legacySnap.docs) {
+      if (!d.id.startsWith(`${pageId}_`)) continue
+      const legacy = d.data()
+      const base = byId.get(d.id)
+      if (!base) { byId.set(d.id, legacy); continue }
+      // Keep page-scoped scalars (message/permalink/createdTime), but combine
+      // insights field-by-field so imported organic engagement (reactions/saves/
+      // shares) is no longer shadowed by a live-sync doc that has 0s.
+      byId.set(d.id, { ...legacy, ...base, insights: mergeInsights(base.insights, legacy.insights) })
+    }
+    rawPosts = Array.from(byId.entries())
+      .map(([id, data]) => ({ id, data }))
+      .sort((a, b) => tsMillis(b.data.createdTime) - tsMillis(a.data.createdTime))
       .slice(0, 200)
   } else {
     const snap = await userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
-    rawDocs = snap.docs
+    rawPosts = snap.docs.map(d => ({ id: d.id, data: d.data() }))
   }
 
-  const posts = rawDocs
-    .map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as { message?: string; [key: string]: unknown }),
-      createdTime: doc.data().createdTime?.toDate().toISOString() ?? null,
-      snapshotAt: doc.data().snapshotAt?.toDate().toISOString() ?? null,
+  const posts = rawPosts
+    .map(({ id, data }) => ({
+      id,
+      ...(data as { message?: string; [key: string]: unknown }),
+      createdTime: tsIso(data.createdTime),
+      snapshotAt: tsIso(data.snapshotAt),
     }))
     .filter((post) =>
       typeof post.message === 'string' &&
