@@ -329,22 +329,28 @@ export async function POST(req: NextRequest) {
     return igMediaIdSet.has(postId)
   }
 
-  const adCreatives = (pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
+  // Page-matched creatives across ALL statuses. Spend already incurred on a now-paused
+  // or finished ad still belongs to this page, so the daily/summary aggregation must
+  // count it — otherwise a page whose only ad has ended would show $0 in the overview.
+  const pageMatchedCreatives = (pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
     ? allAdCreatives.filter(c => {
         const sid = c.effective_object_story_id as string | undefined
         const igId = adIdToIgStoryId.get(c.ad_id as string)
         if (!sid && !igId) return false
         return matchesPage(sid) || matchesIg(sid) || (igId ? matchesIg(igId) : false)
       })
-    : allAdCreatives
-  ).filter(c => {
+    : allAdCreatives)
+
+  // Creative-library display keeps only currently-active creatives.
+  const adCreatives = pageMatchedCreatives.filter(c => {
     const s = c.effective_status as string | undefined
     return !s || s === 'ACTIVE' || s === 'IN_PROCESS' || s === 'WITH_ISSUES'
   })
 
   // Use dailyAdLevelData as single source of truth for both charts and KPI summary.
   // adLevelData (aggregate, no time_increment) can silently fail; dailyAdLevelData is more reliable.
-  const filteredAdIds = new Set(adCreatives.map(c => c.ad_id as string).filter(Boolean))
+  // Aggregate over ALL page-matched ads (any status) so finished-ad spend still counts.
+  const filteredAdIds = new Set(pageMatchedCreatives.map(c => c.ad_id as string).filter(Boolean))
   const filteredDailyAds = dailyAdLevelData.filter(c => filteredAdIds.has(c.ad_id as string))
   const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
   for (const c of filteredDailyAds) {
