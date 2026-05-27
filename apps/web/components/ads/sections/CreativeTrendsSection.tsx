@@ -148,7 +148,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
   }
 
   const VARIANTS: Variant[] = ['A', 'B', 'control']
-  const VARIANT_LABEL: Record<Variant, string> = { A: 'A', B: 'B', control: '對照組' }
+  const VARIANT_LABEL: Record<Variant, string> = { A: 'A', B: 'B', control: '控制組' }
   const abData = useMemo(() => {
     if (!expId) return null
     const groups: Record<Variant, string[]> = { A: [], B: [], control: [] }
