@@ -10,8 +10,8 @@ const fmtK = (n: number) => n >= 10000 ? `$${fmt(Math.round(n / 1000))}K` : `$${
 const fmtCount = (n: number) => n >= 10000 ? `${(n / 10000).toFixed(1)}萬` : n >= 1000 ? `${(n / 1000).toFixed(1)}千` : `${fmt(n)}`
 
 // Platform source (FB / IG) — moved here from the audience-analysis tab.
-const PLATFORM_ORDER = ['facebook', 'instagram']
-const PLATFORM_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram' }
+const PLATFORM_ORDER = ['facebook', 'instagram', 'other']
+const PLATFORM_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', other: '其他版位 (Audience Network / Messenger)' }
 type PlatCell = { key: string; label: string; kind: 'currency' | 'int' | 'percent' | 'ratio' }
 const platCols = (hasPurchase: boolean): PlatCell[] => {
   const base: PlatCell[] = [
@@ -136,9 +136,8 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
 
       {platformRows.length > 0 && (
         <div className="ads-card" style={{ overflow: 'hidden', marginTop: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)', flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)' }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>平台來源（FB / IG）</span>
-            <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>依 publisher_platform 拆分(Meta 限制:無法與年齡×性別交叉同表)</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

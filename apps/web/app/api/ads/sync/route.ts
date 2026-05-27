@@ -492,14 +492,15 @@ export async function POST(req: NextRequest) {
   }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const platformRows: any[] = (await Promise.all(platformResArray.map(r => r.json()))).flatMap((d: any) => d.data ?? [])
-  const PLATFORMS = ['facebook', 'instagram'] // only FB / IG per requirement
+  // FB / IG surfaced individually; every other placement (Audience Network,
+  // Messenger, …) is bucketed into "other" so the table reconciles to total spend.
+  const PLATFORMS = ['facebook', 'instagram', 'other']
   const platformAgg = new Map<string, { platform: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }>()
   for (const p of PLATFORMS) platformAgg.set(p, { platform: p, spend: 0, clicks: 0, impressions: 0, conversions: 0, revenue: 0 })
   for (const r of platformRows) {
     if (!filteredAdIds.has(r.ad_id)) continue // page isolation
-    const plat = (r.publisher_platform as string) ?? ''
-    const e = platformAgg.get(plat)
-    if (!e) continue // skip audience_network / messenger
+    const plat = ((r.publisher_platform as string) ?? '').toLowerCase()
+    const e = platformAgg.get(plat === 'facebook' || plat === 'instagram' ? plat : 'other')!
     e.spend += parseFloat((r.spend as string) ?? '0')
     e.clicks += parseInt((r.clicks as string) ?? '0')
     e.impressions += parseInt((r.impressions as string) ?? '0')
