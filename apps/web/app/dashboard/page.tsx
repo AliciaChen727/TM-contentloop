@@ -15,6 +15,7 @@ import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
 import { ProfileMenu } from '@/components/ProfileMenu'
+import { OnboardingModal } from '@/components/OnboardingModal'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null }
@@ -76,6 +77,8 @@ export default function DashboardPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
   const [userName, setUserName] = useState('')
+  const [idToken, setIdToken] = useState('')
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
@@ -126,8 +129,18 @@ export default function DashboardPage() {
       // Determine if user is admin (has Facebook token)
       const { getDocs: getDocsClient, collection: collectionClient } = await import('firebase/firestore')
       const tokensSnap = await getDocsClient(collectionClient(db, 'users', u.uid, 'metaTokens'))
-      setIsAdmin(tokensSnap.docs.some(d => d.id !== 'userToken'))
+      const adminFlag = tokensSnap.docs.some(d => d.id !== 'userToken')
+      setIsAdmin(adminFlag)
       setUserName(u.displayName ?? u.email ?? '')
+      setIdToken(idToken)
+
+      if (adminFlag) {
+        const onbRes = await fetch('/api/user/onboarding', { headers })
+        if (onbRes.ok) {
+          const j = await onbRes.json()
+          if (!j.completed) setShowOnboarding(true)
+        }
+      }
 
       await fetchPosts(idToken, activePageId)
       setLoading(false)
@@ -485,6 +498,9 @@ export default function DashboardPage() {
       <footer className="mt-8 pb-6 text-center">
         <a href="/privacy" className="text-xs text-gray-400 hover:text-gray-600">Privacy Policy</a>
       </footer>
+      {showOnboarding && isAdmin && idToken && (
+        <OnboardingModal idToken={idToken} onDone={() => setShowOnboarding(false)} />
+      )}
     </main>
   )
 }
