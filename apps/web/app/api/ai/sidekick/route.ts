@@ -5,6 +5,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getUserApiKey } from '@/lib/userApiKeys'
+import { resolvePageProfile } from '@/lib/page-profile'
 
 interface MetricsContext {
   // Posts metrics
@@ -494,6 +495,10 @@ export async function POST(req: NextRequest) {
   const lang: 'zh-TW' | 'en' = prefData?.language === 'en' ? 'en' : 'zh-TW'
   const orgCtx: OrgCtx | null = prefData?.organizationContext ?? null
 
+  // Profile resolution: page-level override → user-level onboarding fallback.
+  // Lets one admin manage multiple pages across different industries.
+  const profile = await resolvePageProfile(uid, pageId)
+
   let abTestResults: ABTestResult[] | undefined
   if (pageId) {
     try {
@@ -522,7 +527,30 @@ export async function POST(req: NextRequest) {
     improveResponses = improveSnap.docs.map(d => d.data() as FeedbackRecord).filter(d => !!d.improveReason)
   } catch { /* non-critical */ }
 
-  const systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx, abTestResults, helpfulResponses, improveResponses)
+  let systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx, abTestResults, helpfulResponses, improveResponses)
+
+  if (profile.industry || profile.optimizationGoal) {
+    const industryLabel: Record<string, { zh: string; en: string }> = {
+      ecommerce: { zh: '電商 / 零售', en: 'E-commerce / Retail' },
+      education: { zh: '課程 / 教育訓練', en: 'Education / Training' },
+      event: { zh: '活動 / 社群組織', en: 'Events / Community' },
+      personal_brand: { zh: '個人品牌 / 自媒體', en: 'Personal brand / Media' },
+      other: { zh: '其他', en: 'Other' },
+    }
+    const goalLabel: Record<string, { zh: string; en: string }> = {
+      clicks: { zh: '提升點擊率（CTR / CPC / 連結點擊）', en: 'increase click-through (CTR / CPC / link clicks)' },
+      conversion: { zh: '提升轉換與 ROI（ROAS / CPA / 轉換數）', en: 'improve conversion & ROI (ROAS / CPA / conversions)' },
+      reach: { zh: '擴大品牌觸及（CPM / 觸及 / 曝光）', en: 'expand brand reach (CPM / reach / impressions)' },
+      event: { zh: '活動報名推廣（CTR / CPL / 連結頁面瀏覽）', en: 'event registration (CTR / CPL / link page views)' },
+    }
+    const ind = profile.industry ? industryLabel[profile.industry] : null
+    const goal = profile.optimizationGoal ? goalLabel[profile.optimizationGoal] : null
+    const sourceTag = profile.source === 'page' ? '（粉專層級設定 / page-level）' : profile.source === 'user' ? '（使用者預設 / user default）' : ''
+    const block = lang === 'en'
+      ? `\n\n[Profile ${profile.source === 'page' ? '(page-level)' : '(user default)'}]\n- Industry: ${ind?.en ?? 'unspecified'}\n- Primary goal: ${goal?.en ?? 'unspecified'}\nUse this profile to make recommendations more precise and tailor diagnostic priorities accordingly.`
+      : `\n\n《使用者背景 ${sourceTag}》\n- 產業：${ind?.zh ?? '未指定'}\n- 最在乎的目標：${goal?.zh ?? '未指定'}\n請根據此背景給出更精準的診斷建議，並依此目標決定優先建議的指標。`
+    systemPrompt = systemPrompt + block
+  }
 
   // Build user message content (text + optional files)
   const userContent: Anthropic.MessageParam['content'] = []
