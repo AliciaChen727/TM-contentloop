@@ -10,7 +10,9 @@ interface Props {
   onDone: () => void
 }
 
-type Submission = { skip: true } | { skip: false; optimizationGoal: OptimizationGoal; industry: Industry }
+type Submission =
+  | { skip: true }
+  | { skip: false; optimizationGoal: OptimizationGoal; industry: Industry; industryOther?: string }
 
 const GOAL_OPTIONS: { value: OptimizationGoal; title: string; desc: string }[] = [
   { value: 'clicks', title: '提升點擊率', desc: '主推 CTR、CPC、連結點擊數' },
@@ -31,11 +33,21 @@ export function OnboardingModal({ idToken, onDone }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
   const [goal, setGoal] = useState<OptimizationGoal | null>(null)
   const [industry, setIndustry] = useState<Industry | null>(null)
+  const [industryOther, setIndustryOther] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const needsOtherText = industry === 'other'
+  const step2Ready = !!industry && (!needsOtherText || industryOther.trim().length > 0)
 
   async function save(payload: Submission) {
     setSaving(true)
-    const body = payload.skip ? { skip: true } : { optimizationGoal: payload.optimizationGoal, industry: payload.industry }
+    const body = payload.skip
+      ? { skip: true }
+      : {
+          optimizationGoal: payload.optimizationGoal,
+          industry: payload.industry,
+          ...(payload.industryOther ? { industryOther: payload.industryOther } : {}),
+        }
     const res = await fetch('/api/user/onboarding', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
@@ -47,7 +59,14 @@ export function OnboardingModal({ idToken, onDone }: Props) {
 
   function handleNext() {
     if (step === 1 && goal) setStep(2)
-    else if (step === 2 && goal && industry) save({ skip: false, optimizationGoal: goal, industry })
+    else if (step === 2 && goal && step2Ready) {
+      save({
+        skip: false,
+        optimizationGoal: goal,
+        industry: industry!,
+        industryOther: needsOtherText ? industryOther.trim() : undefined,
+      })
+    }
   }
 
   return (
@@ -102,6 +121,16 @@ export function OnboardingModal({ idToken, onDone }: Props) {
                   )
                 })}
               </div>
+              {needsOtherText && (
+                <input
+                  type="text"
+                  value={industryOther}
+                  onChange={e => setIndustryOther(e.target.value)}
+                  placeholder="請輸入你的產業（例：寵物用品、SaaS、醫美…）"
+                  className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  autoFocus
+                />
+              )}
             </>
           )}
         </div>
@@ -126,7 +155,7 @@ export function OnboardingModal({ idToken, onDone }: Props) {
             )}
             <button
               onClick={handleNext}
-              disabled={saving || (step === 1 ? !goal : !industry)}
+              disabled={saving || (step === 1 ? !goal : !step2Ready)}
               className="rounded-lg bg-[#1877F2] px-5 py-2 text-sm font-semibold text-white hover:bg-[#166FE5] disabled:opacity-40"
             >
               {step === 1 ? '下一步' : saving ? '儲存中⋯' : '完成'}

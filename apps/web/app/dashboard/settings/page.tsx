@@ -8,13 +8,6 @@ type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
 type Tier = 'free' | 'pro'
 
-interface OrgContext {
-  name: string
-  type: string
-  coreKpi: string
-  extraContext: string
-}
-
 interface UsageData {
   tier: Tier
   imageCount: number
@@ -41,11 +34,16 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [language, setLanguage] = useState<Language>('zh-TW')
   const [usage, setUsage] = useState<UsageData | null>(null)
-  const [orgCtx, setOrgCtx] = useState<OrgContext>({ name: '', type: '', coreKpi: '', extraContext: '' })
-  const [orgSaveState, setOrgSaveState] = useState<SaveState>('idle')
   const [adGoal, setAdGoal] = useState<'clicks' | 'conversion' | 'reach' | 'event' | ''>('')
   const [industry, setIndustry] = useState<'ecommerce' | 'education' | 'event' | 'personal_brand' | 'other' | ''>('')
+  const [industryOther, setIndustryOther] = useState('')
   const [goalSaveState, setGoalSaveState] = useState<SaveState>('idle')
+  const [brandName, setBrandName] = useState('')
+  const [extraContext, setExtraContext] = useState('')
+  const [brandSaveState, setBrandSaveState] = useState<SaveState>('idle')
+
+  const needsOtherText = industry === 'other'
+  const goalReady = !!adGoal && !!industry && (!needsOtherText || industryOther.trim().length > 0)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -60,7 +58,6 @@ export default function SettingsPage() {
       if (prefRes.ok) {
         const data = await prefRes.json()
         setLanguage(data.language ?? 'zh-TW')
-        if (data.organizationContext) setOrgCtx(data.organizationContext)
       }
       if (usageRes.ok) {
         setUsage(await usageRes.json())
@@ -69,6 +66,9 @@ export default function SettingsPage() {
         const j = await onbRes.json()
         if (j.data?.optimizationGoal) setAdGoal(j.data.optimizationGoal)
         if (j.data?.industry) setIndustry(j.data.industry)
+        if (j.data?.industryOther) setIndustryOther(j.data.industryOther)
+        if (j.data?.brandName) setBrandName(j.data.brandName)
+        if (j.data?.extraContext) setExtraContext(j.data.extraContext)
       }
       setLoading(false)
     })
@@ -85,12 +85,15 @@ export default function SettingsPage() {
   }
 
   async function handleGoalSave() {
-    if (!adGoal || !industry) return
+    if (!goalReady) return
     setGoalSaveState('saving')
+    const body: Record<string, unknown> = { optimizationGoal: adGoal, industry }
+    if (needsOtherText) body.industryOther = industryOther.trim()
+    else body.industryOther = null
     const res = await fetch('/api/user/onboarding', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ optimizationGoal: adGoal, industry }),
+      body: JSON.stringify(body),
     })
     if (res.ok) {
       setGoalSaveState('ok')
@@ -101,20 +104,22 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleOrgSave() {
-    setOrgSaveState('saving')
-    const payload = orgCtx.name.trim() ? orgCtx : null
-    const res = await fetch('/api/user/preferences', {
+  async function handleBrandSave() {
+    setBrandSaveState('saving')
+    const res = await fetch('/api/user/onboarding', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationContext: payload }),
+      body: JSON.stringify({
+        brandName: brandName.trim() || null,
+        extraContext: extraContext.trim() || null,
+      }),
     })
     if (res.ok) {
-      setOrgSaveState('ok')
-      setTimeout(() => setOrgSaveState('idle'), 2500)
+      setBrandSaveState('ok')
+      setTimeout(() => setBrandSaveState('idle'), 2500)
     } else {
-      setOrgSaveState('error')
-      setTimeout(() => setOrgSaveState('idle'), 3000)
+      setBrandSaveState('error')
+      setTimeout(() => setBrandSaveState('idle'), 3000)
     }
   }
 
@@ -248,10 +253,20 @@ export default function SettingsPage() {
                   )
                 })}
               </div>
+              {needsOtherText && (
+                <input
+                  type="text"
+                  value={industryOther}
+                  onChange={e => setIndustryOther(e.target.value)}
+                  placeholder="請輸入你的產業（例：寵物用品、SaaS、醫美…）"
+                  className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 text-gray-700"
+                  autoFocus
+                />
+              )}
             </div>
             <button
               onClick={handleGoalSave}
-              disabled={goalSaveState === 'saving' || !adGoal || !industry}
+              disabled={goalSaveState === 'saving' || !goalReady}
               className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
               {goalSaveState === 'saving' ? '儲存中⋯' : goalSaveState === 'ok' ? '已儲存 ✓' : goalSaveState === 'error' ? '儲存失敗' : '儲存'}
@@ -259,34 +274,37 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Organization Context */}
+        {/* Brand context */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">AI 顧問背景設定</h2>
-          <p className="text-xs text-gray-400 mb-5">填寫後，AI Sidekick 會依你的品牌/組織給出更精準的廣告建議。留空則沿用系統預設。</p>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">AI 顧問背景補充</h2>
+          <p className="text-xs text-gray-400 mb-5">填寫後，AI Sidekick 會依你的品牌 / 組織給出更精準的廣告建議。留空則沿用上方產業設定。</p>
           <div className="space-y-4">
-            {([
-              { field: 'name' as keyof OrgContext, label: '組織 / 品牌名稱', placeholder: '例：台灣某品牌、XX 電商' },
-              { field: 'type' as keyof OrgContext, label: '產業 / 類型', placeholder: '例：電商品牌、餐飲業、非營利組織、SaaS 服務' },
-              { field: 'coreKpi' as keyof OrgContext, label: '核心 KPI', placeholder: '例：ROAS、CPL、CPC、品牌曝光' },
-              { field: 'extraContext' as keyof OrgContext, label: '補充說明（選填）', placeholder: '例：主要銷售女裝，目標受眾 25-40 歲女性，客單價 $1,500' },
-            ] as { field: keyof OrgContext; label: string; placeholder: string }[]).map(({ field, label, placeholder }) => (
-              <div key={field}>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-                <input
-                  type="text"
-                  value={orgCtx[field]}
-                  onChange={e => setOrgCtx(c => ({ ...c, [field]: e.target.value }))}
-                  placeholder={placeholder}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700"
-                />
-              </div>
-            ))}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">品牌 / 組織名稱</label>
+              <input
+                type="text"
+                value={brandName}
+                onChange={e => setBrandName(e.target.value)}
+                placeholder="例：TM 分會、XX 電商、OO 學院"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">補充說明（選填）</label>
+              <input
+                type="text"
+                value={extraContext}
+                onChange={e => setExtraContext(e.target.value)}
+                placeholder="例：主要銷售女裝，目標受眾 25-40 歲女性，客單價 $1,500"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700"
+              />
+            </div>
             <button
-              onClick={handleOrgSave}
-              disabled={orgSaveState === 'saving'}
+              onClick={handleBrandSave}
+              disabled={brandSaveState === 'saving'}
               className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
-              {orgSaveState === 'saving' ? '儲存中⋯' : orgSaveState === 'ok' ? '已儲存 ✓' : orgSaveState === 'error' ? '儲存失敗' : '儲存'}
+              {brandSaveState === 'saving' ? '儲存中⋯' : brandSaveState === 'ok' ? '已儲存 ✓' : brandSaveState === 'error' ? '儲存失敗' : '儲存'}
             </button>
           </div>
         </div>

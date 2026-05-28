@@ -527,29 +527,64 @@ export async function POST(req: NextRequest) {
     improveResponses = improveSnap.docs.map(d => d.data() as FeedbackRecord).filter(d => !!d.improveReason)
   } catch { /* non-critical */ }
 
-  let systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, orgCtx, abTestResults, helpfulResponses, improveResponses)
+  // Prefer the merged profile (brand+industry+goal+context) for the persona block.
+  // Fall back to legacy organizationContext for users who only filled the old card.
+  const effectiveOrgCtx: OrgCtx | null = (profile.brandName || profile.industry)
+    ? {
+        name: profile.brandName ?? orgCtx?.name ?? '',
+        type: profile.industry === 'other' && profile.industryOther
+          ? profile.industryOther
+          : (profile.industry
+              ? ({ ecommerce: '電商 / 零售', education: '課程 / 教育訓練', event: '活動 / 社群組織', personal_brand: '個人品牌 / 自媒體', other: '其他' }[profile.industry])
+              : (orgCtx?.type ?? '')),
+        coreKpi: orgCtx?.coreKpi ?? '',
+        extraContext: profile.extraContext ?? orgCtx?.extraContext ?? '',
+      }
+    : orgCtx
 
-  if (profile.industry || profile.optimizationGoal) {
-    const industryLabel: Record<string, { zh: string; en: string }> = {
+  let systemPrompt = buildSidekickSystemPrompt(contextPage, metricsContext, memory || undefined, lang, effectiveOrgCtx, abTestResults, helpfulResponses, improveResponses)
+
+  if (profile.industry || profile.optimizationGoal || profile.brandName || profile.extraContext) {
+    const industryLabelMap: Record<string, { zh: string; en: string }> = {
       ecommerce: { zh: '電商 / 零售', en: 'E-commerce / Retail' },
       education: { zh: '課程 / 教育訓練', en: 'Education / Training' },
       event: { zh: '活動 / 社群組織', en: 'Events / Community' },
       personal_brand: { zh: '個人品牌 / 自媒體', en: 'Personal brand / Media' },
       other: { zh: '其他', en: 'Other' },
     }
-    const goalLabel: Record<string, { zh: string; en: string }> = {
+    const goalLabelMap: Record<string, { zh: string; en: string }> = {
       clicks: { zh: '提升點擊率（CTR / CPC / 連結點擊）', en: 'increase click-through (CTR / CPC / link clicks)' },
       conversion: { zh: '提升轉換與 ROI（ROAS / CPA / 轉換數）', en: 'improve conversion & ROI (ROAS / CPA / conversions)' },
       reach: { zh: '擴大品牌觸及（CPM / 觸及 / 曝光）', en: 'expand brand reach (CPM / reach / impressions)' },
       event: { zh: '活動報名推廣（CTR / CPL / 連結頁面瀏覽）', en: 'event registration (CTR / CPL / link page views)' },
     }
-    const ind = profile.industry ? industryLabel[profile.industry] : null
-    const goal = profile.optimizationGoal ? goalLabel[profile.optimizationGoal] : null
-    const sourceTag = profile.source === 'page' ? '（粉專層級設定 / page-level）' : profile.source === 'user' ? '（使用者預設 / user default）' : ''
-    const block = lang === 'en'
-      ? `\n\n[Profile ${profile.source === 'page' ? '(page-level)' : '(user default)'}]\n- Industry: ${ind?.en ?? 'unspecified'}\n- Primary goal: ${goal?.en ?? 'unspecified'}\nUse this profile to make recommendations more precise and tailor diagnostic priorities accordingly.`
-      : `\n\n《使用者背景 ${sourceTag}》\n- 產業：${ind?.zh ?? '未指定'}\n- 最在乎的目標：${goal?.zh ?? '未指定'}\n請根據此背景給出更精準的診斷建議，並依此目標決定優先建議的指標。`
-    systemPrompt = systemPrompt + block
+    // industryOther wins over the generic "Other" label
+    const indZh = profile.industry === 'other' && profile.industryOther?.trim()
+      ? profile.industryOther.trim()
+      : profile.industry ? industryLabelMap[profile.industry].zh : null
+    const indEn = profile.industry === 'other' && profile.industryOther?.trim()
+      ? profile.industryOther.trim()
+      : profile.industry ? industryLabelMap[profile.industry].en : null
+    const goalZh = profile.optimizationGoal ? goalLabelMap[profile.optimizationGoal].zh : null
+    const goalEn = profile.optimizationGoal ? goalLabelMap[profile.optimizationGoal].en : null
+    const sourceTag = profile.source === 'page' ? '（粉專層級設定 / page-level）' : '（使用者預設 / user default）'
+
+    const lines: string[] = []
+    if (lang === 'en') {
+      if (profile.brandName) lines.push(`- Brand / org: ${profile.brandName}`)
+      if (indEn) lines.push(`- Industry: ${indEn}`)
+      if (goalEn) lines.push(`- Primary goal: ${goalEn}`)
+      if (profile.extraContext) lines.push(`- Notes: ${profile.extraContext}`)
+      systemPrompt = systemPrompt +
+        `\n\n[Profile ${profile.source === 'page' ? '(page-level)' : '(user default)'}]\n${lines.join('\n')}\nUse this profile to make recommendations more precise and tailor diagnostic priorities accordingly.`
+    } else {
+      if (profile.brandName) lines.push(`- 品牌 / 組織：${profile.brandName}`)
+      if (indZh) lines.push(`- 產業：${indZh}`)
+      if (goalZh) lines.push(`- 最在乎的目標：${goalZh}`)
+      if (profile.extraContext) lines.push(`- 補充：${profile.extraContext}`)
+      systemPrompt = systemPrompt +
+        `\n\n《使用者背景 ${sourceTag}》\n${lines.join('\n')}\n請根據此背景給出更精準的診斷建議，並依此目標決定優先建議的指標。`
+    }
   }
 
   // Build user message content (text + optional files)

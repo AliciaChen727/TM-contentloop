@@ -10,6 +10,12 @@ export const VALID_INDUSTRIES: Industry[] = ['ecommerce', 'education', 'event', 
 export interface ProfileFields {
   optimizationGoal: OptimizationGoal
   industry: Industry
+  // Free-text describing the actual industry when `industry === 'other'`.
+  industryOther?: string
+  // Brand / org name + extra context — merged here from the legacy
+  // organizationContext schema on users/{uid}/settings/preferences.
+  brandName?: string
+  extraContext?: string
 }
 
 // Source tells callers whether the resolved profile came from the page doc,
@@ -20,7 +26,17 @@ export type ProfileSource = 'page' | 'user' | 'none'
 export interface ResolvedProfile {
   optimizationGoal: OptimizationGoal | null
   industry: Industry | null
+  industryOther: string | null
+  brandName: string | null
+  extraContext: string | null
   source: ProfileSource
+}
+
+// Effective industry label for prompts/UI: prefer industryOther when industry === 'other'.
+export function effectiveIndustryLabel(industry: Industry | null, industryOther: string | null): string | null {
+  if (!industry) return null
+  if (industry === 'other' && industryOther?.trim()) return industryOther.trim()
+  return INDUSTRY_LABEL_ZH[industry]
 }
 
 export const GOAL_LABEL_ZH: Record<OptimizationGoal, string> = {

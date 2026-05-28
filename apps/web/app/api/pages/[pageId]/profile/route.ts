@@ -35,6 +35,9 @@ export async function GET(req: NextRequest, { params }: { params: { pageId: stri
   return NextResponse.json({
     optimizationGoal: data.optimizationGoal ?? null,
     industry: data.industry ?? null,
+    industryOther: data.industryOther ?? null,
+    brandName: data.brandName ?? null,
+    extraContext: data.extraContext ?? null,
     updatedBy: data.updatedBy ?? null,
   })
 }
@@ -46,7 +49,13 @@ export async function POST(req: NextRequest, { params }: { params: { pageId: str
   if (!pageId) return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
   if (!(await verifyPageAdmin(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const body: { optimizationGoal?: OptimizationGoal | null; industry?: Industry | null } = await req.json()
+  const body: {
+    optimizationGoal?: OptimizationGoal | null
+    industry?: Industry | null
+    industryOther?: string | null
+    brandName?: string | null
+    extraContext?: string | null
+  } = await req.json()
   const update: Record<string, unknown> = { updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }
 
   if (body.optimizationGoal !== undefined) {
@@ -66,6 +75,15 @@ export async function POST(req: NextRequest, { params }: { params: { pageId: str
     } else {
       return NextResponse.json({ error: 'Invalid industry' }, { status: 400 })
     }
+  }
+  if (body.industryOther !== undefined) {
+    update.industryOther = body.industryOther === null ? FieldValue.delete() : body.industryOther
+  }
+  if (body.brandName !== undefined) {
+    update.brandName = body.brandName === null ? FieldValue.delete() : body.brandName
+  }
+  if (body.extraContext !== undefined) {
+    update.extraContext = body.extraContext === null ? FieldValue.delete() : body.extraContext
   }
 
   await adminDb.collection('pages').doc(pageId).collection('profile').doc('profile').set(update, { merge: true })
