@@ -43,15 +43,19 @@ export default function SettingsPage() {
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [orgCtx, setOrgCtx] = useState<OrgContext>({ name: '', type: '', coreKpi: '', extraContext: '' })
   const [orgSaveState, setOrgSaveState] = useState<SaveState>('idle')
+  const [adGoal, setAdGoal] = useState<'clicks' | 'conversion' | 'reach' | 'event' | ''>('')
+  const [industry, setIndustry] = useState<'ecommerce' | 'education' | 'event' | 'personal_brand' | 'other' | ''>('')
+  const [goalSaveState, setGoalSaveState] = useState<SaveState>('idle')
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.replace('/auth/login'); return }
       const token = await u.getIdToken()
       setIdToken(token)
-      const [prefRes, usageRes] = await Promise.all([
+      const [prefRes, usageRes, onbRes] = await Promise.all([
         fetch('/api/user/preferences', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/user/usage', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/user/onboarding', { headers: { Authorization: `Bearer ${token}` } }),
       ])
       if (prefRes.ok) {
         const data = await prefRes.json()
@@ -60,6 +64,11 @@ export default function SettingsPage() {
       }
       if (usageRes.ok) {
         setUsage(await usageRes.json())
+      }
+      if (onbRes.ok) {
+        const j = await onbRes.json()
+        if (j.data?.optimizationGoal) setAdGoal(j.data.optimizationGoal)
+        if (j.data?.industry) setIndustry(j.data.industry)
       }
       setLoading(false)
     })
@@ -73,6 +82,23 @@ export default function SettingsPage() {
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ language: lang }),
     })
+  }
+
+  async function handleGoalSave() {
+    if (!adGoal || !industry) return
+    setGoalSaveState('saving')
+    const res = await fetch('/api/user/onboarding', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ optimizationGoal: adGoal, industry }),
+    })
+    if (res.ok) {
+      setGoalSaveState('ok')
+      setTimeout(() => setGoalSaveState('idle'), 2500)
+    } else {
+      setGoalSaveState('error')
+      setTimeout(() => setGoalSaveState('idle'), 3000)
+    }
   }
 
   async function handleOrgSave() {
@@ -169,6 +195,67 @@ export default function SettingsPage() {
                 <span className="text-sm text-gray-700">{label}</span>
               </label>
             ))}
+          </div>
+        </div>
+
+        {/* Ad Goal & Industry */}
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-1">廣告目標設定</h2>
+          <p className="text-xs text-gray-400 mb-5">調整後儀表板的 KPI 排序與 AI Sidekick 建議會同步更新。</p>
+          <div className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">最在乎的廣告目標</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { v: 'clicks', t: '提升點擊率', d: 'CTR / CPC / 連結點擊' },
+                  { v: 'conversion', t: '提升轉換與 ROI', d: 'ROAS / CPA / 轉換數' },
+                  { v: 'reach', t: '擴大品牌觸及', d: 'CPM / 觸及 / 曝光' },
+                  { v: 'event', t: '活動報名推廣', d: 'CTR / CPL / 頁面瀏覽' },
+                ] as const).map(opt => {
+                  const active = adGoal === opt.v
+                  return (
+                    <button
+                      key={opt.v}
+                      onClick={() => setAdGoal(opt.v)}
+                      className={`rounded-xl border p-3 text-left transition ${active ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                    >
+                      <div className={`text-xs font-semibold ${active ? 'text-blue-700' : 'text-gray-800'}`}>{opt.t}</div>
+                      <div className="mt-0.5 text-[11px] text-gray-500">{opt.d}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">產業類別</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { v: 'ecommerce', t: '電商 / 零售' },
+                  { v: 'education', t: '課程 / 教育訓練' },
+                  { v: 'event', t: '活動 / 社群組織' },
+                  { v: 'personal_brand', t: '個人品牌 / 自媒體' },
+                  { v: 'other', t: '其他' },
+                ] as const).map(opt => {
+                  const active = industry === opt.v
+                  return (
+                    <button
+                      key={opt.v}
+                      onClick={() => setIndustry(opt.v)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${active ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`}
+                    >
+                      {opt.t}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <button
+              onClick={handleGoalSave}
+              disabled={goalSaveState === 'saving' || !adGoal || !industry}
+              className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
+            >
+              {goalSaveState === 'saving' ? '儲存中⋯' : goalSaveState === 'ok' ? '已儲存 ✓' : goalSaveState === 'error' ? '儲存失敗' : '儲存'}
+            </button>
           </div>
         </div>
 
