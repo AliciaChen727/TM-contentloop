@@ -355,6 +355,7 @@ export default function AdsPage() {
   const [creativeLabels, setCreativeLabels] = useState<Record<string, LabelEntry>>({})
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [idTokenRef, setIdTokenRef] = useState('')
+  const [optimizationGoal, setOptimizationGoal] = useState<'clicks' | 'conversion' | 'reach' | 'event' | null>(null)
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: AdMetricsMap; igPostIds: Set<string>; igPostMetrics: AdMetricsMap }> {
@@ -410,6 +411,12 @@ export default function AdsPage() {
           }
         }
         setAuthed(true)
+
+        fetch('/api/user/onboarding', { headers }).then(async r => {
+          if (!r.ok) return
+          const j = await r.json()
+          if (j.data?.optimizationGoal) setOptimizationGoal(j.data.optimizationGoal)
+        }).catch(() => {})
 
         const qs = pageId ? `?pageId=${pageId}` : ''
         const [fbRes, igRes, adRes] = await Promise.all([
@@ -905,7 +912,7 @@ export default function AdsPage() {
             </div>
           ) : (
             <>
-              {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} />}
+              {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} optimizationGoal={optimizationGoal} />}
               {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
               {active === 'creative' && <CreativeSection
                 data={adData}

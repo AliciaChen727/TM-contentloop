@@ -34,7 +34,17 @@ const fmtPlat = (v: number, kind: PlatCell['kind']) =>
   : kind === 'ratio' ? v.toFixed(2)
   : Math.round(v).toLocaleString('zh-TW')
 
-export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskAI?: (q: string) => void; posts?: Post[] | null }) {
+export type OptimizationGoal = 'clicks' | 'conversion' | 'reach' | 'event'
+
+// 3 leading KPI ids per optimization goal. Cards not listed retain original order behind these.
+const GOAL_PRIORITY: Record<OptimizationGoal, string[]> = {
+  clicks: ['ctr', 'cpc', 'link_clicks'],
+  conversion: ['roas', 'cpa', 'conversions'],
+  reach: ['reach', 'cpm', 'impressions'],
+  event: ['ctr', 'cpl', 'link_page_views'],
+}
+
+export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { data: AdData; onAskAI?: (q: string) => void; posts?: Post[] | null; optimizationGoal?: OptimizationGoal | null }) {
   const s = data.overview.summary
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const convType = (data as any).conversionType as string | undefined
@@ -51,16 +61,32 @@ export function OverviewSection({ data, onAskAI, posts }: { data: AdData; onAskA
   const frequency = s.frequency ?? 0
   const reach = s.reach ?? 0
   const impressions = s.impressions ?? 0
-  const kpis = [
-    { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPA 如何降低？' },
-    { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
-    { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
-    { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
-    { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
-    { label: '總觸及', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)}次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
-    { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
-    { label: '頻率', value: frequency.toFixed(2), meta: '建議 < 3.5', color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? '⚠ 偏高' : '正常', dir: frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
-  ]
+  // Derived metrics — for goals that ask for fields the API doesn't expose, fall back
+  // to closest available signal. conversionType=link_click means s.conversions == link clicks.
+  const linkClicks = isClickBased ? (s.conversions ?? 0) : 0
+  const cpl = linkClicks > 0 ? (s.spend ?? 0) / linkClicks : 0
+  const cards: Record<string, { label: string; value: string; meta: string; color: string; delta: string; dir: string; q: string }> = {
+    roas: { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPA 如何降低？' },
+    spend: { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
+    cpa: { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
+    ctr: { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
+    cpc: { label: 'CPC', value: `$${fmt(s.cpa ?? 0, 2)}`, meta: '每次點擊成本', color: 'blue', delta: '', dir: 'neutral', q: 'CPC 如何降低？' },
+    cpm: { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
+    reach: { label: '觸及人數', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)} 次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
+    impressions: { label: '曝光次數', value: fmtCount(impressions), meta: `觸及 ${fmtCount(reach)} 人`, color: 'blue', delta: '', dir: 'neutral', q: '曝光與觸及的差距代表什麼？' },
+    conversions: { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
+    link_clicks: { label: '連結點擊數', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '已點擊連結次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '怎麼提升連結點擊？' },
+    cpl: { label: 'CPL', value: cpl > 0 ? `$${fmt(cpl, 2)}` : '–', meta: '每次報名點擊成本', color: 'orange', delta: '', dir: 'neutral', q: 'CPL 如何降低？' },
+    link_page_views: { label: '連結頁面瀏覽', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '連結頁面瀏覽次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '連結頁面瀏覽如何提升？' },
+    frequency: { label: '頻率', value: frequency.toFixed(2), meta: '建議 < 3.5', color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? '⚠ 偏高' : '正常', dir: frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
+  }
+
+  // Default order (used when no onboarding goal selected) preserves prior layout.
+  const defaultOrder = ['roas', 'spend', 'cpa', 'ctr', 'cpm', 'reach', 'conversions', 'frequency']
+  const lead = optimizationGoal ? GOAL_PRIORITY[optimizationGoal] : []
+  const tail = defaultOrder.filter(id => !lead.includes(id))
+  const orderedIds = [...lead, ...tail]
+  const kpis = orderedIds.map(id => cards[id]).filter(Boolean)
 
   const hasPurchase = convType === 'purchase'
   const platformCols = platCols(hasPurchase)
