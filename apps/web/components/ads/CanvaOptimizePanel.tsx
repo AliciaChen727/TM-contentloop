@@ -1,5 +1,5 @@
 'use client'
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { auth } from '@/lib/firebase/client'
 import { uploadImageForCanva } from '@/lib/firebase/storage'
 
@@ -27,6 +27,23 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
   const [errorMsg, setErrorMsg] = useState('')
   const [assetId, setAssetId] = useState<string | null>(null)
   const [designEditUrl, setDesignEditUrl] = useState<string | null>(null)
+  // null = checking, true/false = known
+  const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
+
+  // Check Canva connection status whenever panel opens
+  useEffect(() => {
+    if (!open) return
+    setCanvaConnected(null)
+    auth.currentUser?.getIdToken().then(async idToken => {
+      try {
+        const res = await fetch('/api/canva/status', { headers: { Authorization: `Bearer ${idToken}` } })
+        const d = await res.json()
+        setCanvaConnected(!!d.connected)
+      } catch {
+        setCanvaConnected(false)
+      }
+    })
+  }, [open])
 
   function reset() {
     setStep('pick')
@@ -52,10 +69,10 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
       if (!user) throw new Error('未登入')
       const idToken = await user.getIdToken()
 
-      // 1. Upload to Firebase Storage
+      // 1. Upload to Firebase Storage (needed for Canva asset sync + persistent URL)
       const storageUrl = await uploadImageForCanva(user.uid, file, pct => setUploadPct(Math.round(pct)))
 
-      // 2. Read as base64 for AI analysis
+      // 2. Read as base64 for AI analysis (no Canva required)
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve((reader.result as string).split(',')[1])
@@ -63,17 +80,19 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
         reader.readAsDataURL(file)
       })
 
-      // 3. Upload to Canva in background (non-blocking)
-      fetch('/api/canva/upload-asset', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: storageUrl, name: file.name }),
-      }).then(async r => {
-        if (r.ok) {
-          const d = await r.json()
-          if (d.assetId) setAssetId(d.assetId)
-        }
-      }).catch(() => {})
+      // 3. If Canva connected, upload asset in background (non-blocking)
+      if (canvaConnected) {
+        fetch('/api/canva/upload-asset', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: storageUrl, name: file.name }),
+        }).then(async r => {
+          if (r.ok) {
+            const d = await r.json()
+            if (d.assetId) setAssetId(d.assetId)
+          }
+        }).catch(() => {})
+      }
 
       // 4. Send image to Sidekick chat for AI analysis
       onSendToChat(
@@ -81,7 +100,6 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
         { data: base64, mimeType: file.type, name: file.name },
       )
       setStep('done')
-      setDesignEditUrl('https://www.canva.com/')
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : '上傳失敗，請稍後再試')
       setStep('error')
@@ -109,12 +127,7 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
       })
 
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        if (d.error === 'CANVA_NOT_CONNECTED') {
-          setErrorMsg('尚未連接 Canva，請先至設定頁授權')
-        } else {
-          setErrorMsg('無法讀取設計稿，請確認連結是否正確')
-        }
+        setErrorMsg('無法讀取設計稿，請確認連結是否正確')
         setStep('error')
         return
       }
@@ -163,7 +176,7 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
               你想怎麼提供廣告素材？
             </p>
 
-            {/* Upload card */}
+            {/* Upload card — works without Canva */}
             <button
               onClick={() => fileInputRef.current?.click()}
               style={{
@@ -176,7 +189,7 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
             >
               <div style={{ fontSize: 22, marginBottom: 6 }}>📁</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text)', marginBottom: 3 }}>上傳圖片</div>
-              <div style={{ fontSize: 12, color: 'var(--ad-text3)' }}>支援 JPG、PNG</div>
+              <div style={{ fontSize: 12, color: 'var(--ad-text3)' }}>支援 JPG、PNG　無需 Canva 帳號</div>
             </button>
             <input
               ref={fileInputRef}
@@ -186,38 +199,62 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f) }}
             />
 
-            {/* Canva link card */}
+            {/* Canva link card — gated on Canva connection */}
             <div style={{ borderRadius: 12, border: '1.5px solid var(--ad-border)', background: 'var(--ad-surface)', padding: 16 }}>
-              <div style={{ fontSize: 22, marginBottom: 6 }}>🔗</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ fontSize: 22 }}>🔗</div>
+                {canvaConnected === true && (
+                  <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>● 已連接</span>
+                )}
+              </div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text)', marginBottom: 3 }}>貼上 Canva 連結</div>
               <div style={{ fontSize: 12, color: 'var(--ad-text3)', marginBottom: 10 }}>直接分析現有 Canva 設計稿</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  type="text"
-                  value={canvaUrl}
-                  onChange={e => setCanvaUrl(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && canvaUrl.trim()) handleCanvaLink() }}
-                  placeholder="https://www.canva.com/design/D..."
-                  style={{
-                    flex: 1, fontSize: 12, padding: '7px 10px',
-                    border: '1px solid var(--ad-border)', borderRadius: 8,
-                    background: 'var(--ad-bg)', color: 'var(--ad-text)',
-                    outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={handleCanvaLink}
-                  disabled={!canvaUrl.trim()}
-                  style={{
-                    padding: '7px 12px', borderRadius: 8, border: 'none',
-                    background: 'var(--ad-blue)', color: 'white',
-                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    opacity: canvaUrl.trim() ? 1 : 0.4,
-                  }}
-                >
-                  分析
-                </button>
-              </div>
+
+              {canvaConnected === null && (
+                <p style={{ fontSize: 12, color: 'var(--ad-text3)' }}>檢查連線中⋯</p>
+              )}
+
+              {canvaConnected === false && (
+                <div style={{ padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#854d0e' }}>需先連接 Canva 帳號</span>
+                  <a
+                    href="/dashboard/settings"
+                    style={{ fontSize: 12, fontWeight: 600, color: '#8B5CF6', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                  >
+                    前往設定 →
+                  </a>
+                </div>
+              )}
+
+              {canvaConnected === true && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    value={canvaUrl}
+                    onChange={e => setCanvaUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && canvaUrl.trim()) handleCanvaLink() }}
+                    placeholder="https://www.canva.com/design/D..."
+                    style={{
+                      flex: 1, fontSize: 12, padding: '7px 10px',
+                      border: '1px solid var(--ad-border)', borderRadius: 8,
+                      background: 'var(--ad-bg)', color: 'var(--ad-text)',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handleCanvaLink}
+                    disabled={!canvaUrl.trim()}
+                    style={{
+                      padding: '7px 12px', borderRadius: 8, border: 'none',
+                      background: 'var(--ad-blue)', color: 'white',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      opacity: canvaUrl.trim() ? 1 : 0.4,
+                    }}
+                  >
+                    分析
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -250,9 +287,10 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
             <p style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 20 }}>
               {mode === 'upload' ? 'AI 正在分析你的廣告圖片，建議將顯示在對話框中。' : 'AI 正在分析你的設計稿文案，建議將顯示在對話框中。'}
             </p>
-            {designEditUrl && (
+            {/* Canva deep link: only show if Canva connected (Method C always, Method A only if asset synced) */}
+            {mode === 'canva' && designEditUrl && (
               <a
-                href={mode === 'canva' ? designEditUrl : 'https://www.canva.com/'}
+                href={designEditUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -261,13 +299,27 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
                   fontSize: 13, fontWeight: 600, textDecoration: 'none',
                 }}
               >
-                {mode === 'canva' ? '在 Canva 中編輯 →' : '前往 Canva 使用素材 →'}
+                在 Canva 中編輯 →
               </a>
             )}
-            {mode === 'upload' && assetId && (
-              <p style={{ fontSize: 11, color: 'var(--ad-text3)', marginTop: 8 }}>
-                素材已同步至 Canva 資產庫（ID: {assetId}）
-              </p>
+            {mode === 'upload' && canvaConnected && assetId && (
+              <>
+                <a
+                  href="https://www.canva.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-block', padding: '9px 18px', borderRadius: 10,
+                    background: '#8B5CF6', color: 'white',
+                    fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                  }}
+                >
+                  前往 Canva 使用素材 →
+                </a>
+                <p style={{ fontSize: 11, color: 'var(--ad-text3)', marginTop: 8 }}>
+                  素材已同步至 Canva 資產庫
+                </p>
+              </>
             )}
             <button
               onClick={() => { reset(); onClose() }}
