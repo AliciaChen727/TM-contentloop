@@ -41,6 +41,7 @@ export default function SettingsPage() {
   const [brandName, setBrandName] = useState('')
   const [extraContext, setExtraContext] = useState('')
   const [brandSaveState, setBrandSaveState] = useState<SaveState>('idle')
+  const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
 
   const needsOtherText = industry === 'other'
   const goalReady = !!adGoal && !!industry && (!needsOtherText || industryOther.trim().length > 0)
@@ -50,10 +51,11 @@ export default function SettingsPage() {
       if (!u) { router.replace('/auth/login'); return }
       const token = await u.getIdToken()
       setIdToken(token)
-      const [prefRes, usageRes, onbRes] = await Promise.all([
+      const [prefRes, usageRes, onbRes, canvaRes] = await Promise.all([
         fetch('/api/user/preferences', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/user/usage', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/user/onboarding', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/canva/status', { headers: { Authorization: `Bearer ${token}` } }),
       ])
       if (prefRes.ok) {
         const data = await prefRes.json()
@@ -69,6 +71,10 @@ export default function SettingsPage() {
         if (j.data?.industryOther) setIndustryOther(j.data.industryOther)
         if (j.data?.brandName) setBrandName(j.data.brandName)
         if (j.data?.extraContext) setExtraContext(j.data.extraContext)
+      }
+      if (canvaRes.ok) {
+        const c = await canvaRes.json()
+        setCanvaConnected(!!c.connected)
       }
       setLoading(false)
     })
@@ -309,6 +315,37 @@ export default function SettingsPage() {
           </div>
         </div>
 
+
+        {/* Canva Integration */}
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-1">Canva 整合</h2>
+          <p className="text-xs text-gray-400 mb-5">連接 Canva 後，AI Sidekick 可分析你的設計稿並上傳圖片素材。</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${canvaConnected ? 'bg-green-400' : 'bg-gray-300'}`} />
+              <span className="text-sm text-gray-700">
+                {canvaConnected === null ? '檢查中⋯' : canvaConnected ? '已連接' : '尚未連接'}
+              </span>
+            </div>
+            {!canvaConnected && (
+              <a
+                href={`/api/auth/canva/authorize?idToken=${encodeURIComponent(idToken)}`}
+                className="px-4 py-2 bg-[#8B5CF6] text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                連接 Canva
+              </a>
+            )}
+            {canvaConnected && (
+              <span className="text-xs text-green-600 font-semibold">✓ 授權有效</span>
+            )}
+          </div>
+          {new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('canva') === 'connected' && (
+            <p className="text-xs text-green-600 mt-3">✅ Canva 連接成功！</p>
+          )}
+          {new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('canva') === 'error' && (
+            <p className="text-xs text-red-500 mt-3">連接失敗，請稍後再試。</p>
+          )}
+        </div>
 
       </div>
     </main>

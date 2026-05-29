@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { auth } from '@/lib/firebase/client'
 import { uploadVideoForAnalysis } from '@/lib/firebase/storage'
 import { Icon } from './Icon'
+import { CanvaOptimizePanel } from './CanvaOptimizePanel'
 
 interface CopyVariant { label: string; copy: string; rationale: string }
 
@@ -353,6 +354,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [exportCustomEnd, setExportCustomEnd] = useState('')
   const [exportFeedbackFilter, setExportFeedbackFilter] = useState<'all' | 'has_feedback' | 'improve_only'>('all')
   const [exporting, setExporting] = useState(false)
+  const [showCanvaPanel, setShowCanvaPanel] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -436,9 +438,9 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     }
   }, [])
 
-  const send = useCallback(async (text?: string) => {
+  const send = useCallback(async (text?: string, directAtts?: FileAttachment[]) => {
     const t = text ?? input
-    const atts = fileAttachments
+    const atts = directAtts ?? fileAttachments
     if (!t.trim() && atts.length === 0) return
     const now = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
@@ -1035,6 +1037,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
 
               {/* Suggestions */}
               <div className="ads-sk-suggestions">
+                <div
+                  className="ads-sk-sug"
+                  style={{ background: 'linear-gradient(135deg,#7c3aed22,#3b82f622)', borderColor: '#7c3aed44', fontWeight: 600 }}
+                  onClick={() => setShowCanvaPanel(true)}
+                >
+                  ✨ 優化廣告素材
+                </div>
                 {suggestions.map((s, i) => <div key={i} className="ads-sk-sug" onClick={() => send(s)}>{s}</div>)}
               </div>
 
@@ -1076,6 +1085,18 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               </div>
             </>
           )}
+          <CanvaOptimizePanel
+            open={showCanvaPanel}
+            onClose={() => setShowCanvaPanel(false)}
+            pageId={pageId}
+            onSendToChat={(message, image) => {
+              setShowCanvaPanel(false)
+              const atts: FileAttachment[] = image
+                ? [{ type: 'image', mimeType: image.mimeType, content: image.data, name: image.name }]
+                : []
+              setTimeout(() => send(message, atts.length > 0 ? atts : undefined), 100)
+            }}
+          />
         </div>
       </div>
     </div>
