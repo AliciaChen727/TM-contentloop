@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ authorized: true, authorizedPageIds: all.map(p => p.pageId) })
   }
 
+  const authorizedPageIds: string[] = []
+
+  // --- Path 1: owner / admin (connected Meta) ---
   const tokensSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
   const pageIds = tokensSnap.docs
     .filter(d => d.id !== 'userToken' && d.id !== 'page')
@@ -32,29 +35,30 @@ export async function GET(req: NextRequest) {
     if (oldDoc) pageIds.push(oldDoc.data().pageId ?? 'page')
   }
 
-  if (pageIds.length === 0) return NextResponse.json({ authorized: false })
-
-  const authorizedPageIds: string[] = []
-
   for (const pageId of pageIds) {
-    // Check if this user is an explicit owner
     const adminDoc = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-    if (adminDoc.exists && adminDoc.data()?.isOwner === true) {
+    if (adminDoc.exists) {
+      // Any entry in admins collection (owner or non-owner) is authorized
       authorizedPageIds.push(pageId)
       continue
     }
-
-    // Legacy fallback: if no one has isOwner yet, authorize whoever connected first
+    // Legacy fallback: no admins doc yet — authorize whoever connected first
     const ownerSnap = await adminDb.collection('pages').doc(pageId).collection('admins')
       .where('isOwner', '==', true).limit(1).get()
     if (ownerSnap.empty) {
-      // No owner set yet — check if this user is the earliest admin by addedAt
       const earliestSnap = await adminDb.collection('pages').doc(pageId).collection('admins')
         .orderBy('addedAt', 'asc').limit(1).get()
       if (!earliestSnap.empty && earliestSnap.docs[0].id === uid) {
         authorizedPageIds.push(pageId)
       }
     }
+  }
+
+  // --- Path 2: invited viewer (accepted invite, no Meta connection needed) ---
+  const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+  const viewerPageIds: string[] = viewerSnap.exists ? (viewerSnap.data()?.pages ?? []) : []
+  for (const pageId of viewerPageIds) {
+    if (!authorizedPageIds.includes(pageId)) authorizedPageIds.push(pageId)
   }
 
   return NextResponse.json({ authorized: authorizedPageIds.length > 0, authorizedPageIds })
