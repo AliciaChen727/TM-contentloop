@@ -1002,7 +1002,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                             const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
                             if (!prompt) return
                             setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageUrl: undefined, imageLoading: true } : m))
-                            generateImage(msg.id, prompt)
+                            generateImage(msg.id, prompt, imageEngine)
                           }
                           return (
                             <div style={{ marginTop: 8 }}>
@@ -1012,6 +1012,15 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                 onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); regenImage() } }}
                                 style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                              <select value={imageEngine}
+                                onChange={e => setImageEngine(e.target.value)}
+                                title="圖片模型"
+                                style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
+                                <option value="fal-grok-image">Grok Imagine（預設・便宜美感）</option>
+                                <option value="fal-gpt-image-2">GPT Image 2（文字最強・含中文）</option>
+                                <option value="fal-recraft">Recraft V3（廣告/品牌風格）</option>
+                                <option value="fal-flux">FLUX dev（快速通用）</option>
+                              </select>
                               <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
                                 <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenImage}>↻ 重新生成</button>
                                 <a href={msg.imageUrl} download="ad-creative.jpg"
