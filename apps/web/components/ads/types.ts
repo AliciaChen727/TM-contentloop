@@ -91,6 +91,7 @@ export interface AdData {
       frequency: number
       conversions: number
       revenue: number
+      clicks?: number
     }
     dailySpend: DailyData[]
     channelBreakdown: { channel: string; spend: number; pct: number; roas: number; cpa: number }[]

@@ -308,6 +308,7 @@ function buildAdData(raw: any): AdData {
         frequency: s.frequency,
         conversions: s.conversions,
         revenue: s.revenue,
+        clicks: s.clicks ?? 0,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       dailySpend: (raw.daily ?? []).map((d: any) => ({
