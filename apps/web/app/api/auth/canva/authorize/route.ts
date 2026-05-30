@@ -7,6 +7,7 @@ const SCOPES = [
   'asset:read',
   'asset:write',
   'design:content:read',
+  'design:content:write', // 讓 AI 能用 Create Design API 產出優化後的新設計稿
   'design:meta:read',
   'profile:read',
 ].join(' ')
