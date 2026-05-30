@@ -35,16 +35,28 @@ export async function GET(
 
   const { designId } = params
 
-  const [designRes, pagesRes] = await Promise.all([
-    canvaFetch(uid, `/designs/${designId}`),
-    canvaFetch(uid, `/designs/${designId}/pages`),
-  ])
+  let designRes: Response, pagesRes: Response
+  try {
+    [designRes, pagesRes] = await Promise.all([
+      canvaFetch(uid, `/designs/${designId}`),
+      canvaFetch(uid, `/designs/${designId}/pages`),
+    ])
+  } catch (e) {
+    // getValidAccessToken throws when there's no stored token or refresh failed.
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`[canva/design] token error for uid=${uid}: ${msg}`)
+    return NextResponse.json({ error: 'CANVA_NOT_CONNECTED', detail: msg }, { status: 401 })
+  }
 
   if (!designRes.ok) {
+    const detail = await designRes.text().catch(() => '')
+    console.error(`[canva/design] designId=${designId} canva status=${designRes.status} body=${detail.slice(0, 300)}`)
     if (designRes.status === 401 || designRes.status === 403) {
-      return NextResponse.json({ error: 'CANVA_NOT_CONNECTED' }, { status: 401 })
+      // 401/403 here means Canva rejected the read: either the token can't be
+      // refreshed, or this design isn't owned by / shared with the connected account.
+      return NextResponse.json({ error: 'CANVA_DESIGN_FORBIDDEN', canvaStatus: designRes.status }, { status: 403 })
     }
-    return NextResponse.json({ error: 'Design not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Design not found', canvaStatus: designRes.status }, { status: 404 })
   }
 
   const { design } = await designRes.json()

@@ -217,7 +217,14 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
       })
 
       if (!res.ok) {
-        setErrorMsg('無法讀取設計稿，請確認連結是否正確')
+        const ed = await res.json().catch(() => ({}))
+        if (ed.error === 'CANVA_DESIGN_FORBIDDEN') {
+          setErrorMsg('讀不到這份設計稿：它必須是「你連接的 Canva 帳號」自己擁有的設計。請貼自己帳號裡的設計連結。')
+        } else if (ed.error === 'CANVA_NOT_CONNECTED') {
+          setErrorMsg('Canva 授權已失效，請到設定頁重新連接 Canva。')
+        } else {
+          setErrorMsg('無法讀取設計稿，請確認連結是否正確')
+        }
         setStep('error')
         return
       }
