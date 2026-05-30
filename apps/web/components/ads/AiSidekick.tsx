@@ -670,7 +670,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         .catch(() => {})
         .finally(() => setHistoryLoading(false))
     })
-  }, [showHistory])
+  }, [showHistory, pageId])
 
   function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const items = Array.from(e.clipboardData.items)

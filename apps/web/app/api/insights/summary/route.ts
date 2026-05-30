@@ -24,9 +24,10 @@ function getPeriodRange(year: number, periodType: 'month' | 'quarter', value: nu
 }
 
 // Handle both Firestore Timestamp and ISO string date
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tsMillis = (v: unknown): number => {
-  if (v && typeof (v as any).toMillis === 'function') return (v as any).toMillis()
+  if (v && typeof (v as Record<string, unknown>).toMillis === 'function') {
+    return (v as { toMillis(): number }).toMillis()
+  }
   if (typeof v === 'string') { const ms = Date.parse(v); return isNaN(ms) ? 0 : ms }
   return 0
 }
