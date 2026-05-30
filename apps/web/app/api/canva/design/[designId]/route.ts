@@ -50,27 +50,36 @@ export async function GET(
   const { design } = await designRes.json()
   const editUrl = `https://www.canva.com/design/${designId}/edit`
 
-  // Canva's API does NOT expose a design's text/element content — only page
-  // metadata + a thumbnail image. So we fetch the first page's thumbnail and let
-  // the AI analyse the design visually (it can read the text from the image).
-  let thumbnail: { data: string; mimeType: string } | null = null
-  if (pagesRes.ok) {
+  // Canva's API does NOT expose a design's text/element content — only a
+  // thumbnail image. The Get Design response carries design.thumbnail.url
+  // directly; fall back to the first page's thumbnail. We send the image to the
+  // AI for visual analysis (it reads the text from the image itself).
+  let thumbUrl: string | undefined = design?.thumbnail?.url
+  if (!thumbUrl && pagesRes.ok) {
     try {
       const { pages } = await pagesRes.json()
-      const thumbUrl = pages?.[0]?.thumbnail?.url as string | undefined
-      if (thumbUrl) {
-        const imgRes = await fetch(thumbUrl)
-        if (imgRes.ok) {
-          const buf = Buffer.from(await imgRes.arrayBuffer())
-          thumbnail = {
-            data: buf.toString('base64'),
-            mimeType: imgRes.headers.get('content-type') ?? 'image/png',
-          }
+      thumbUrl = pages?.[0]?.thumbnail?.url
+    } catch { /* ignore */ }
+  }
+
+  let thumbnail: { data: string; mimeType: string } | null = null
+  if (thumbUrl) {
+    try {
+      const imgRes = await fetch(thumbUrl)
+      if (imgRes.ok) {
+        const buf = Buffer.from(await imgRes.arrayBuffer())
+        thumbnail = {
+          data: buf.toString('base64'),
+          mimeType: imgRes.headers.get('content-type') ?? 'image/png',
         }
+      } else {
+        console.error(`[canva/design] thumbnail download failed status=${imgRes.status}`)
       }
     } catch (e) {
-      console.error(`[canva/design] thumbnail fetch failed: ${e instanceof Error ? e.message : e}`)
+      console.error(`[canva/design] thumbnail fetch error: ${e instanceof Error ? e.message : e}`)
     }
+  } else {
+    console.error(`[canva/design] no thumbnail url for designId=${designId}`)
   }
 
   return NextResponse.json({ title: design.title ?? '', editUrl, thumbnail })
