@@ -56,6 +56,103 @@ const GOAL_AD_METRICS: Record<string, string[]> = {
   event: ['adCtr', 'adCpc', 'adCpm'],
 }
 
+function buildPrintHTML(summary: Summary, report: InsightReport): string {
+  const bm = summary.benchmarkCompare.fb
+  const ads = summary.adsSummary
+  const ov = summary.overview
+  const GOAL_MAP: Record<string, string> = { clicks: '提升點擊率', conversion: '提升轉換與ROI', reach: '擴大品牌觸及', event: '活動報名推廣' }
+
+  const bmRow = (label: string, value: string, bench: string, status: 'above' | 'below') =>
+    `<tr><td>${label}</td><td><strong>${value}</strong></td><td style="color:#888">${bench}</td><td style="color:${status === 'above' ? '#16a34a' : '#ca8a04'}">${status === 'above' ? '優於同業 ↑' : '低於同業 ↓'}</td></tr>`
+
+  const statCard = (label: string, value: string) =>
+    `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`
+
+  const postCard = (p: PostSummary, type: 'top' | 'under') => `
+    <div class="post-card ${type}">
+      <div class="post-header">互動率 ${p.engRate}%&nbsp;·&nbsp;「${p.postSnippet}⋯」</div>
+      ${type === 'top'
+        ? `<div>💡 ${p.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${p.replicablePattern}</div>`
+        : `<div>⚠️ 問題：${p.issue}</div><div class="post-pattern">🔧 建議：${p.improvement}</div>`}
+    </div>`
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
+<title>洞察報告 ${summary.period}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 13px; color: #1f2937; background: white; padding: 32px 40px; }
+  h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; }
+  .meta { font-size: 11px; color: #6b7280; margin-bottom: 24px; }
+  .goal-badge { display: inline-block; font-size: 11px; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 10px; margin-left: 8px; font-weight: 500; }
+  .exec { background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 6px; line-height: 1.7; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #f9fafb; padding: 8px 10px; text-align: left; font-weight: 600; color: #374151; border: 1px solid #e5e7eb; }
+  td { padding: 8px 10px; border: 1px solid #e5e7eb; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .stat-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; }
+  .stat-label { font-size: 10px; color: #9ca3af; margin-bottom: 4px; }
+  .stat-value { font-size: 18px; font-weight: 700; }
+  .section-label { font-size: 10px; font-weight: 700; color: #9ca3af; letter-spacing: 0.05em; margin: 16px 0 6px; text-transform: uppercase; }
+  .post-card { padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; line-height: 1.6; font-size: 12px; }
+  .post-card.top { background: #f0fdf4; border: 1px solid #86efac; }
+  .post-card.under { background: #fff7ed; border: 1px solid #fdba74; }
+  .post-header { font-weight: 700; margin-bottom: 4px; }
+  .post-pattern { font-size: 11px; margin-top: 4px; opacity: 0.8; }
+  .benchmark-insight { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; line-height: 1.7; }
+  ol { padding-left: 20px; }
+  ol li { margin-bottom: 6px; line-height: 1.6; }
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; text-align: right; }
+  @media print { body { padding: 20px 24px; } @page { margin: 1cm; } }
+</style></head><body>
+<h1>📊 洞察報告<span class="goal-badge">🎯 ${GOAL_MAP[summary.optimizationGoal] ?? summary.optimizationGoal}</span></h1>
+<div class="meta">期間：${summary.period}${summary.isPartial ? `（統計至 ${summary.dataAsOf}）` : ''} &nbsp;·&nbsp; 基準：${summary.benchmarkIndustry} &nbsp;·&nbsp; 生成時間：${new Date().toLocaleString('zh-TW')}</div>
+
+<h2>✨ 執行摘要</h2>
+<div class="exec">${report.executiveSummary}</div>
+
+<h2>📈 同業 Benchmark 比較</h2>
+<table><thead><tr><th>指標</th><th>本期表現</th><th>同業基準</th><th>評估</th></tr></thead><tbody>
+${bmRow('FB 平均互動率', `${bm.engagementRate.value}%`, `${bm.engagementRate.benchmark}%`, bm.engagementRate.status)}
+${bmRow('追蹤者成長率', `${bm.followerGrowth.value}%`, `${bm.followerGrowth.benchmark}%`, bm.followerGrowth.status)}
+${bmRow('廣告 CTR', `${bm.adCtr.value}%`, `${bm.adCtr.benchmark}%`, bm.adCtr.status)}
+${bmRow('廣告 CPC', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benchmark}`, bm.adCpc.status)}
+</tbody></table>
+<div class="benchmark-insight" style="margin-top:10px">${report.benchmarkInsight}</div>
+
+<div class="section-label">有機貼文</div>
+<div class="stats-grid">
+  ${statCard('發文數', `${ov.totalPosts} 則`)}
+  ${statCard('平均互動率', `${ov.avgEngRate}%`)}
+  ${statCard('平均觸及', `${ov.avgReach.toLocaleString()} 人`)}
+  ${statCard('追蹤成長', `+${ov.followerGrowth} 人`)}
+</div>
+
+<div class="section-label">廣告投放</div>
+<div class="stats-grid">
+  ${statCard('CTR', `${ads.ctr}%`)}
+  ${statCard('CPC', `$${Number(ads.cpc).toFixed(2)}`)}
+  ${statCard('CPM', `$${Number(ads.cpm).toFixed(2)}`)}
+  ${statCard('總花費', `$${Number(ads.spend).toLocaleString()}`)}
+  ${statCard('連結點擊', `${ads.clicks.toLocaleString()} 次`)}
+  ${statCard('觸及人數', ads.reach > 0 ? `${(ads.reach / 10000).toFixed(1)} 萬` : '-')}
+  ${statCard('頻率', String(ads.frequency))}
+  ${statCard('廣告數', `${ads.adCount} 則`)}
+</div>
+
+<h2>🌟 表現最佳貼文分析</h2>
+${report.topPostAnalysis.map(p => postCard(p, 'top')).join('')}
+
+<h2>📉 需改善貼文分析</h2>
+${report.underPerformerAnalysis.map(p => postCard(p, 'under')).join('')}
+
+<h2>🎯 Top 3 行動建議</h2>
+<ol>${report.topRecommendations.map(r => `<li>${r}</li>`).join('')}</ol>
+
+<div class="footer">ContentLoop · 洞察報告 · ${summary.period}</div>
+</body></html>`
+}
+
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
 const CURRENT_QUARTER = Math.ceil(CURRENT_MONTH / 3)
@@ -242,10 +339,25 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           </button>
         )}
         {report && (
-          <button onClick={() => generate(true)} disabled={loading}
-            style={{ padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 8, border: '1px solid var(--ad-border)', background: 'white', color: 'var(--ad-text2)', cursor: loading ? 'default' : 'pointer' }}>
-            {loading ? '⋯' : '↻ 重新生成'}
-          </button>
+          <>
+            <button onClick={() => generate(true)} disabled={loading}
+              style={{ padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 8, border: '1px solid var(--ad-border)', background: 'white', color: 'var(--ad-text2)', cursor: loading ? 'default' : 'pointer' }}>
+              {loading ? '⋯' : '↻ 重新生成'}
+            </button>
+            {summary && (
+              <button onClick={() => {
+                const win = window.open('', '_blank')
+                if (!win) return
+                win.document.write(buildPrintHTML(summary, report))
+                win.document.close()
+                win.focus()
+                setTimeout(() => win.print(), 400)
+              }}
+                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 8, border: '1px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer' }}>
+                📄 匯出 PDF
+              </button>
+            )}
+          </>
         )}
 
         {/* Status indicators */}
