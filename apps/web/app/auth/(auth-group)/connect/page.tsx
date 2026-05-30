@@ -10,6 +10,7 @@ import { Suspense } from 'react'
 const SCOPES = [
   'pages_show_list',
   'pages_read_engagement',
+  'pages_manage_posts', // needed to read the Page Stories edge (/{page}/stories)
   'read_insights',
   'instagram_basic',
   'instagram_manage_insights',

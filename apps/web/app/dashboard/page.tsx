@@ -86,14 +86,21 @@ export default function DashboardPage() {
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
     const qs = pageId ? `?pageId=${pageId}` : ''
-    const [fbRes, igRes, storiesRes] = await Promise.all([
+    const [fbRes, igRes, storiesRes, fbStoriesRes] = await Promise.all([
       fetch(`/api/insights/fb${qs}`, { headers }),
       fetch(`/api/insights/ig${qs}`, { headers }),
       fetch(`/api/insights/ig/stories${qs}`, { headers }),
+      fetch(`/api/insights/fb/stories${qs}`, { headers }),
     ])
     if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())); setFollowerStats(d.followerStats ?? []) }
     if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
-    if (storiesRes.ok) { const d = await storiesRes.json(); setIgStories(d.stories ?? []) }
+    // Tag platform so the combined stories table can distinguish FB vs IG.
+    const ig = storiesRes.ok ? ((await storiesRes.json()).stories ?? []) : []
+    const fb = fbStoriesRes.ok ? ((await fbStoriesRes.json()).stories ?? []) : []
+    setIgStories([
+      ...ig.map((s: IgStory) => ({ ...s, platform: s.platform ?? 'IG' as const })),
+      ...fb.map((s: IgStory) => ({ ...s, platform: 'FB' as const })),
+    ])
   }, [])
 
   useEffect(() => {
