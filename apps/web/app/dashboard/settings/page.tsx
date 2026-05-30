@@ -42,6 +42,18 @@ export default function SettingsPage() {
   const [extraContext, setExtraContext] = useState('')
   const [brandSaveState, setBrandSaveState] = useState<SaveState>('idle')
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
+  const [canvaMsg, setCanvaMsg] = useState<'connected' | 'error' | null>(null)
+
+  // Read the ?canva=... result once, then strip it from the URL. OAuth leaves
+  // intermediate steps in browser history; without cleaning the param, pressing
+  // back or refreshing replays a stale callback and shows a misleading error.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('canva')
+    if (param === 'connected' || param === 'error') {
+      setCanvaMsg(param)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const needsOtherText = industry === 'other'
   const goalReady = !!adGoal && !!industry && (!needsOtherText || industryOther.trim().length > 0)
@@ -339,10 +351,12 @@ export default function SettingsPage() {
               <span className="text-xs text-green-600 font-semibold">✓ 授權有效</span>
             )}
           </div>
-          {new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('canva') === 'connected' && (
+          {canvaMsg === 'connected' && (
             <p className="text-xs text-green-600 mt-3">✅ Canva 連接成功！</p>
           )}
-          {new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('canva') === 'error' && (
+          {/* Only surface an error when we're genuinely not connected — a stale
+              bad_state replay after a successful connect should not alarm. */}
+          {canvaMsg === 'error' && canvaConnected === false && (
             <p className="text-xs text-red-500 mt-3">連接失敗，請稍後再試。</p>
           )}
         </div>
