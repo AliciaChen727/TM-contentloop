@@ -71,7 +71,11 @@ export async function syncFbStories(
       return { synced: 0, error: data.error?.message ?? 'fb stories fetch failed' }
     }
     stories = data.data ?? []
-    console.log(`[fbStories] pageId=${pageId} status=${res.status} count=${stories.length} sample=${JSON.stringify(stories[0] ?? {}).slice(0, 250)} paging=${data.paging ? 'yes' : 'no'}`)
+    // The Page Stories edge returns 200 + empty for manually-posted stories
+    // (Meta limitation), so only log when something actually came back.
+    if (stories.length > 0) {
+      console.log(`[fbStories] pageId=${pageId} count=${stories.length} sample=${JSON.stringify(stories[0] ?? {}).slice(0, 250)}`)
+    }
   } catch (e) {
     return { synced: 0, error: e instanceof Error ? e.message : 'fb stories fetch exception' }
   }

@@ -64,7 +64,7 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
   if (!stories.length) {
     return (
       <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>
-        尚無限動資料。IG 限動需在發布後 24 小時內抓取；FB 限動需在粉專開啟「限時動態典藏」才讀得到。
+        尚無限動資料。IG 限動需在發布後 24 小時內、限動還在線時按同步收集。（FB 粉專限動目前 Meta API 無法讀取手動發布的限動，請改用「上傳圖片」分析。）
       </p>
     )
   }
