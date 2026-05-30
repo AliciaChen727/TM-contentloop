@@ -27,7 +27,7 @@ interface OverviewData {
   followerGrowthRate: number
 }
 
-interface BenchmarkStatus { value: number; benchmark: number; status: 'above' | 'below' }
+interface BenchmarkStatus { value: number; benchmark: number; status: 'above' | 'below' | 'nodata' }
 
 interface Summary {
   period: string
@@ -158,13 +158,10 @@ const CURRENT_MONTH = new Date().getMonth() + 1
 const CURRENT_QUARTER = Math.ceil(CURRENT_MONTH / 3)
 const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR].filter(y => y >= 2024)
 
-// lowerIsBetter: for CPC/CPM — lower value = cheaper = better performance
-function StatusBadge({ status, lowerIsBetter = false }: { status: 'above' | 'below'; lowerIsBetter?: boolean }) {
-  // For lowerIsBetter metrics: 'above' means value <= benchmark (cheaper = good)
+function StatusBadge({ status, lowerIsBetter = false }: { status: 'above' | 'below' | 'nodata'; lowerIsBetter?: boolean }) {
+  if (status === 'nodata') return <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#f3f4f6', color: '#9ca3af', fontWeight: 600 }}>無資料</span>
   const good = status === 'above'
-  const label = lowerIsBetter
-    ? (good ? '較省 ✓' : '較貴 ↑')
-    : (good ? '優於同業 ↑' : '低於同業 ↓')
+  const label = lowerIsBetter ? (good ? '較省 ✓' : '較貴 ↑') : (good ? '優於同業 ↑' : '低於同業 ↓')
   return good
     ? <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#16a34a', fontWeight: 600 }}>{label}</span>
     : <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#ca8a04', fontWeight: 600 }}>{label}</span>

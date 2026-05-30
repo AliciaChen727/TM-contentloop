@@ -176,9 +176,9 @@ export async function GET(req: NextRequest) {
     fb: {
       engagementRate: { value: avgEngRate, benchmark: BENCHMARKS.fb.engagementRate, status: avgEngRate >= BENCHMARKS.fb.engagementRate ? 'above' : 'below' as const },
       followerGrowth: { value: followerGrowthRate, benchmark: BENCHMARKS.fb.followerGrowthMonthly, status: followerGrowthRate >= BENCHMARKS.fb.followerGrowthMonthly ? 'above' : 'below' as const },
-      adCtr: { value: Number(adCtr.toFixed(2)), benchmark: goalBenchmarks.ctr, status: adCtr >= goalBenchmarks.ctr ? 'above' : 'below' as const },
-      adCpc: { value: Number(adCpc.toFixed(2)), benchmark: goalBenchmarks.cpc, status: adCpc > 0 && adCpc <= goalBenchmarks.cpc ? 'above' : 'below' as const },
-      adCpm: { value: Number(adCpm.toFixed(2)), benchmark: goalBenchmarks.cpm, status: adCpm > 0 && adCpm <= goalBenchmarks.cpm ? 'above' : 'below' as const },
+      adCtr: { value: Number(adCtr.toFixed(2)), benchmark: goalBenchmarks.ctr, status: adCtr === 0 ? 'nodata' : adCtr >= goalBenchmarks.ctr ? 'above' : 'below' as const },
+      adCpc: { value: Number(adCpc.toFixed(2)), benchmark: goalBenchmarks.cpc, status: adCpc === 0 ? 'nodata' : adCpc <= goalBenchmarks.cpc ? 'above' : 'below' as const },
+      adCpm: { value: Number(adCpm.toFixed(2)), benchmark: goalBenchmarks.cpm, status: adCpm === 0 ? 'nodata' : adCpm <= goalBenchmarks.cpm ? 'above' : 'below' as const },
     },
   }
 
