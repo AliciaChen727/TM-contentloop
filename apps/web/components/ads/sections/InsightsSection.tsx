@@ -36,10 +36,24 @@ interface Summary {
   dataAsOf: string
   dateRange: { start: string; end: string }
   adsDateRange: { start: string; end: string } | null
+  optimizationGoal: string
+  industry: string
   overview: OverviewData
-  benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus } }
+  benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus; adCpc: BenchmarkStatus; adCpm: BenchmarkStatus } }
   benchmarkIndustry: string
-  adsSummary: { spend: number; ctr: number; cpm: number; adCount: number }
+  adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
+}
+
+const GOAL_LABELS: Record<string, string> = {
+  clicks: '提升點擊率', conversion: '提升轉換與ROI', reach: '擴大品牌觸及', event: '活動報名推廣',
+}
+
+// Which ad benchmark rows to show per goal
+const GOAL_AD_METRICS: Record<string, string[]> = {
+  clicks: ['adCtr', 'adCpc'],
+  conversion: ['adCtr', 'adCpc'],
+  reach: ['adCpm'],
+  event: ['adCtr', 'adCpc', 'adCpm'],
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -265,19 +279,26 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       {summary && (
         <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '16px 20px', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>同業 Benchmark 比較</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>同業 Benchmark 比較</span>
+              {summary.optimizationGoal && (
+                <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 10, background: '#eff6ff', color: '#1d4ed8', fontWeight: 500 }}>
+                  🎯 {GOAL_LABELS[summary.optimizationGoal] ?? summary.optimizationGoal}
+                </span>
+              )}
+            </div>
             <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>基準：{summary.benchmarkIndustry}</span>
           </div>
           {metricRow('FB 平均互動率', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
-          <div>
-            {metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
-            {summary.adsDateRange && (
-              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 2 }}>
-                廣告資料：{summary.adsDateRange.start} ~ {summary.adsDateRange.end}
-              </div>
-            )}
-          </div>
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? ['adCtr']).includes('adCtr') && metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPC', summary.benchmarkCompare.fb.adCpc, '')}
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '')}
+          {summary.adsDateRange && (
+            <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 6 }}>
+              廣告資料：{summary.adsDateRange.start} ~ {summary.adsDateRange.end}
+            </div>
+          )}
         </div>
       )}
 
@@ -287,8 +308,8 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {[
             { label: '發文數', value: summary.overview.totalPosts, unit: '則' },
             { label: '平均互動率', value: `${summary.overview.avgEngRate}%`, unit: '' },
-            { label: '平均觸及', value: summary.overview.avgReach.toLocaleString(), unit: '人' },
-            { label: '追蹤成長', value: `+${summary.overview.followerGrowth}`, unit: '人' },
+            { label: '廣告 CTR', value: `${summary.adsSummary.ctr}%`, unit: '' },
+            { label: '廣告 CPC', value: `$${summary.adsSummary.cpc}`, unit: '' },
           ].map(c => (
             <div key={c.label} style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 16px' }}>
               <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4 }}>{c.label}</div>
