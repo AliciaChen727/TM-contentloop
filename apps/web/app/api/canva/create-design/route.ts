@@ -78,12 +78,14 @@ export async function POST(req: NextRequest) {
   }
   if (!assetId) return NextResponse.json({ error: 'Asset upload timed out' }, { status: 504 })
 
-  // 3. Create a design containing the asset
+  // 3. Create a design containing the asset. Canva's preset names are limited
+  // to doc/email/presentation/whiteboard (no social/image preset), so we omit
+  // design_type and let Canva size the design to the asset (asset_id alone is
+  // a valid request).
   const designRes = await canvaFetch(uid, '/designs', {
     method: 'POST',
     body: JSON.stringify({
       type: 'type_and_asset',
-      design_type: { type: 'preset', name: 'instagram_post' },
       asset_id: assetId,
       title: name,
     }),
