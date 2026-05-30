@@ -416,7 +416,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       let attempts = 0
       const interval = setInterval(async () => {
         attempts++
-        if (attempts > 36) { // ~6 min max (video can take a few minutes)
+        if (attempts > 120) { // ~20 min max (video can take several minutes on high load)
           clearInterval(interval)
           setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: '影片生成逾時，請重試' } : m))
           return

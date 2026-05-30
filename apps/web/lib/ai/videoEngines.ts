@@ -3,7 +3,7 @@
 // /api/ai/video route already polls (built for Vertex Veo), so these slot in.
 const FAL_QUEUE = 'https://queue.fal.run'
 
-export type FalVideoEngine = 'fal-hailuo' | 'fal-grok-video' | 'fal-kling-26'
+export type FalVideoEngine = 'fal-hailuo' | 'fal-kling-26' | 'fal-wan'
 
 interface FalVideoConfig {
   model: string
@@ -23,15 +23,15 @@ const FAL_VIDEO: Record<FalVideoEngine, FalVideoConfig> = {
     seconds: d => (isLong(d) ? 10 : 6),
     input: (p, d) => ({ prompt: p, duration: isLong(d) ? '10' : '6', aspect_ratio: '9:16' }),
   },
-  'fal-grok-video': { // integer duration
-    model: 'xai/grok-imagine-video/text-to-video',
-    seconds: d => (isLong(d) ? 10 : 6),
-    input: (p, d) => ({ prompt: p, duration: isLong(d) ? 10 : 6, aspect_ratio: '9:16', resolution: '720p' }),
-  },
   'fal-kling-26': { // supports 5 | 10
     model: 'fal-ai/kling-video/v2.6/pro/text-to-video',
     seconds: d => (isLong(d) ? 10 : 5),
     input: (p, d) => ({ prompt: p, duration: isLong(d) ? '10' : '5', aspect_ratio: '9:16' }),
+  },
+  'fal-wan': { // flexible frames
+    model: 'fal-ai/wan/v2.2/t2v-14b/text-to-video',
+    seconds: d => (isLong(d) ? 8 : 5),
+    input: (p, d) => ({ prompt: p, num_frames: isLong(d) ? 96 : 60, aspect_ratio: '9:16' }),
   },
 }
 
