@@ -48,9 +48,11 @@ async function fetchStoryInsights(storyId: string, token: string): Promise<Story
     }
   }
 
-  // Graceful degradation: v21 uses `impressions`; newer versions use `views`.
-  let core = await tryMetrics('reach,impressions,replies')
-  if (!core) core = await tryMetrics('reach,views,replies')
+  // Meta deprecated `impressions` in 2025 and replaced it with `views`.
+  // Try `views` first, fallback to `impressions` if on older versions, then try individual.
+  let core = await tryMetrics('reach,views,replies')
+  if (!core) core = await tryMetrics('reach,impressions,replies')
+  if (!core) core = await tryMetrics('views,replies')
   if (!core) core = await tryMetrics('reach,replies')
   for (const m of core ?? []) {
     const v = m.values?.[0]?.value ?? 0
