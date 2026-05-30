@@ -3,17 +3,41 @@
 import { Icon } from '../Icon'
 import type { AdData, Post } from '../types'
 
-// Resolve a clickable FB/IG post URL + thumbnail for a diagnosis item.
-// Prefers matching the creative's storyId to a real synced post (correct
-// permalink for both FB & IG); falls back to a constructed FB URL.
-function resolvePostLink(storyId: string | null | undefined, posts: Post[]): string | null {
-  if (!storyId) return null
-  const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
-  // Match against synced posts (Post.id is `{pageId}_{postId}` for FB, mediaId for IG)
-  const match = posts.find(p => p.id === storyId || p.id === postId || p.id.endsWith(`_${postId}`))
-  if (match?.url && match.url !== '#') return match.url
-  // Fallback: FB post permalink works with the combined story id
-  return `https://www.facebook.com/${storyId}`
+// Normalize a title/name for fuzzy matching (strip punctuation/brackets/spaces).
+function normalizeName(s: string): string {
+  return (s || '').replace(/[「」『』《》【】\[\]()（）"'：:、，。.,#＃\s]/g, '').toLowerCase()
+}
+
+// Name-based match: if the creative/diagnosis name and a post's title share a
+// meaningful leading chunk, treat them as the same post. Handles the case where
+// the ad has no storyId but its name echoes the post text (e.g. 《Legacy 看板人物 #9》).
+export function matchPostByName(name: string | null | undefined, posts: Post[]): string {
+  const n = normalizeName(name ?? '')
+  if (n.length < 4) return ''
+  for (const p of posts) {
+    const t = normalizeName(p.title)
+    if (t.length < 4 || !p.url || p.url === '#') continue
+    // Match if either string starts-with the other's leading 6+ chars, or one contains the other.
+    const a = n.slice(0, 8), b = t.slice(0, 8)
+    if (n.includes(b) || t.includes(a) || t.startsWith(a.slice(0, 6)) || n.startsWith(b.slice(0, 6))) {
+      return p.url
+    }
+  }
+  return ''
+}
+
+// Resolve a clickable FB/IG post URL for a diagnosis item.
+// 1) match creative storyId to a synced post  2) match by name  3) constructed FB URL.
+function resolvePostLink(storyId: string | null | undefined, name: string | null | undefined, posts: Post[]): string | null {
+  if (storyId) {
+    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+    const match = posts.find(p => p.id === storyId || p.id === postId || p.id.endsWith(`_${postId}`))
+    if (match?.url && match.url !== '#') return match.url
+  }
+  const byName = matchPostByName(name, posts)
+  if (byName) return byName
+  if (storyId) return `https://www.facebook.com/${storyId}`
+  return null
 }
 
 export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts?: Post[] | null; onAskAI?: (q: string) => void }) {
@@ -68,7 +92,7 @@ export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts
 
       <div className="ads-diag-list">
         {data.diagnosis.map(d => {
-          const postUrl = resolvePostLink(d.storyId, postList)
+          const postUrl = resolvePostLink(d.storyId, d.adset, postList)
           const hasPreview = !!(d.thumbnailUrl || postUrl)
           return (
           <div key={d.id} className={`ads-diag-item ${d.severity}`}>

@@ -53,13 +53,29 @@ interface Summary {
   adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
 }
 
+// Normalize text for fuzzy name matching (strip punctuation/brackets/spaces).
+function normalizeName(s: string): string {
+  return (s || '').replace(/[「」『』《》【】\[\]()（）"'：:、，。.,#＃\s]/g, '').toLowerCase()
+}
+
 // Match an AI analysis item back to the original post (for the permalink).
-// Prefer exact engRate match, fall back to the post at the same index.
-function matchPostLink(items: RawPost[] | undefined, engRate: number, index: number): string {
+// 1) exact engRate match  2) name/snippet overlap with post message  3) same index.
+function matchPostLink(items: RawPost[] | undefined, engRate: number, index: number, snippet?: string): string {
   if (!items || items.length === 0) return ''
   const byRate = items.find(p => Math.abs(p.engRate - engRate) < 0.01)
-  const post = byRate ?? items[index] ?? null
-  return post?.permalink ?? ''
+  if (byRate?.permalink) return byRate.permalink
+  // Name-based: AI snippet echoes the post message
+  const n = normalizeName(snippet ?? '')
+  if (n.length >= 4) {
+    const byName = items.find(p => {
+      const t = normalizeName(p.message)
+      if (t.length < 4) return false
+      const a = n.slice(0, 8), b = t.slice(0, 8)
+      return n.includes(b) || t.includes(a) || t.startsWith(a.slice(0, 6)) || n.startsWith(b.slice(0, 6))
+    })
+    if (byName?.permalink) return byName.permalink
+  }
+  return items[index]?.permalink ?? ''
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -92,7 +108,7 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
     `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`
 
   const postCard = (p: PostSummary, type: 'top' | 'under', index: number) => {
-    const link = matchPostLink(type === 'top' ? summary.topPosts : summary.underPosts, p.engRate, index)
+    const link = matchPostLink(type === 'top' ? summary.topPosts : summary.underPosts, p.engRate, index, p.postSnippet)
     return `
     <div class="post-card ${type}">
       <div class="post-header">互動率 ${p.engRate}%&nbsp;·&nbsp;「${p.postSnippet}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看貼文 ↗</a>` : ''}</div>
@@ -542,7 +558,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🌟 表現最佳貼文分析</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {report.topPostAnalysis.map((p, i) => {
-                const link = matchPostLink(summary.topPosts, p.engRate, i)
+                const link = matchPostLink(summary.topPosts, p.engRate, i, p.postSnippet)
                 return (
                 <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #86efac' }}>
                   <div style={{ fontSize: 12, color: '#15803d', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -561,7 +577,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📉 需改善貼文分析</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {report.underPerformerAnalysis.map((p, i) => {
-                const link = matchPostLink(summary.underPosts, p.engRate, i)
+                const link = matchPostLink(summary.underPosts, p.engRate, i, p.postSnippet)
                 return (
                 <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fdba74' }}>
                   <div style={{ fontSize: 12, color: '#c2410c', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
