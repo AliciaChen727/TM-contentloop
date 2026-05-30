@@ -9,7 +9,7 @@ import { checkImageQuota } from '@/lib/quota'
 import { recordImageGeneration } from '@/lib/usage'
 import { generateImage, type ImageEngine } from '@/lib/ai/generateImage'
 
-const VALID_ENGINES: ImageEngine[] = ['vertex-imagen', 'fal-recraft', 'fal-flux']
+const VALID_ENGINES: ImageEngine[] = ['vertex-imagen', 'fal-recraft', 'fal-flux', 'fal-grok-image', 'fal-gpt-image-2']
 
 interface CreativeBrief {
   imagePrompt: string
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
   }
   if (!parsed) return NextResponse.json({ error: 'AI 回應格式異常，請再試一次' }, { status: 500 })
 
-  const chosenEngine: ImageEngine = engine && VALID_ENGINES.includes(engine) ? engine : 'fal-recraft'
+  const chosenEngine: ImageEngine = engine && VALID_ENGINES.includes(engine) ? engine : 'fal-grok-image'
   let img
   try {
     img = await generateImage(chosenEngine, parsed.imagePrompt)

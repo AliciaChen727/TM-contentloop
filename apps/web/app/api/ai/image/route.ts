@@ -1,11 +1,13 @@
 export const dynamic = 'force-dynamic'
+// Some engines (gpt-image-2, grok) take 10–30s; raise the function timeout.
+export const maxDuration = 60
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { recordImageGeneration } from '@/lib/usage'
 import { checkImageQuota } from '@/lib/quota'
 import { generateImage, type ImageEngine } from '@/lib/ai/generateImage'
 
-const VALID_ENGINES: ImageEngine[] = ['vertex-imagen', 'fal-recraft', 'fal-flux']
+const VALID_ENGINES: ImageEngine[] = ['vertex-imagen', 'fal-recraft', 'fal-flux', 'fal-grok-image', 'fal-gpt-image-2']
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')

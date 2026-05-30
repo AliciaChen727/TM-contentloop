@@ -371,7 +371,8 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ prompt }),
+        // Default to Grok Imagine: cheap, aesthetic, decent cross-language text.
+        body: JSON.stringify({ prompt, engine: 'fal-grok-image' }),
       })
       const data = await res.json()
       if (!res.ok || !data.imageData) {

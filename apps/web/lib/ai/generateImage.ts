@@ -2,17 +2,28 @@ import { GoogleAuth } from 'google-auth-library'
 import { falGenerateImage } from './falClient'
 
 // Image-generation engine abstraction. Routing by use case:
-//  - vertex-imagen: general photoreal (default; existing GCP service account)
-//  - fal-recraft:    ad creative with readable in-image text (Recraft V3)
-//  - fal-flux:       fast general-purpose diffusion (FLUX dev)
-export type ImageEngine = 'vertex-imagen' | 'fal-recraft' | 'fal-flux'
+//  - fal-grok-image: aesthetic, cheap, decent cross-language text (default)
+//  - fal-gpt-image-2: best in-image text incl. Chinese (pricier/slower)
+//  - fal-recraft:     ad creative with readable text, brand/vector styles
+//  - fal-flux:        fast general-purpose diffusion (FLUX dev)
+//  - vertex-imagen:   existing GCP service account (kept as fallback)
+export type ImageEngine =
+  | 'vertex-imagen'
+  | 'fal-recraft'
+  | 'fal-flux'
+  | 'fal-grok-image'
+  | 'fal-gpt-image-2'
 
 export interface GenerateImageResult {
   imageData: string // base64, no data: prefix
   mimeType: string
 }
 
-const FAL_MODELS: Record<'fal-recraft' | 'fal-flux', string> = {
+type FalEngine = Exclude<ImageEngine, 'vertex-imagen'>
+
+const FAL_MODELS: Record<FalEngine, string> = {
+  'fal-grok-image': 'xai/grok-imagine-image',
+  'fal-gpt-image-2': 'fal-ai/gpt-image-2',
   'fal-recraft': 'fal-ai/recraft-v3',
   'fal-flux': 'fal-ai/flux/dev',
 }
@@ -21,14 +32,9 @@ export async function generateImage(
   engine: ImageEngine,
   prompt: string,
 ): Promise<GenerateImageResult> {
-  switch (engine) {
-    case 'fal-recraft':
-    case 'fal-flux':
-      return viaFal(FAL_MODELS[engine], prompt)
-    case 'vertex-imagen':
-    default:
-      return viaVertexImagen(prompt)
-  }
+  if (engine === 'vertex-imagen') return viaVertexImagen(prompt)
+  const model = FAL_MODELS[engine] ?? FAL_MODELS['fal-grok-image']
+  return viaFal(model, prompt)
 }
 
 // fal returns a hosted URL; download and normalise to base64 so the response

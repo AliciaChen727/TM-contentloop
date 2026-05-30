@@ -22,6 +22,15 @@ interface GeneratedCreative {
   rationale: string
 }
 
+type PanelEngine = 'fal-grok-image' | 'fal-gpt-image-2' | 'fal-recraft' | 'fal-flux'
+
+const ENGINE_OPTIONS: { value: PanelEngine; label: string }[] = [
+  { value: 'fal-grok-image', label: 'Grok Imagine（預設・便宜美感）' },
+  { value: 'fal-gpt-image-2', label: 'GPT Image 2（文字最強・含中文）' },
+  { value: 'fal-recraft', label: 'Recraft V3（廣告/品牌風格）' },
+  { value: 'fal-flux', label: 'FLUX dev（快速通用）' },
+]
+
 function parseDesignId(url: string): string | null {
   const m = url.match(/canva\.com\/design\/(D[A-Za-z0-9_-]{10,})/i)
   return m?.[1] ?? null
@@ -55,6 +64,7 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
   const [assetId, setAssetId] = useState<string | null>(null)
   const [designEditUrl, setDesignEditUrl] = useState<string | null>(null)
   const [briefText, setBriefText] = useState('')
+  const [engine, setEngine] = useState<PanelEngine>('fal-grok-image')
   const [gen, setGen] = useState<GeneratedCreative | null>(null)
   // null = checking, true/false = known
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
@@ -83,6 +93,7 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
     setAssetId(null)
     setDesignEditUrl(null)
     setBriefText('')
+    setEngine('fal-grok-image')
     setGen(null)
   }
 
@@ -96,7 +107,7 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
       const res = await fetch('/api/ai/creative', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId, brief: briefText.trim() || undefined, engine: 'fal-recraft' }),
+        body: JSON.stringify({ pageId, brief: briefText.trim() || undefined, engine }),
       })
       const d = await res.json()
       if (!res.ok) {
@@ -357,6 +368,18 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
         {/* Step: generate input */}
         {step === 'generateInput' && (
           <div>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--ad-text3)', marginBottom: 6 }}>圖片模型</label>
+            <select
+              value={engine}
+              onChange={e => setEngine(e.target.value as PanelEngine)}
+              style={{
+                width: '100%', fontSize: 13, padding: '8px 10px', borderRadius: 10, marginBottom: 14,
+                border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text)',
+                outline: 'none', cursor: 'pointer',
+              }}
+            >
+              {ENGINE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
             <p style={{ fontSize: 13, color: 'var(--ad-text2)', marginBottom: 10 }}>
               想強調什麼？（選填，留空則依品牌資料自動發想）
             </p>
