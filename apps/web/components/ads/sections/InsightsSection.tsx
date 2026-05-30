@@ -29,6 +29,13 @@ interface OverviewData {
 
 interface BenchmarkStatus { value: number; benchmark: number; status: 'above' | 'below' | 'nodata' }
 
+interface RawPost {
+  id: string
+  message: string
+  engRate: number
+  permalink: string
+}
+
 interface Summary {
   period: string
   periodKey: string
@@ -39,9 +46,20 @@ interface Summary {
   optimizationGoal: string
   industry: string
   overview: OverviewData
+  topPosts?: RawPost[]
+  underPosts?: RawPost[]
   benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus; adCpc: BenchmarkStatus; adCpm: BenchmarkStatus } }
   benchmarkIndustry: string
   adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
+}
+
+// Match an AI analysis item back to the original post (for the permalink).
+// Prefer exact engRate match, fall back to the post at the same index.
+function matchPostLink(items: RawPost[] | undefined, engRate: number, index: number): string {
+  if (!items || items.length === 0) return ''
+  const byRate = items.find(p => Math.abs(p.engRate - engRate) < 0.01)
+  const post = byRate ?? items[index] ?? null
+  return post?.permalink ?? ''
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -73,13 +91,16 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
   const statCard = (label: string, value: string) =>
     `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`
 
-  const postCard = (p: PostSummary, type: 'top' | 'under') => `
+  const postCard = (p: PostSummary, type: 'top' | 'under', index: number) => {
+    const link = matchPostLink(type === 'top' ? summary.topPosts : summary.underPosts, p.engRate, index)
+    return `
     <div class="post-card ${type}">
-      <div class="post-header">互動率 ${p.engRate}%&nbsp;·&nbsp;「${p.postSnippet}⋯」</div>
+      <div class="post-header">互動率 ${p.engRate}%&nbsp;·&nbsp;「${p.postSnippet}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看貼文 ↗</a>` : ''}</div>
       ${type === 'top'
         ? `<div>💡 ${p.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${p.replicablePattern}</div>`
         : `<div>⚠️ 問題：${p.issue}</div><div class="post-pattern">🔧 建議：${p.improvement}</div>`}
     </div>`
+  }
 
   return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
 <title>洞察報告 ${summary.period}</title>
@@ -146,10 +167,10 @@ ${bmRow('廣告 CPA（每次行動成本）', `$${Number(bm.adCpc.value).toFixed
 </div>
 
 <h2>🌟 表現最佳貼文分析</h2>
-${report.topPostAnalysis.map(p => postCard(p, 'top')).join('')}
+${report.topPostAnalysis.map((p, i) => postCard(p, 'top', i)).join('')}
 
 <h2>📉 需改善貼文分析</h2>
-${report.underPerformerAnalysis.map(p => postCard(p, 'under')).join('')}
+${report.underPerformerAnalysis.map((p, i) => postCard(p, 'under', i)).join('')}
 
 <h2>🎯 Top 3 行動建議</h2>
 <ol>${report.topRecommendations.map(r => `<li>${r}</li>`).join('')}</ol>
@@ -501,7 +522,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       )}
 
       {/* AI Report */}
-      {report && (
+      {report && summary && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="ads-ai-box" style={{ flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -520,26 +541,38 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 18px' }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🌟 表現最佳貼文分析</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {report.topPostAnalysis.map((p, i) => (
+              {report.topPostAnalysis.map((p, i) => {
+                const link = matchPostLink(summary.topPosts, p.engRate, i)
+                return (
                 <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #86efac' }}>
-                  <div style={{ fontSize: 12, color: '#15803d', fontWeight: 600, marginBottom: 4 }}>互動率 {p.engRate}% &nbsp;·&nbsp; 「{p.postSnippet}⋯」</div>
+                  <div style={{ fontSize: 12, color: '#15803d', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>互動率 {p.engRate}% &nbsp;·&nbsp; 「{p.postSnippet}⋯」</span>
+                    {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: 700, textDecoration: 'none' }}>查看貼文 ↗</a>}
+                  </div>
                   <div style={{ fontSize: 12, color: '#166534', marginBottom: 4 }}>💡 {p.whyItWorked}</div>
                   <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>📌 可複製模式：{p.replicablePattern}</div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
           <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 18px' }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📉 需改善貼文分析</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {report.underPerformerAnalysis.map((p, i) => (
+              {report.underPerformerAnalysis.map((p, i) => {
+                const link = matchPostLink(summary.underPosts, p.engRate, i)
+                return (
                 <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fdba74' }}>
-                  <div style={{ fontSize: 12, color: '#c2410c', fontWeight: 600, marginBottom: 4 }}>互動率 {p.engRate}% &nbsp;·&nbsp; 「{p.postSnippet}⋯」</div>
+                  <div style={{ fontSize: 12, color: '#c2410c', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>互動率 {p.engRate}% &nbsp;·&nbsp; 「{p.postSnippet}⋯」</span>
+                    {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#ea580c', fontWeight: 700, textDecoration: 'none' }}>查看貼文 ↗</a>}
+                  </div>
                   <div style={{ fontSize: 12, color: '#9a3412', marginBottom: 4 }}>⚠️ 問題：{p.issue}</div>
                   <div style={{ fontSize: 11, color: '#ea580c', fontWeight: 500 }}>🔧 建議：{p.improvement}</div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
