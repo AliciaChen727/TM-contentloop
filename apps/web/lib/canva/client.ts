@@ -28,14 +28,19 @@ export async function saveCanvaTokens(uid: string, tokens: CanvaTokens): Promise
 }
 
 async function refreshAccessToken(uid: string, refreshToken: string): Promise<CanvaTokens> {
+  // Canva authenticates the client via HTTP Basic auth, not body credentials.
+  const basic = Buffer.from(
+    `${process.env.CANVA_CLIENT_ID}:${process.env.CANVA_CLIENT_SECRET}`,
+  ).toString('base64')
   const res = await fetch(TOKEN_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${basic}`,
+    },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: process.env.CANVA_CLIENT_ID!,
-      client_secret: process.env.CANVA_CLIENT_SECRET!,
     }),
   })
   if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`)
