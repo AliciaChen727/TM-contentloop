@@ -22,6 +22,7 @@ interface RawStory {
   thumbnail_url?: string
   media_url?: string
   timestamp: string
+  caption?: string
 }
 
 // Story insight metrics have churned a lot across API versions (impressions →
@@ -93,7 +94,7 @@ export async function syncIgStories(
   pageId: string,
 ): Promise<{ synced: number; error?: string }> {
   const url = new URL(`${BASE}/${igUserId}/stories`)
-  url.searchParams.set('fields', 'id,media_type,permalink,thumbnail_url,media_url,timestamp')
+  url.searchParams.set('fields', 'id,media_type,permalink,thumbnail_url,media_url,timestamp,caption')
   url.searchParams.set('access_token', accessToken)
 
   let stories: RawStory[]
@@ -125,6 +126,7 @@ export async function syncIgStories(
       thumbnailUrl: story.thumbnail_url ?? story.media_url ?? '',
       permalink: story.permalink ?? '',
       timestamp: Timestamp.fromDate(new Date(story.timestamp)),
+      caption: story.caption ?? '',
       insights: ins,
       syncedAt: Timestamp.now(),
     }, { merge: true })

@@ -10,6 +10,7 @@ export interface IgStory {
   thumbnailUrl: string
   permalink: string
   timestamp: string
+  caption?: string
   insights: {
     reach: number
     views: number
@@ -54,7 +55,7 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: {
 
 function buildStoryPrompt(s: IgStory): string {
   const rate = skipRate(s)
-  return `請分析這則 Instagram 限動：\n日期：${s.timestamp.slice(0, 10)}｜類型：限動${s.mediaSubType === 'VIDEO' ? '影片' : '圖片'}\n觀看：${s.insights.views}｜觸及：${s.insights.reach}｜回覆：${s.insights.replies}｜略過率：${rate != null ? (rate * 100).toFixed(1) + '%' : '無資料'}\n\n請判斷這則限動的吸引力與留存表現，並給出具體優化建議。`
+  return `請分析這則 Instagram 限動：\n日期：${s.timestamp.slice(0, 10)}｜類型：限動${s.mediaSubType === 'VIDEO' ? '影片' : '圖片'}\n內容：${s.caption || '（無文字內容）'}\n觀看：${s.insights.views}｜觸及：${s.insights.reach}｜回覆：${s.insights.replies}｜略過率：${rate != null ? (rate * 100).toFixed(1) + '%' : '無資料'}\n\n請判斷這則限動的吸引力與留存表現，並給出具體優化建議。`
 }
 
 export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
@@ -95,6 +96,7 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
         <thead>
           <tr>
             <SortTh k="timestamp" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'left' }}>內容</th>
             <th style={{ textAlign: 'left' }}>類型</th>
             <th style={{ textAlign: 'left' }}>限動</th>
             <SortTh k="views" label="觀看" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -111,6 +113,11 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
             return (
               <tr key={s.id}>
                 <td className="ads-posts-date">{fullDate(s.timestamp)}</td>
+                <td style={{ maxWidth: 200 }}>
+                  <div style={{ fontSize: 13, color: 'var(--ad-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.caption || '（無文字內容）'}>
+                    {s.caption ? s.caption : <span style={{ color: 'var(--ad-text3)' }}>（無文字內容）</span>}
+                  </div>
+                </td>
                 <td>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: s.platform === 'FB' ? '#E7F0FF' : '#FCE4EC', color: s.platform === 'FB' ? '#1877F2' : '#C2185B' }}>
