@@ -5,24 +5,37 @@ import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { BENCHMARKS } from '@/lib/benchmarks'
 
 // Period helpers
-function getPeriodRange(period: string): { start: Date; end: Date; label: string } {
+// params: year=2026, month=5 OR year=2026, quarter=2 (1-4)
+function getPeriodRange(year: number, periodType: 'month' | 'quarter', value: number): {
+  start: Date; end: Date; label: string; isPartial: boolean; periodKey: string
+} {
   const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth() // 0-based
 
-  if (period === 'quarter') {
-    const qStart = Math.floor(m / 3) * 3
+  if (periodType === 'month') {
+    const start = new Date(year, value - 1, 1)
+    const fullEnd = new Date(year, value, 0, 23, 59, 59)
+    const isPartial = now < fullEnd
+    const end = isPartial ? now : fullEnd
     return {
-      start: new Date(y, qStart, 1),
-      end: new Date(y, qStart + 3, 0, 23, 59, 59),
-      label: `Q${Math.floor(qStart / 3) + 1} ${y}`,
+      start, end,
+      label: `${year}年${value}月`,
+      isPartial,
+      periodKey: `${year}-${String(value).padStart(2, '0')}`,
     }
   }
-  // Default: current month
+
+  // Quarter: 1=Q1(1-3), 2=Q2(4-6), 3=Q3(7-9), 4=Q4(10-12)
+  const QUARTER_LABELS = ['', '1-3月', '4-6月', '7-9月', '10-12月']
+  const qStartMonth = (value - 1) * 3
+  const start = new Date(year, qStartMonth, 1)
+  const fullEnd = new Date(year, qStartMonth + 3, 0, 23, 59, 59)
+  const isPartial = now < fullEnd
+  const end = isPartial ? now : fullEnd
   return {
-    start: new Date(y, m, 1),
-    end: new Date(y, m + 1, 0, 23, 59, 59),
-    label: `${y}年${m + 1}月`,
+    start, end,
+    label: `${year} Q${value}（${QUARTER_LABELS[value]}）`,
+    isPartial,
+    periodKey: `${year}-Q${value}`,
   }
 }
 
@@ -41,7 +54,11 @@ export async function GET(req: NextRequest) {
   }
 
   const pageId = req.nextUrl.searchParams.get('pageId') ?? ''
-  const period = req.nextUrl.searchParams.get('period') ?? 'month'
+  const now = new Date()
+  const periodType = (req.nextUrl.searchParams.get('periodType') ?? 'month') as 'month' | 'quarter'
+  const year = parseInt(req.nextUrl.searchParams.get('year') ?? String(now.getFullYear()))
+  const month = parseInt(req.nextUrl.searchParams.get('month') ?? String(now.getMonth() + 1))
+  const quarter = parseInt(req.nextUrl.searchParams.get('quarter') ?? String(Math.floor(now.getMonth() / 3) + 1))
 
   // Resolve data owner
   let dataOwnerUid = uid
@@ -58,7 +75,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const { start, end, label } = getPeriodRange(period)
+  const { start, end, label, isPartial, periodKey } = getPeriodRange(
+    year, periodType, periodType === 'month' ? month : quarter
+  )
   const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
   // --- Fetch FB posts for period ---
@@ -142,7 +161,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     period: label,
-    periodType: period,
+    periodKey,
+    periodType,
+    isPartial,
+    dataAsOf: end.toISOString().slice(0, 10),
     // Posts date range (calendar month/quarter)
     dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
     // Ads date range (from adInsights snapshot, may differ from calendar period)
