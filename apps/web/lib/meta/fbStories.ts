@@ -66,8 +66,12 @@ export async function syncFbStories(
   try {
     const res = await fetch(url)
     const data = await res.json()
-    if (!res.ok || data.error) return { synced: 0, error: data.error?.message ?? 'fb stories fetch failed' }
+    if (!res.ok || data.error) {
+      console.error(`[fbStories] pageId=${pageId} status=${res.status} error=${JSON.stringify(data.error).slice(0, 300)}`)
+      return { synced: 0, error: data.error?.message ?? 'fb stories fetch failed' }
+    }
     stories = data.data ?? []
+    console.log(`[fbStories] pageId=${pageId} status=${res.status} count=${stories.length} sample=${JSON.stringify(stories[0] ?? {}).slice(0, 250)} paging=${data.paging ? 'yes' : 'no'}`)
   } catch (e) {
     return { synced: 0, error: e instanceof Error ? e.message : 'fb stories fetch exception' }
   }
