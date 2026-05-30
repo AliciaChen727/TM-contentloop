@@ -939,8 +939,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                 onChange={e => setEditedVideoPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireVideo() } }}
                                 style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }} />
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ad-text3)', marginBottom: 6 }}>
-                                影片模型
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                                 <select value={videoEngine}
                                   onChange={e => setVideoEngine(e.target.value)}
                                   title="影片模型"
@@ -949,7 +948,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                   <option value="fal-grok-video">Grok（含音訊）</option>
                                   <option value="fal-kling-26">Kling 2.6（高品質）</option>
                                 </select>
-                              </label>
+                                <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 6)}
+                                  onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
+                                  title="影片長度"
+                                  style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
+                                  <option value={6}>短（~6 秒）</option>
+                                  <option value={10}>長（~10 秒）</option>
+                                </select>
+                              </div>
                               <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={fireVideo}>🎬 生成 Reels 影片</button>
                               <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>Enter 換行　Shift+Enter 送出</div>
                             </div>

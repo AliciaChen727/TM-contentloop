@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   // fal video engines (async queue). Default for new requests.
   if (engine && isFalVideoEngine(engine)) {
-    const seconds = falVideoSeconds(engine)
+    const seconds = falVideoSeconds(engine, durationSeconds)
     const quota = await checkVideoQuota(uid, seconds)
     if (!quota.ok) {
       return NextResponse.json(
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       )
     }
     try {
-      const { model, requestId } = await submitFalVideo(engine, prompt)
+      const { model, requestId } = await submitFalVideo(engine, prompt, durationSeconds)
       await recordVideoGeneration(uid, seconds)
       return NextResponse.json({ provider: 'fal', model, requestId })
     } catch (e) {

@@ -7,26 +7,31 @@ export type FalVideoEngine = 'fal-hailuo' | 'fal-grok-video' | 'fal-kling-26'
 
 interface FalVideoConfig {
   model: string
-  seconds: number // billed/quota seconds for this engine's default duration
-  input: (prompt: string) => Record<string, unknown>
+  // Map a requested duration (s) to this model's valid seconds + input payload.
+  // These models only support fixed durations, so we snap: short vs long.
+  seconds: (requested?: number) => number
+  input: (prompt: string, requested?: number) => Record<string, unknown>
 }
 
-// All set to 9:16 vertical (Reels). Durations match each model's safe default.
+// Each model supports limited durations; "long" (≥9s) snaps to 10, else short.
+const isLong = (d?: number) => !!d && d >= 9
+
+// All set to 9:16 vertical (Reels).
 const FAL_VIDEO: Record<FalVideoEngine, FalVideoConfig> = {
-  'fal-hailuo': {
+  'fal-hailuo': { // supports 6 | 10
     model: 'fal-ai/minimax/hailuo-02/standard/text-to-video',
-    seconds: 6,
-    input: p => ({ prompt: p, duration: '6', aspect_ratio: '9:16' }),
+    seconds: d => (isLong(d) ? 10 : 6),
+    input: (p, d) => ({ prompt: p, duration: isLong(d) ? '10' : '6', aspect_ratio: '9:16' }),
   },
-  'fal-grok-video': {
+  'fal-grok-video': { // integer duration
     model: 'xai/grok-imagine-video/text-to-video',
-    seconds: 6,
-    input: p => ({ prompt: p, duration: 6, aspect_ratio: '9:16', resolution: '720p' }),
+    seconds: d => (isLong(d) ? 10 : 6),
+    input: (p, d) => ({ prompt: p, duration: isLong(d) ? 10 : 6, aspect_ratio: '9:16', resolution: '720p' }),
   },
-  'fal-kling-26': {
+  'fal-kling-26': { // supports 5 | 10
     model: 'fal-ai/kling-video/v2.6/pro/text-to-video',
-    seconds: 5,
-    input: p => ({ prompt: p, duration: '5', aspect_ratio: '9:16' }),
+    seconds: d => (isLong(d) ? 10 : 5),
+    input: (p, d) => ({ prompt: p, duration: isLong(d) ? '10' : '5', aspect_ratio: '9:16' }),
   },
 }
 
@@ -34,12 +39,12 @@ export function isFalVideoEngine(e: string): e is FalVideoEngine {
   return e in FAL_VIDEO
 }
 
-export function falVideoSeconds(engine: FalVideoEngine): number {
-  return FAL_VIDEO[engine]?.seconds ?? 6
+export function falVideoSeconds(engine: FalVideoEngine, requested?: number): number {
+  return FAL_VIDEO[engine]?.seconds(requested) ?? 6
 }
 
 // Submit a generation job; returns the model id + request id for polling.
-export async function submitFalVideo(engine: FalVideoEngine, prompt: string): Promise<{ model: string; requestId: string }> {
+export async function submitFalVideo(engine: FalVideoEngine, prompt: string, requestedSeconds?: number): Promise<{ model: string; requestId: string }> {
   const key = process.env.FAL_KEY
   if (!key) throw new Error('FAL_KEY not configured')
   const cfg = FAL_VIDEO[engine]
@@ -48,7 +53,7 @@ export async function submitFalVideo(engine: FalVideoEngine, prompt: string): Pr
   const res = await fetch(`${FAL_QUEUE}/${cfg.model}`, {
     method: 'POST',
     headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(cfg.input(prompt)),
+    body: JSON.stringify(cfg.input(prompt, requestedSeconds)),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok || !data.request_id) {
