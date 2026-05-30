@@ -44,9 +44,9 @@ export default function SettingsPage() {
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
   const [canvaMsg, setCanvaMsg] = useState<'connected' | 'error' | null>(null)
 
-  // Read the ?canva=... result once, then strip it from the URL. OAuth leaves
-  // intermediate steps in browser history; without cleaning the param, pressing
-  // back or refreshing replays a stale callback and shows a misleading error.
+  // Fallback path only: if the OAuth flow ran full-page (popup blocked), the
+  // callback redirects here with ?canva=... — read it once, then strip it so
+  // back/refresh doesn't replay a stale result.
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get('canva')
     if (param === 'connected' || param === 'error') {
@@ -54,6 +54,33 @@ export default function SettingsPage() {
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
+
+  // Preferred path: the OAuth flow runs in a popup so canva.com never enters the
+  // main window's history (fixes "back button returns to Canva consent"). The
+  // callback posts the result back here and closes itself.
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return
+      const data = e.data as { type?: string; status?: 'connected' | 'error' }
+      if (data?.type !== 'canva-result') return
+      if (data.status === 'connected') {
+        setCanvaMsg('connected')
+        setCanvaConnected(true)
+      } else if (data.status === 'error') {
+        setCanvaMsg('error')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
+  function connectCanva() {
+    if (!idToken) return
+    const url = `/api/auth/canva/authorize?idToken=${encodeURIComponent(idToken)}`
+    const popup = window.open(url, 'canva-oauth', 'width=600,height=760')
+    // Popup blocked → fall back to full-page navigation (callback redirects back)
+    if (!popup) window.location.href = url
+  }
 
   const needsOtherText = industry === 'other'
   const goalReady = !!adGoal && !!industry && (!needsOtherText || industryOther.trim().length > 0)
@@ -340,12 +367,13 @@ export default function SettingsPage() {
               </span>
             </div>
             {!canvaConnected && (
-              <a
-                href={`/api/auth/canva/authorize?idToken=${encodeURIComponent(idToken)}`}
-                className="px-4 py-2 bg-[#8B5CF6] text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+              <button
+                onClick={connectCanva}
+                disabled={!idToken}
+                className="px-4 py-2 bg-[#8B5CF6] text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
               >
                 連接 Canva
-              </a>
+              </button>
             )}
             {canvaConnected && (
               <span className="text-xs text-green-600 font-semibold">✓ 授權有效</span>
