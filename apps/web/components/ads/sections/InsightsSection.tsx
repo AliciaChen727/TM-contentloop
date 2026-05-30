@@ -178,6 +178,13 @@ const selectStyle: React.CSSProperties = {
   color: 'var(--ad-text)', cursor: 'pointer',
 }
 
+// Fingerprint of the underlying data — if this changes, a cached Claude report
+// is stale and should be regenerated. Built from the metrics that drive the report.
+function fingerprintOf(s: Summary): string {
+  const a = s.adsSummary, o = s.overview
+  return [a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
+}
+
 export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?: (q: string) => void }) {
   const [periodType, setPeriodType] = useState<'month' | 'quarter'>('month')
   const [year, setYear] = useState(CURRENT_YEAR)
@@ -189,6 +196,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
   const [report, setReport] = useState<InsightReport | null>(null)
   const [generatedAt, setGeneratedAt] = useState('')
   const [fromCache, setFromCache] = useState(false)
+  const [staleCache, setStaleCache] = useState(false)
   const [error, setError] = useState('')
 
   // Derived period key for cache lookup
@@ -205,22 +213,41 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       setReport(null)
       setSummary(null)
       setFromCache(false)
+      setStaleCache(false)
       setError('')
       try {
         const user = auth.currentUser
         const idToken = user ? await user.getIdToken() : null
         if (!idToken) return
-        const res = await fetch(`/api/insights/cache?pageId=${pageId}&periodKey=${periodKey}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
-        if (!res.ok || cancelled) return
-        const { cached } = await res.json()
-        if (cached?.report && !cancelled) {
-          setReport(cached.report)
-          setSummary(cached.summary)
-          setFromCache(true)
-          const ts = cached.generatedAt?.toDate?.()?.toISOString?.() ?? cached.generatedAt ?? ''
-          setGeneratedAt(ts)
+        const headers = { Authorization: `Bearer ${idToken}` }
+
+        // Always fetch FRESH summary (cheap, no Claude) so numbers are never stale.
+        const params = new URLSearchParams({ pageId, periodType, year: String(year) })
+        if (periodType === 'month') params.set('month', String(month))
+        else params.set('quarter', String(quarter))
+        const [sumRes, cacheRes] = await Promise.all([
+          fetch(`/api/insights/summary?${params}`, { headers }),
+          fetch(`/api/insights/cache?pageId=${pageId}&periodKey=${periodKey}`, { headers }),
+        ])
+        if (cancelled) return
+
+        const freshSummary: Summary | null = sumRes.ok ? await sumRes.json() : null
+        if (freshSummary && !cancelled) setSummary(freshSummary)
+
+        const { cached } = cacheRes.ok ? await cacheRes.json() : { cached: null }
+        if (cached?.report && freshSummary && !cancelled) {
+          const freshFp = fingerprintOf(freshSummary)
+          const cachedFp = cached.dataFingerprint ?? null
+          if (cachedFp && cachedFp === freshFp) {
+            // Data unchanged → reuse cached Claude report (no tokens burned)
+            setReport(cached.report)
+            setFromCache(true)
+            const ts = cached.generatedAt?.toDate?.()?.toISOString?.() ?? cached.generatedAt ?? ''
+            setGeneratedAt(ts)
+          } else {
+            // Data changed (or legacy cache w/o fingerprint) → mark stale, prompt regenerate
+            setStaleCache(true)
+          }
         }
       } catch { /* non-critical */ } finally {
         if (!cancelled) setCacheChecking(false)
@@ -228,14 +255,14 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
     }
     checkCache()
     return () => { cancelled = true }
-  }, [pageId, periodKey])
+  }, [pageId, periodKey, periodType, year, month, quarter])
 
   async function generate(forceRegen = false) {
     if (forceRegen) {
       setReport(null)
-      setSummary(null)
       setFromCache(false)
     }
+    setStaleCache(false)
     setLoading(true)
     setError('')
     try {
@@ -270,11 +297,11 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       setGeneratedAt(repData.generatedAt)
       setFromCache(false)
 
-      // Step 3: save to cache
+      // Step 3: save to cache (with data fingerprint for staleness detection)
       await fetch('/api/insights/cache', {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId, periodKey: sumData.periodKey, report: repData.report, summary: sumData }),
+        body: JSON.stringify({ pageId, periodKey: sumData.periodKey, report: repData.report, summary: sumData, dataFingerprint: fingerprintOf(sumData) }),
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : '發生錯誤')
@@ -386,6 +413,17 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       {(isCurrentPeriod || (summary?.isPartial)) && (
         <div style={{ marginBottom: 14, padding: '8px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fcd34d', fontSize: 12, color: '#92400e' }}>
           ⏳ 本期間尚未結束，統計至 {summary?.dataAsOf ?? new Date().toISOString().slice(0, 10)}
+        </div>
+      )}
+
+      {/* Stale cache: data changed since last report */}
+      {staleCache && !loading && (
+        <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: '#eff6ff', border: '1px solid #93c5fd', fontSize: 12, color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span>🔄 數據已更新（與上次生成報告時不同），下方數字為最新；AI 文字分析需重新生成才會更新。</span>
+          <button onClick={() => generate(true)}
+            style={{ flexShrink: 0, padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 7, border: 'none', background: 'var(--ad-blue)', color: 'white', cursor: 'pointer' }}>
+            ✨ 重新生成
+          </button>
         </div>
       )}
 

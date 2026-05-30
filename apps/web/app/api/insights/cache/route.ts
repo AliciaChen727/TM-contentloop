@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
   try { uid = (await adminAuth.verifyIdToken(idToken)).uid }
   catch { return NextResponse.json({ error: 'Invalid token' }, { status: 401 }) }
 
-  const { pageId, periodKey, report, summary } = await req.json() as {
-    pageId: string; periodKey: string; report: unknown; summary: unknown
+  const { pageId, periodKey, report, summary, dataFingerprint } = await req.json() as {
+    pageId: string; periodKey: string; report: unknown; summary: unknown; dataFingerprint?: string
   }
   if (!pageId || !periodKey || !report) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
 
   await adminDb.collection('pages').doc(pageId).collection('insightReports').doc(periodKey).set({
     periodKey, report, summary,
+    dataFingerprint: dataFingerprint ?? null,
     generatedAt: FieldValue.serverTimestamp(),
     generatedBy: uid,
   })
