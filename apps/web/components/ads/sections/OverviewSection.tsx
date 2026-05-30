@@ -53,8 +53,10 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   const budgetPct = (s.spend / data.budget.total) * 100
   const roasLabel = isVideoBased ? '觀看效益' : isClickBased ? '點擊效益' : 'CPA'
   const roasUnit = isVideoBased || isClickBased ? '次/百元' : 'x'
-  const cpaLabel = isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'
-  const cpaQ = isVideoBased ? 'CPV 如何進一步降低？' : isClickBased ? 'CPC 如何進一步降低？' : 'CPA 如何進一步降低？'
+  // The dedicated `cpc` card already shows cost-per-click; this `cpa` card is the
+  // cost-per-action/registration (with target). Label it CPA to avoid a duplicate CPC.
+  const cpaLabel = isVideoBased ? 'CPV' : 'CPA'
+  const cpaQ = isVideoBased ? 'CPV 如何進一步降低？' : 'CPA 如何進一步降低？'
   const convLabel = isVideoBased ? '影片觀看' : isClickBased ? '點擊數' : '轉換數'
   const convMeta = isVideoBased ? '影片觀看次數' : isClickBased ? '連結點擊次數' : `營收 ${fmtK(s.revenue ?? 0)}`
   const roas = s.roas ?? 0
@@ -70,7 +72,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     spend: { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
     cpa: { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
     ctr: { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
-    cpc: { label: 'CPC', value: `$${fmt(s.cpa ?? 0, 2)}`, meta: '每次點擊成本', color: 'blue', delta: '', dir: 'neutral', q: 'CPC 如何降低？' },
+    cpc: { label: 'CPC', value: `$${fmt((s.clicks ?? 0) > 0 ? (s.spend ?? 0) / (s.clicks ?? 1) : 0, 2)}`, meta: '每次點擊成本（含互動）', color: 'blue', delta: '', dir: 'neutral', q: 'CPC 如何降低？' },
     cpm: { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
     reach: { label: '觸及人數', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)} 次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
     impressions: { label: '曝光次數', value: fmtCount(impressions), meta: `觸及 ${fmtCount(reach)} 人`, color: 'blue', delta: '', dir: 'neutral', q: '曝光與觸及的差距代表什麼？' },
