@@ -80,7 +80,7 @@ interface Message {
   videoLoading?: boolean
   videoError?: string
   videoDuration?: number
-  filePreviews?: { name: string; type: string }[]
+  filePreviews?: { name: string; type: string; url?: string }[]
   noApiKey?: boolean
 }
 
@@ -461,7 +461,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
 
     setMessages(p => [...p, {
       id: Date.now() + 'u', role: 'user', text: t, time: now,
-      filePreviews: atts.length > 0 ? atts.map(a => ({ name: a.name, type: a.type })) : undefined,
+      filePreviews: atts.length > 0 ? atts.map(a => ({
+        name: a.name,
+        type: a.type,
+        // Keep a small inline preview for images so the user can see exactly
+        // which image is being analysed.
+        url: a.type === 'image' && a.content ? `data:${a.mimeType};base64,${a.content}` : undefined,
+      })) : undefined,
     }])
     setInput('')
     setFileAttachments([])
@@ -865,11 +871,22 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                     <div className="ads-sk-msg-bubble">
                       <div className="ads-sk-msg-text">
                         {msg.filePreviews && msg.filePreviews.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
                             {msg.filePreviews.map((fp, i) => (
-                              <div key={i} style={{ fontSize: 11, color: 'var(--ad-text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                {FILE_EMOJI[fp.type] ?? '📎'} {fp.name}
-                              </div>
+                              fp.url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={i}
+                                  src={fp.url}
+                                  alt={fp.name}
+                                  title={fp.name}
+                                  style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.25)' }}
+                                />
+                              ) : (
+                                <div key={i} style={{ fontSize: 11, color: 'var(--ad-text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {FILE_EMOJI[fp.type] ?? '📎'} {fp.name}
+                                </div>
+                              )
                             ))}
                           </div>
                         )}
