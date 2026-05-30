@@ -34,13 +34,16 @@ export async function generateImage(
 ): Promise<GenerateImageResult> {
   if (engine === 'vertex-imagen') return viaVertexImagen(prompt)
   const model = FAL_MODELS[engine] ?? FAL_MODELS['fal-grok-image']
-  return viaFal(model, prompt)
+  // gpt-image-2 defaults to high quality (slow + expensive → can exceed the
+  // function timeout). Force medium for usable speed/cost.
+  const extra = engine === 'fal-gpt-image-2' ? { quality: 'medium' } : {}
+  return viaFal(model, { prompt, ...extra })
 }
 
 // fal returns a hosted URL; download and normalise to base64 so the response
 // shape matches Vertex (and downstream Canva asset upload gets raw bytes).
-async function viaFal(model: string, prompt: string): Promise<GenerateImageResult> {
-  const { url, content_type } = await falGenerateImage(model, { prompt })
+async function viaFal(model: string, input: Record<string, unknown>): Promise<GenerateImageResult> {
+  const { url, content_type } = await falGenerateImage(model, input)
   const imgRes = await fetch(url)
   if (!imgRes.ok) throw new Error(`fal: failed to download generated image (${imgRes.status})`)
   const buf = Buffer.from(await imgRes.arrayBuffer())

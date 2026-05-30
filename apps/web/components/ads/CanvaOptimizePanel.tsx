@@ -142,14 +142,23 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, brief: briefText.trim() || undefined, engine }),
       })
-      const d = await res.json()
-      if (!res.ok) {
-        setErrorMsg(d.error === 'NO_API_KEY' ? '尚未設定 AI API 金鑰，請先到設定頁設定。' : (d.error ?? '生成失敗，請稍後再試'))
+      // Slow models can hit the function timeout → Vercel returns a plain-text
+      // error (not JSON). Parse defensively and show a friendly message.
+      const raw = await res.text()
+      let d: { imageData?: string; mimeType?: string; headline?: string; subhead?: string; cta?: string; rationale?: string; error?: string } = {}
+      try { d = raw ? JSON.parse(raw) : {} } catch { /* non-JSON (timeout/crash) */ }
+      if (!res.ok || !d.imageData) {
+        const timedOut = res.status === 504 || /timeout|timed out|an error occurred/i.test(raw)
+        setErrorMsg(
+          d.error === 'NO_API_KEY' ? '尚未設定 AI API 金鑰，請先到設定頁設定。'
+          : timedOut ? '生成逾時了（GPT Image 2 較慢）。請改用 Grok 或 Recraft，或稍後重試。'
+          : (d.error ?? '生成失敗，請稍後再試')
+        )
         setStep('error')
         return
       }
       setGen({
-        imageData: d.imageData, mimeType: d.mimeType,
+        imageData: d.imageData, mimeType: d.mimeType ?? 'image/png',
         headline: d.headline ?? '', subhead: d.subhead ?? '', cta: d.cta ?? '', rationale: d.rationale ?? '',
       })
       setStep('genResult')
