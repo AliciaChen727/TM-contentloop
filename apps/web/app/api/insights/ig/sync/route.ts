@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { syncIgStories } from '@/lib/meta/igStories'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -107,7 +108,10 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit()
 
-    return NextResponse.json({ success: true, synced: posts.length, igUserId, igUsername, mediaCount: verifyData.media_count ?? null })
+    // Also capture currently-live Stories (only available for 24h via the API)
+    const storyResult = await syncIgStories(uid, accessToken, igUserId, pageId)
+
+    return NextResponse.json({ success: true, synced: posts.length, stories: storyResult.synced, igUserId, igUsername, mediaCount: verifyData.media_count ?? null })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'IG sync failed' }, { status: 500 })
   }
