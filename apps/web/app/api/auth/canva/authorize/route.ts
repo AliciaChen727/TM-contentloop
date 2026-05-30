@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
-import { cookies } from 'next/headers'
 import crypto from 'crypto'
 
 const SCOPES = [
@@ -33,18 +32,6 @@ export async function GET(req: NextRequest) {
     .update(codeVerifier)
     .digest('base64url')
 
-  const cookieStore = await cookies()
-  const cookieOpts = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 600,
-    path: '/',
-  } as const
-  cookieStore.set('canva_oauth_state', state, cookieOpts)
-  cookieStore.set('canva_oauth_verifier', codeVerifier, cookieOpts)
-  // Stash the idToken in a short-lived cookie so callback can identify the user
-  cookieStore.set('canva_oauth_id_token', idToken, cookieOpts)
-
   const params = new URLSearchParams({
     client_id: process.env.CANVA_CLIENT_ID!,
     redirect_uri: process.env.CANVA_REDIRECT_URI!,
@@ -55,7 +42,26 @@ export async function GET(req: NextRequest) {
     code_challenge_method: 'S256',
   })
 
-  return NextResponse.redirect(
+  const res = NextResponse.redirect(
     `https://www.canva.com/api/oauth/authorize?${params}`,
   )
+
+  // IMPORTANT: set cookies on the redirect response itself. Cookies set via
+  // next/headers cookies() are NOT attached to a manually-built
+  // NextResponse.redirect(), so the browser never stores them and the callback
+  // can't verify state / find the code_verifier → connection silently fails.
+  // sameSite 'lax' so the cookies survive Canva's top-level GET redirect back.
+  const cookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge: 600,
+    path: '/',
+  }
+  res.cookies.set('canva_oauth_state', state, cookieOpts)
+  res.cookies.set('canva_oauth_verifier', codeVerifier, cookieOpts)
+  // Stash the idToken in a short-lived cookie so callback can identify the user
+  res.cookies.set('canva_oauth_id_token', idToken, cookieOpts)
+
+  return res
 }
