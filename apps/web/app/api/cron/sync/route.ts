@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
+import { syncIgStories } from '@/lib/meta/igStories'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -496,7 +497,7 @@ export async function POST(req: NextRequest) {
       const tokenData = doc.data() as { userAccessToken?: string; accessToken?: string; igUserId?: string; pageId?: string }
       const pageId = doc.id === 'page' ? (tokenData.pageId ?? '') : doc.id
 
-      const [adsResult, igResult, fbResult] = await Promise.all([
+      const [adsResult, igResult, fbResult, storyResult] = await Promise.all([
         tokenData.userAccessToken && pageId
           ? syncAdsForUser(uid, tokenData.userAccessToken, pageId, tokenData.igUserId)
           : Promise.resolve({ error: 'no userAccessToken' }),
@@ -506,10 +507,13 @@ export async function POST(req: NextRequest) {
         tokenData.accessToken && pageId
           ? syncFbForUser(uid, tokenData.accessToken, pageId)
           : Promise.resolve({ synced: 0, error: 'no accessToken or pageId' }),
+        tokenData.accessToken && tokenData.igUserId && pageId
+          ? syncIgStories(uid, tokenData.accessToken, tokenData.igUserId, pageId)
+          : Promise.resolve({ synced: 0, error: 'no accessToken or igUserId' }),
       ])
 
-      results.push({ uid, pageId, ads: adsResult, ig: igResult, fb: fbResult })
-      console.log(`[cron/sync] uid=${uid} pageId=${pageId} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult)
+      results.push({ uid, pageId, ads: adsResult, ig: igResult, fb: fbResult, stories: storyResult })
+      console.log(`[cron/sync] uid=${uid} pageId=${pageId} ads=`, adsResult, 'ig=', igResult, 'fb=', fbResult, 'stories=', storyResult)
     }
 
     const pageIdsToMerge = new Set<string>()

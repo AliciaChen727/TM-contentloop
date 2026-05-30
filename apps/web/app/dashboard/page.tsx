@@ -9,6 +9,8 @@ import { FbPostsTable } from '@/components/dashboard/FbPostsTable'
 import { FbCsvImport } from '@/components/dashboard/FbCsvImport'
 import { FbMdImport } from '@/components/dashboard/FbMdImport'
 import { IgPostsTable } from '@/components/dashboard/IgPostsTable'
+import { IgStoriesTable } from '@/components/dashboard/IgStoriesTable'
+import type { IgStory } from '@/components/dashboard/IgStoriesTable'
 import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
 import { ContentChart } from '@/components/dashboard/ContentChart'
 import type { DailyPoint } from '@/components/dashboard/ContentChart'
@@ -61,10 +63,11 @@ export default function DashboardPage() {
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [fbPosts, setFbPosts] = useState<FbPost[]>([])
   const [igPosts, setIgPosts] = useState<IgPost[]>([])
+  const [igStories, setIgStories] = useState<IgStory[]>([])
   const [followerStats, setFollowerStats] = useState<{ date: string; total: number; net: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('combined')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'post' | 'reels'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'post' | 'reels' | 'stories'>('all')
   const [search, setSearch] = useState('')
   // Date range (shared between summary + chart)
   const [days, setDays] = useState(30)
@@ -83,12 +86,14 @@ export default function DashboardPage() {
   const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
     const qs = pageId ? `?pageId=${pageId}` : ''
-    const [fbRes, igRes] = await Promise.all([
+    const [fbRes, igRes, storiesRes] = await Promise.all([
       fetch(`/api/insights/fb${qs}`, { headers }),
       fetch(`/api/insights/ig${qs}`, { headers }),
+      fetch(`/api/insights/ig/stories${qs}`, { headers }),
     ])
     if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())); setFollowerStats(d.followerStats ?? []) }
     if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
+    if (storiesRes.ok) { const d = await storiesRes.json(); setIgStories(d.stories ?? []) }
   }, [])
 
   useEffect(() => {
@@ -249,6 +254,14 @@ export default function DashboardPage() {
     if (search) arr = arr.filter(p => p.caption.toLowerCase().includes(search.toLowerCase()))
     return arr
   }, [igPosts, typeFilter, search])
+
+  // Stories live in a date-range-filtered list (they expire after 24h anyway)
+  const filteredStories = useMemo(() => {
+    return igStories.filter(s => {
+      const d = s.timestamp?.slice(0, 10)
+      return d ? d >= dateBounds.start && d <= dateBounds.end : true
+    })
+  }, [igStories, dateBounds])
 
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
@@ -432,9 +445,9 @@ export default function DashboardPage() {
                 </button>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                {(['all', 'post', 'reels'] as const).map(v => (
+                {(['all', 'post', 'reels', 'stories'] as const).map(v => (
                   <button key={v} className={`ads-posts-type-chip ${typeFilter === v ? 'active' : ''}`} onClick={() => setTypeFilter(v)}>
-                    {v === 'all' ? '全部' : v === 'post' ? '貼文' : 'Reels'}
+                    {v === 'all' ? '全部' : v === 'post' ? '貼文' : v === 'reels' ? 'Reels' : '限動'}
                   </button>
                 ))}
               </div>
@@ -464,6 +477,9 @@ export default function DashboardPage() {
               {(() => {
                 const canSidekick = isAdmin || !!pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick
                 const askAI = canSidekick ? (q: string, a?: boolean) => openSidekick(q, a) : undefined
+                if (typeFilter === 'stories') {
+                  return <IgStoriesTable stories={filteredStories} onAskAI={askAI} />
+                }
                 return (<>
                   {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} onAskAI={askAI} />}
                   {activeTab === 'fb' && <FbPostsTable posts={filteredFb} onAskAI={askAI} />}
