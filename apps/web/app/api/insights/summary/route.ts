@@ -146,28 +146,32 @@ export async function GET(req: NextRequest) {
   const followerGrowthRate = latestFollowers > 0 ? Number((followerGrowth / latestFollowers * 100).toFixed(2)) : 0
 
   // --- Ads data: prefer user path; fall back to shared path (mirrors ads/data route) ---
-  // Shared path tends to have more complete/accurate summary data
+  // The stored summary has fields: spend, reach, impressions, clicks, ctr, cpm,
+  // frequency, conversions, revenue, roas, cpa. There is NO `cpc` or `link_clicks`.
+  // 總覽 displays CPC = summary.cpa (cost per link click) and link_clicks = summary.conversions.
   const adsRawUser = adsSnapUser.data() ?? {}
   const adsRawShared = adsSnapShared.data() ?? {}
-  // Use shared if user path has no summary.cpc (or 0), otherwise prefer user path
-  const userCpc = (adsRawUser.summary as Record<string, number> | undefined)?.cpc ?? 0
-  const adsRaw = userCpc > 0 ? adsRawUser : (adsSnapShared.exists ? adsRawShared : adsRawUser)
+  // Prefer user path when it has real summary data (ctr present); else shared.
+  const userHasData = ((adsRawUser.summary as Record<string, number> | undefined)?.ctr ?? 0) > 0
+    || ((adsRawUser.summary as Record<string, number> | undefined)?.spend ?? 0) > 0
+  const adsRaw = userHasData ? adsRawUser : (adsSnapShared.exists ? adsRawShared : adsRawUser)
   const adsSummaryRaw = (adsRaw.summary ?? {}) as Record<string, number>
   const adsDateRange = adsRaw.dateRange as { from?: string; to?: string } | undefined
 
-  // Extract goal-relevant ad metrics
+  // Extract goal-relevant ad metrics (match 總覽 / OverviewSection exactly)
   const adCtr = adsSummaryRaw.ctr ?? 0
   const adSpendRaw = adsSummaryRaw.spend ?? 0
-  // link_clicks is the correct denominator for CPC (not all-clicks which includes engagement clicks)
-  const adLinkClicks = adsSummaryRaw.link_clicks ?? adsSummaryRaw.linkClicks ?? adsSummaryRaw.clicks ?? 0
-  // Prefer pre-computed cpc from summary; fall back to spend/link_clicks
-  const adCpc = adsSummaryRaw.cpc > 0
-    ? adsSummaryRaw.cpc
+  // link clicks = conversions (for non-purchase accounts the action IS a link click)
+  const adLinkClicks = adsSummaryRaw.conversions ?? 0
+  // CPC = cpa (cost per link click); 總覽 shows this value as CPC. Fall back to spend/link_clicks.
+  const adCpc = (adsSummaryRaw.cpa ?? 0) > 0
+    ? adsSummaryRaw.cpa
     : (adSpendRaw > 0 && adLinkClicks > 0 ? Number((adSpendRaw / adLinkClicks).toFixed(2)) : 0)
   const adCpm = adsSummaryRaw.cpm ?? 0
   const adSpend = adSpendRaw
   const adImpressions = adsSummaryRaw.impressions ?? 0
-  const adClicks = adsSummaryRaw.clicks ?? 0
+  // 連結點擊數 = conversions (link clicks), matching 總覽; fall back to all clicks
+  const adClicks = adLinkClicks > 0 ? adLinkClicks : (adsSummaryRaw.clicks ?? 0)
   const adFrequency = adsSummaryRaw.frequency ?? 0
   const adReach = adsSummaryRaw.reach ?? 0
 

@@ -121,7 +121,7 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
 ${bmRow('FB 平均互動率', `${bm.engagementRate.value}%`, `${bm.engagementRate.benchmark}%`, bm.engagementRate.status)}
 ${bmRow('追蹤者成長率', `${bm.followerGrowth.value}%`, `${bm.followerGrowth.benchmark}%`, bm.followerGrowth.status)}
 ${bmRow('廣告 CTR', `${bm.adCtr.value}%`, `${bm.adCtr.benchmark}%`, bm.adCtr.status)}
-${bmRow('廣告 CPC', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benchmark}`, bm.adCpc.status, true)}
+${bmRow('廣告 CPA（每次行動成本）', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benchmark}`, bm.adCpc.status, true)}
 </tbody></table>
 <div class="benchmark-insight" style="margin-top:10px">${report.benchmarkInsight}</div>
 
@@ -136,7 +136,7 @@ ${bmRow('廣告 CPC', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benc
 <div class="section-label">廣告投放</div>
 <div class="stats-grid">
   ${statCard('CTR', `${ads.ctr}%`)}
-  ${statCard('CPC', `$${Number(ads.cpc).toFixed(2)}`)}
+  ${statCard('CPA', `$${Number(ads.cpc).toFixed(2)}`)}
   ${statCard('CPM', `$${Number(ads.cpm).toFixed(2)}`)}
   ${statCard('總花費', `$${Number(ads.spend).toLocaleString()}`)}
   ${statCard('連結點擊', `${ads.clicks.toLocaleString()} 次`)}
@@ -412,7 +412,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {metricRow('FB 平均互動率', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? ['adCtr']).includes('adCtr') && metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
-          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPC', summary.benchmarkCompare.fb.adCpc, '', true)}
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPA（每次行動成本）', summary.benchmarkCompare.fb.adCpc, '', true)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '', true)}
           {summary.adsDateRange && (
             <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 6 }}>
@@ -445,7 +445,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: '廣告 CTR', value: `${summary.adsSummary.ctr}%`, unit: '' },
-              { label: '廣告 CPC', value: `$${Number(summary.adsSummary.cpc).toFixed(2)}`, unit: '' },
+              { label: '廣告 CPA', value: `$${Number(summary.adsSummary.cpc).toFixed(2)}`, unit: '' },
               { label: '廣告 CPM', value: `$${Number(summary.adsSummary.cpm).toFixed(2)}`, unit: '' },
               { label: '總花費', value: `$${Number(summary.adsSummary.spend).toLocaleString()}`, unit: '' },
               { label: '連結點擊數', value: summary.adsSummary.clicks.toLocaleString(), unit: '次' },
