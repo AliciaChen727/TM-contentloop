@@ -302,21 +302,44 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
         </div>
       )}
 
-      {/* Stats cards */}
+      {/* Stats cards — two rows */}
       {summary && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-          {[
-            { label: '發文數', value: summary.overview.totalPosts, unit: '則' },
-            { label: '平均互動率', value: `${summary.overview.avgEngRate}%`, unit: '' },
-            { label: '廣告 CTR', value: `${summary.adsSummary.ctr}%`, unit: '' },
-            { label: '廣告 CPC', value: `$${summary.adsSummary.cpc}`, unit: '' },
-          ].map(c => (
-            <div key={c.label} style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 16px' }}>
-              <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4 }}>{c.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{c.value}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ad-text3)', marginLeft: 2 }}>{c.unit}</span></div>
-            </div>
-          ))}
-        </div>
+        <>
+          {/* Row 1: Organic */}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ad-text3)', marginBottom: 6, letterSpacing: '0.05em' }}>有機貼文</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }}>
+            {[
+              { label: '發文數', value: String(summary.overview.totalPosts), unit: '則' },
+              { label: '平均互動率', value: `${summary.overview.avgEngRate}%`, unit: '' },
+              { label: '平均觸及', value: summary.overview.avgReach.toLocaleString(), unit: '人' },
+              { label: '追蹤成長', value: `+${summary.overview.followerGrowth}`, unit: '人' },
+            ].map(c => (
+              <div key={c.label} style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4 }}>{c.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{c.value}<span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ad-text3)', marginLeft: 2 }}>{c.unit}</span></div>
+              </div>
+            ))}
+          </div>
+          {/* Row 2: Ads */}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ad-text3)', marginBottom: 6, letterSpacing: '0.05em' }}>廣告投放</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+            {[
+              { label: '廣告 CTR', value: `${summary.adsSummary.ctr}%`, unit: '' },
+              { label: '廣告 CPC', value: `$${Number(summary.adsSummary.cpc).toFixed(2)}`, unit: '' },
+              { label: '廣告 CPM', value: `$${Number(summary.adsSummary.cpm).toFixed(2)}`, unit: '' },
+              { label: '總花費', value: `$${Number(summary.adsSummary.spend).toLocaleString()}`, unit: '' },
+              { label: '連結點擊數', value: summary.adsSummary.clicks.toLocaleString(), unit: '次' },
+              { label: '觸及人數', value: summary.adsSummary.reach > 0 ? (summary.adsSummary.reach / 10000).toFixed(1) + '萬' : '-', unit: '' },
+              { label: '頻率', value: String(summary.adsSummary.frequency), unit: '' },
+              { label: '廣告數', value: String(summary.adsSummary.adCount), unit: '則' },
+            ].map(c => (
+              <div key={c.label} style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4 }}>{c.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{c.value}<span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ad-text3)', marginLeft: 2 }}>{c.unit}</span></div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* AI Report */}
