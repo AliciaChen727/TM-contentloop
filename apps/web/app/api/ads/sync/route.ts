@@ -587,7 +587,11 @@ export async function POST(req: NextRequest) {
   }
   const adCreativesWithTitle = adCreatives.map(c => {
     const sid = c.effective_object_story_id as string | undefined
-    return sid && postMessageMap[sid] ? { ...c, post_title: postMessageMap[sid] } : c
+    // Attach the ad's thumbnail_url (lives in adsList/adMeta, keyed by ad.id) and
+    // post title so the diagnosis / insights UI can show a preview + deep link.
+    const thumb = adMeta.get(c.ad_id as string)?.thumbnailUrl ?? null
+    const withThumb = thumb ? { ...c, thumbnail_url: thumb } : c
+    return sid && postMessageMap[sid] ? { ...withThumb, post_title: postMessageMap[sid] } : withThumb
   })
 
   // Load known IG media IDs from Firestore to catch cross-account and cross-format ads.

@@ -1,9 +1,22 @@
 'use client'
 
 import { Icon } from '../Icon'
-import type { AdData } from '../types'
+import type { AdData, Post } from '../types'
 
-export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI?: (q: string) => void }) {
+// Resolve a clickable FB/IG post URL + thumbnail for a diagnosis item.
+// Prefers matching the creative's storyId to a real synced post (correct
+// permalink for both FB & IG); falls back to a constructed FB URL.
+function resolvePostLink(storyId: string | null | undefined, posts: Post[]): string | null {
+  if (!storyId) return null
+  const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
+  // Match against synced posts (Post.id is `{pageId}_{postId}` for FB, mediaId for IG)
+  const match = posts.find(p => p.id === storyId || p.id === postId || p.id.endsWith(`_${postId}`))
+  if (match?.url && match.url !== '#') return match.url
+  // Fallback: FB post permalink works with the combined story id
+  return `https://www.facebook.com/${storyId}`
+}
+
+export function DiagnosisSection({ data, posts = [], onAskAI }: { data: AdData; posts?: Post[]; onAskAI?: (q: string) => void }) {
   const icons: Record<string, string> = { critical: '🚨', warning: '⚠️', good: '✅' }
   const labels: Record<string, string> = { critical: '嚴重', warning: '警告', good: '優化機會' }
   const lc: Record<string, [string, string]> = {
@@ -53,7 +66,10 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI?: (q
       </div>
 
       <div className="ads-diag-list">
-        {data.diagnosis.map(d => (
+        {data.diagnosis.map(d => {
+          const postUrl = resolvePostLink(d.storyId, posts)
+          const hasPreview = !!(d.thumbnailUrl || postUrl)
+          return (
           <div key={d.id} className={`ads-diag-item ${d.severity}`}>
             <div className={`ads-diag-icon ${d.severity}`}>{icons[d.severity]}</div>
             <div style={{ flex: 1 }}>
@@ -63,6 +79,30 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI?: (q
                   {labels[d.severity]}
                 </span>
               </div>
+
+              {/* Creative preview: thumbnail + post link */}
+              {hasPreview && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0' }}>
+                  {d.thumbnailUrl && (
+                    postUrl ? (
+                      <a href={postUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={d.thumbnailUrl} alt="貼文預覽" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--ad-border)' }} />
+                      </a>
+                    ) : (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={d.thumbnailUrl} alt="貼文預覽" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--ad-border)' }} />
+                    )
+                  )}
+                  {postUrl && (
+                    <a href={postUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      查看貼文 ↗
+                    </a>
+                  )}
+                </div>
+              )}
+
               <div className="ads-diag-desc">{d.desc}</div>
               <div className="ads-diag-footer">
                 <span className="ads-diag-chip metric">{d.metric}</span>
@@ -74,7 +114,8 @@ export function DiagnosisSection({ data, onAskAI }: { data: AdData; onAskAI?: (q
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

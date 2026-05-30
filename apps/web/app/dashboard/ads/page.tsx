@@ -136,6 +136,7 @@ function mapRawAdCreative(c: any, idx: number) {
   const cpa = primaryMetric > 0 ? parseFloat((spend / primaryMetric).toFixed(2)) : 0
   const postTitle = c.post_title ? (c.post_title as string).slice(0, 60) : null
   const type = inferCreativeType(c.ad_name ?? '')
+  const storyId = (c.effective_object_story_id as string | undefined) ?? null
   return {
     id: c.ad_id ?? String(idx),
     name: postTitle ?? c.ad_name ?? `廣告 ${idx + 1}`,
@@ -153,6 +154,8 @@ function mapRawAdCreative(c: any, idx: number) {
     adName: c.ad_name ?? '',
     campaignName: c.campaign_name ?? '',
     budget: typeof c.budget === 'number' ? c.budget : 0,
+    thumbnailUrl: (c.thumbnail_url as string | undefined) ?? null,
+    storyId,
   }
 }
 
@@ -191,7 +194,8 @@ function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof 
   if (lowCtr) {
     items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低素材',
       desc: `素材「${lowCtr.name.slice(0, 25)}」CTR 僅 ${lowCtr.ctr.toFixed(2)}%，低於建議值 1.5%。`,
-      adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材' })
+      adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材',
+      thumbnailUrl: lowCtr.thumbnailUrl, storyId: lowCtr.storyId })
   } else if ((s.ctr ?? 0) > 0 && (s.ctr) < 1.5) {
     items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低',
       desc: `整體 CTR 僅 ${(s.ctr).toFixed(2)}%，低於建議值 1.5%。`,
@@ -202,7 +206,8 @@ function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof 
   if (top && top.roas >= 5) {
     items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: '最佳點擊效率素材',
       desc: `素材「${top.name.slice(0, 25)}」點擊效率達 ${top.roas.toFixed(1)}x，建議增加預算。`,
-      adset: top.name.slice(0, 30), metric: `點擊效率 ${top.roas.toFixed(1)}`, threshold: '目標 > 5', action: `增加預算 20-30%` })
+      adset: top.name.slice(0, 30), metric: `點擊效率 ${top.roas.toFixed(1)}`, threshold: '目標 > 5', action: `增加預算 20-30%`,
+      thumbnailUrl: top.thumbnailUrl, storyId: top.storyId })
   }
 
   if (items.length === 0) {
@@ -916,7 +921,7 @@ export default function AdsPage() {
             <>
               {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} optimizationGoal={optimizationGoal} />}
               {active === 'insights' && <InsightsSection pageId={selectedPageId} onAskAI={canSidekick ? openSidekick : undefined} />}
-              {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
+              {active === 'diagnosis' && <DiagnosisSection data={adData} posts={realPosts} onAskAI={canSidekick ? openSidekick : undefined} />}
               {active === 'creative' && <CreativeSection
                 data={adData}
                 onAskAI={canSidekick ? openSidekick : undefined}

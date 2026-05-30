@@ -59,6 +59,9 @@ export interface DiagItem {
   metric: string
   threshold: string
   action: string
+  // Optional creative preview (for top_performer / low_ctr items)
+  thumbnailUrl?: string | null
+  storyId?: string | null
 }
 
 export interface Adset {
