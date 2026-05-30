@@ -43,8 +43,13 @@ export async function GET(req: NextRequest) {
     code_challenge_method: 'S256',
   })
 
+  // URLSearchParams encodes spaces as '+', but Canva's authorize endpoint does
+  // not treat '+' as a scope delimiter — it then sees one malformed scope and
+  // returns invalid_scope. Use '%20' for spaces. Safe here because no value
+  // contains a literal '+' (state=hex, code_challenge=base64url has no '+').
+  const query = params.toString().replace(/\+/g, '%20')
   const res = NextResponse.redirect(
-    `https://www.canva.com/api/oauth/authorize?${params}`,
+    `https://www.canva.com/api/oauth/authorize?${query}`,
   )
 
   // IMPORTANT: set cookies on the redirect response itself. Cookies set via
