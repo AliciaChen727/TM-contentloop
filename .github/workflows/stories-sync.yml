@@ -1,0 +1,27 @@
+name: IG Stories Sync
+
+on:
+  schedule:
+    # 每 4 小時一次（限動 24h 內會消失，需高頻補抓才能取得成熟數據）
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  sync-stories:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync IG Stories for all pages
+        run: |
+          body=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST https://tm-contentloop.vercel.app/api/cron/sync-stories \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          status=$(echo "$body" | grep "HTTP_STATUS:" | cut -d: -f2)
+          response=$(echo "$body" | grep -v "HTTP_STATUS:")
+          echo "Response status: $status"
+          echo "Response body: $response"
+          if [ "$status" != "200" ]; then
+            echo "Stories sync failed with status $status"
+            exit 1
+          fi
+          echo "Stories sync completed successfully"
