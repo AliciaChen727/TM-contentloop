@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin } from '@/lib/auth/superadmin'
 
 async function verifyOwner(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -11,6 +12,8 @@ async function verifyOwner(req: NextRequest): Promise<string | null> {
     const decoded = await adminAuth.verifyIdToken(idToken)
     uid = decoded.uid
   } catch { return null }
+
+  if (isSuperAdmin(uid)) return uid
 
   const tokensSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
   for (const tokenDoc of tokensSnap.docs) {
