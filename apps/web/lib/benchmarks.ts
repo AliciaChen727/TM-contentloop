@@ -16,11 +16,12 @@ export const BENCHMARKS = {
 }
 
 // Goal-specific ad benchmarks (Taiwan/Asia market)
+// CPC/CPM in TWD (NT$), matching the values shown in 廣告目標設定 / 總覽 dashboard
 const GOAL_BENCHMARKS: Record<string, { ctr: number; cpc: number; cpm: number; label: string }> = {
-  clicks:     { ctr: 1.8, cpc: 2.8,  cpm: 5.0,  label: '提升點擊率' },
-  conversion: { ctr: 1.5, cpc: 3.5,  cpm: 4.5,  label: '提升轉換與ROI' },
-  reach:      { ctr: 0.9, cpc: 6.0,  cpm: 2.5,  label: '擴大品牌觸及' },
-  event:      { ctr: 1.8, cpc: 2.8,  cpm: 4.5,  label: '活動報名推廣' },
+  clicks:     { ctr: 1.8, cpc: 280, cpm: 150, label: '提升點擊率' },
+  conversion: { ctr: 1.5, cpc: 300, cpm: 120, label: '提升轉換與ROI' },
+  reach:      { ctr: 0.9, cpc: 500, cpm:  80, label: '擴大品牌觸及' },
+  event:      { ctr: 1.8, cpc: 280, cpm: 130, label: '活動報名推廣' },
 }
 
 export function getBenchmarkByGoal(goal: string) {
