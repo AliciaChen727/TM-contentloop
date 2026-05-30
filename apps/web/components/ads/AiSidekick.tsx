@@ -342,6 +342,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [editedDurations, setEditedDurations] = useState<Record<string, number>>({})
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([])
   const [typingLabel, setTypingLabel] = useState('正在載入數據⋯')
+  const [imageEngine, setImageEngine] = useState('fal-grok-image')
   const [videoEngine, setVideoEngine] = useState('fal-hailuo')
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadPct, setVideoUploadPct] = useState(0)
@@ -364,7 +365,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const convStartedRef = useRef(false)
   const turnCountRef = useRef(0)
 
-  const generateImage = useCallback(async (msgId: string, prompt: string) => {
+  const generateImage = useCallback(async (msgId: string, prompt: string, engine = 'fal-grok-image') => {
     const user = auth.currentUser
     const idToken = user ? await user.getIdToken() : null
     if (!idToken) return
@@ -372,8 +373,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        // Default to Grok Imagine: cheap, aesthetic, decent cross-language text.
-        body: JSON.stringify({ prompt, engine: 'fal-grok-image' }),
+        body: JSON.stringify({ prompt, engine }),
       })
       const data = await res.json()
       if (!res.ok || !data.imageData) {
@@ -910,7 +910,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                             const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
                             if (!prompt) return
                             setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageLoading: true } : m))
-                            generateImage(msg.id, prompt)
+                            generateImage(msg.id, prompt, imageEngine)
                           }
                           return (
                             <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
@@ -919,7 +919,18 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                 onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireImage() } }}
                                 style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }} />
-                              <button className="ads-btn" style={{ fontSize: 12 }} onClick={fireImage}>✨ 生成圖片</button>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                                <select value={imageEngine}
+                                  onChange={e => setImageEngine(e.target.value)}
+                                  title="圖片模型"
+                                  style={{ flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
+                                  <option value="fal-grok-image">Grok Imagine（預設・便宜美感）</option>
+                                  <option value="fal-gpt-image-2">GPT Image 2（文字最強・含中文）</option>
+                                  <option value="fal-recraft">Recraft V3（廣告/品牌風格）</option>
+                                  <option value="fal-flux">FLUX dev（快速通用）</option>
+                                </select>
+                              </div>
+                              <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={fireImage}>✨ 生成圖片</button>
                               <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>Enter 換行　Shift+Enter 送出</div>
                             </div>
                           )
@@ -967,7 +978,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                             const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
                             if (!prompt) return
                             setMessages(p => p.map(m => m.id === msg.id ? { ...m, imageError: undefined, imageLoading: true } : m))
-                            generateImage(msg.id, prompt)
+                            generateImage(msg.id, prompt, imageEngine)
                           }
                           return (
                             <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>
