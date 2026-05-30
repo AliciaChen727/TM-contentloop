@@ -31,6 +31,8 @@ interface BenchmarkStatus { value: number; benchmark: number; status: 'above' | 
 
 interface Summary {
   period: string
+  dateRange: { start: string; end: string }
+  adsDateRange: { start: string; end: string } | null
   overview: OverviewData
   benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus } }
   benchmarkIndustry: string
@@ -139,7 +141,14 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           </div>
           {metricRow('FB 平均互動率', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
-          {metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
+          <div>
+            {metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
+            {summary.adsDateRange && (
+              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 2 }}>
+                廣告資料：{summary.adsDateRange.start} ~ {summary.adsDateRange.end}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

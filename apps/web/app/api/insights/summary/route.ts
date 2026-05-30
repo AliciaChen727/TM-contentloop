@@ -103,6 +103,9 @@ export async function GET(req: NextRequest) {
   const adsSnap = await adminDb.collection('users').doc(dataOwnerUid)
     .collection('pages').doc(pageId).collection('adInsights').doc('latest').get()
   const adsRaw = adsSnap.data() ?? {}
+  // adInsights structure: { summary: { ctr, spend, impressions, cpm, cpc, ... }, adCreatives, dateRange }
+  const adsSummary = (adsRaw.summary ?? {}) as Record<string, number>
+  const adsDateRange = adsRaw.dateRange as { from?: string; to?: string } | undefined
 
   // --- Aggregate FB post metrics ---
   const totalFbPosts = fbPosts.length
@@ -122,15 +125,17 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a.engRate - b.engRate)
     .slice(0, 3)
 
+  const adCtr = adsSummary.ctr ?? 0
+
   // --- Benchmark comparison ---
   const benchmarkCompare = {
     fb: {
       engagementRate: { value: avgEngRate, benchmark: BENCHMARKS.fb.engagementRate, status: avgEngRate >= BENCHMARKS.fb.engagementRate ? 'above' : 'below' },
       followerGrowth: { value: followerGrowthRate, benchmark: BENCHMARKS.fb.followerGrowthMonthly, status: followerGrowthRate >= BENCHMARKS.fb.followerGrowthMonthly ? 'above' : 'below' },
       adCtr: {
-        value: Number((adsRaw.ctr ?? 0).toFixed(2)),
+        value: Number(adCtr.toFixed(2)),
         benchmark: BENCHMARKS.fb.ctr,
-        status: (adsRaw.ctr ?? 0) >= BENCHMARKS.fb.ctr ? 'above' : 'below'
+        status: adCtr >= BENCHMARKS.fb.ctr ? 'above' : 'below'
       },
     },
   }
@@ -138,7 +143,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     period: label,
     periodType: period,
+    // Posts date range (calendar month/quarter)
     dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
+    // Ads date range (from adInsights snapshot, may differ from calendar period)
+    adsDateRange: adsDateRange ? { start: adsDateRange.from ?? '', end: adsDateRange.to ?? '' } : null,
     overview: {
       totalPosts: totalFbPosts,
       avgEngRate,
@@ -152,11 +160,11 @@ export async function GET(req: NextRequest) {
     benchmarkCompare,
     benchmarkIndustry: BENCHMARKS.industry,
     adsSummary: {
-      spend: adsRaw.spend ?? 0,
-      impressions: adsRaw.impressions ?? 0,
-      ctr: Number((adsRaw.ctr ?? 0).toFixed(2)),
-      cpm: Number((adsRaw.cpm ?? 0).toFixed(2)),
-      cpc: Number((adsRaw.cpc ?? 0).toFixed(2)),
+      spend: adsSummary.spend ?? 0,
+      impressions: adsSummary.impressions ?? 0,
+      ctr: Number(adCtr.toFixed(2)),
+      cpm: Number((adsSummary.cpm ?? 0).toFixed(2)),
+      cpc: Number((adsSummary.cpc ?? 0).toFixed(2)),
       adCount: Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives.length : 0,
     },
   })
