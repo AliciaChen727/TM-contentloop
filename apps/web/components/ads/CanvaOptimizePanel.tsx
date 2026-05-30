@@ -66,6 +66,9 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
   const [briefText, setBriefText] = useState('')
   const [engine, setEngine] = useState<PanelEngine>('fal-grok-image')
   const [gen, setGen] = useState<GeneratedCreative | null>(null)
+  const [pushing, setPushing] = useState(false)
+  const [pushedUrl, setPushedUrl] = useState<string | null>(null)
+  const [pushError, setPushError] = useState('')
   // null = checking, true/false = known
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
 
@@ -95,6 +98,36 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
     setBriefText('')
     setEngine('fal-grok-image')
     setGen(null)
+    setPushing(false)
+    setPushedUrl(null)
+    setPushError('')
+  }
+
+  // Push the generated image into Canva as a new design (asset → design).
+  async function pushToCanva() {
+    if (!gen) return
+    setPushing(true)
+    setPushError('')
+    try {
+      const user = auth.currentUser
+      if (!user) throw new Error('未登入')
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/canva/create-design', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: gen.imageData, mimeType: gen.mimeType, title: gen.headline || 'ContentLoop AI 設計' }),
+      })
+      const d = await res.json()
+      if (!res.ok || !d.editUrl) {
+        setPushError(d.error === 'CANVA_NOT_CONNECTED' ? 'Canva 授權已失效，請到設定頁重新連接。' : '推送失敗，請稍後再試。')
+        return
+      }
+      setPushedUrl(d.editUrl)
+    } catch {
+      setPushError('推送失敗，請稍後再試。')
+    } finally {
+      setPushing(false)
+    }
   }
 
   async function handleGenerate() {
@@ -448,15 +481,46 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
                 💡 {gen.rationale}
               </p>
             )}
+            {/* Push to Canva — creates a new design containing this image */}
+            {canvaConnected && !pushedUrl && (
+              <button
+                onClick={pushToCanva}
+                disabled={pushing}
+                style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: '#00C4CC', color: 'white', fontSize: 13, fontWeight: 600, cursor: pushing ? 'default' : 'pointer', marginBottom: 8, opacity: pushing ? 0.7 : 1 }}
+              >
+                {pushing ? '推送到 Canva 中⋯（約 10–20 秒）' : '🎨 推到 Canva 建立設計稿'}
+              </button>
+            )}
+            {pushedUrl && (
+              <a
+                href={pushedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'block', textAlign: 'center', width: '100%', padding: '10px', borderRadius: 8, background: '#00C4CC', color: 'white', fontSize: 13, fontWeight: 600, textDecoration: 'none', marginBottom: 8 }}
+              >
+                ✓ 已建立 — 在 Canva 開啟編輯 →
+              </a>
+            )}
+            {pushedUrl && (
+              <p style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 8, textAlign: 'center' }}>
+                設計稿已含底圖；上方中文文案可複製後在 Canva 貼成可編輯文字。
+              </p>
+            )}
+            {pushError && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 8 }}>{pushError}</p>}
+            {canvaConnected === false && !pushedUrl && (
+              <p style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 8, textAlign: 'center' }}>
+                連接 Canva 後可一鍵推成設計稿（目前僅可下載）。
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={downloadGenerated}
-                style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--ad-border)', background: 'none', color: 'var(--ad-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
               >
                 ⬇ 下載底圖
               </button>
               <button
-                onClick={() => { setGen(null); setStep('generateInput') }}
+                onClick={() => { setGen(null); setPushedUrl(null); setPushError(''); setStep('generateInput') }}
                 style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--ad-border)', background: 'none', color: 'var(--ad-text2)', fontSize: 13, cursor: 'pointer' }}
               >
                 ↻ 重新生成
