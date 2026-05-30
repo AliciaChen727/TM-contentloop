@@ -342,6 +342,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [editedDurations, setEditedDurations] = useState<Record<string, number>>({})
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([])
   const [typingLabel, setTypingLabel] = useState('正在載入數據⋯')
+  const [videoEngine, setVideoEngine] = useState('fal-hailuo')
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadPct, setVideoUploadPct] = useState(0)
   const [showHistory, setShowHistory] = useState(false)
@@ -390,7 +391,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     }
   }, [])
 
-  const generateVideo = useCallback(async (msgId: string, prompt: string, duration: number) => {
+  const generateVideo = useCallback(async (msgId: string, prompt: string, duration: number, engine?: string) => {
     const user = auth.currentUser
     if (!user) return
     try {
@@ -398,39 +399,39 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const submitRes = await fetch('/api/ai/video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ prompt, durationSeconds: duration }),
+        body: JSON.stringify({ prompt, durationSeconds: duration, engine }),
       })
       const submitData = await submitRes.json()
-      if (!submitRes.ok || !submitData.operationName) {
+      // fal queue → poll by provider/model/requestId; Vertex → poll by op.
+      const pollUrl = submitData.provider === 'fal'
+        ? `/api/ai/video?provider=fal&model=${encodeURIComponent(submitData.model)}&requestId=${encodeURIComponent(submitData.requestId)}`
+        : submitData.operationName ? `/api/ai/video?op=${encodeURIComponent(submitData.operationName)}` : null
+      if (!submitRes.ok || !pollUrl) {
         setMessages(p => p.map(m => m.id === msgId ? {
           ...m, videoLoading: false,
           videoError: submitData.error ?? '影片生成失敗',
         } : m))
         return
       }
-      const operationName: string = submitData.operationName
       let attempts = 0
       const interval = setInterval(async () => {
         attempts++
-        if (attempts > 18) {
+        if (attempts > 36) { // ~6 min max (video can take a few minutes)
           clearInterval(interval)
-          setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
+          setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: '影片生成逾時，請重試' } : m))
           return
         }
         try {
           const token = await user.getIdToken()
-          const pollRes = await fetch(`/api/ai/video?op=${encodeURIComponent(operationName)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
+          const pollRes = await fetch(pollUrl, { headers: { Authorization: `Bearer ${token}` } })
           const pollData = await pollRes.json()
-          if (pollData.done && pollData.videoData) {
+          if (pollData.done && (pollData.videoUrl || pollData.videoData)) {
             clearInterval(interval)
-            setMessages(p => p.map(m => m.id === msgId
-              ? { ...m, videoLoading: false, videoUrl: `data:${pollData.mimeType ?? 'video/mp4'};base64,${pollData.videoData}` }
-              : m))
+            const url = pollData.videoUrl ?? `data:${pollData.mimeType ?? 'video/mp4'};base64,${pollData.videoData}`
+            setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoUrl: url } : m))
           } else if (!pollRes.ok) {
             clearInterval(interval)
-            setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false } : m))
+            setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: pollData.error ?? '影片生成失敗' } : m))
           }
         } catch { /* continue polling */ }
       }, 10000)
@@ -929,7 +930,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                             if (!prompt) return
                             const dur = editedDurations[msg.id] ?? msg.videoDuration ?? 5
                             setMessages(p => p.map(m => m.id === msg.id ? { ...m, videoLoading: true } : m))
-                            generateVideo(msg.id, prompt, dur)
+                            generateVideo(msg.id, prompt, dur, videoEngine)
                           }
                           return (
                             <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
@@ -1012,7 +1013,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                             if (!prompt) return
                             const dur = editedDurations[msg.id] ?? msg.videoDuration ?? 5
                             setMessages(p => p.map(m => m.id === msg.id ? { ...m, videoUrl: undefined, videoLoading: true } : m))
-                            generateVideo(msg.id, prompt, dur)
+                            generateVideo(msg.id, prompt, dur, videoEngine)
                           }
                           return (
                           <div style={{ marginTop: 8 }}>
@@ -1099,7 +1100,21 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                     <Icon name="send" size={15} color="white" />
                   </button>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4, paddingRight: 2 }}>Enter 換行　Shift+Enter 送出</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingRight: 2 }}>
+                  <label style={{ fontSize: 11, color: 'var(--ad-text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    🎬 影片模型
+                    <select
+                      value={videoEngine}
+                      onChange={e => setVideoEngine(e.target.value)}
+                      style={{ fontSize: 11, padding: '1px 4px', borderRadius: 4, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', outline: 'none', cursor: 'pointer' }}
+                    >
+                      <option value="fal-hailuo">Hailuo（預設・最省）</option>
+                      <option value="fal-grok-video">Grok（含音訊）</option>
+                      <option value="fal-kling-26">Kling 2.6（高品質）</option>
+                    </select>
+                  </label>
+                  <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>Enter 換行　Shift+Enter 送出</span>
+                </div>
               </div>
             </>
           )}
