@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 export interface IgStory {
   id: string
+  platform?: 'IG' | 'FB'
   mediaType: 'STORY'
   mediaSubType: 'IMAGE' | 'VIDEO'
   thumbnailUrl: string
@@ -63,7 +64,7 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
   if (!stories.length) {
     return (
       <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>
-        尚無限動資料。限動只能在發布後 24 小時內抓取，請在限動還在線時按「同步」收集。
+        尚無限動資料。IG 限動需在發布後 24 小時內抓取；FB 限動需在粉專開啟「限時動態典藏」才讀得到。
       </p>
     )
   }
@@ -111,8 +112,13 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
               <tr key={s.id}>
                 <td className="ads-posts-date">{fullDate(s.timestamp)}</td>
                 <td>
-                  <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#F3E5F5', color: '#6A1B9A', whiteSpace: 'nowrap' }}>
-                    {isVideo ? '◐ 限動影片' : '◐ 限動圖片'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: s.platform === 'FB' ? '#E7F0FF' : '#FCE4EC', color: s.platform === 'FB' ? '#1877F2' : '#C2185B' }}>
+                      {s.platform === 'FB' ? 'FB' : 'IG'}
+                    </span>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#F3E5F5', color: '#6A1B9A' }}>
+                      {isVideo ? '◐ 限動影片' : '◐ 限動圖片'}
+                    </span>
                   </span>
                 </td>
                 <td style={{ maxWidth: 200 }}>
