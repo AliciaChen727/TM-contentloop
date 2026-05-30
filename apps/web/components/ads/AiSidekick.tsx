@@ -934,16 +934,19 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           }
                           return (
                             <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
-                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>🎬 待生成 Reels — 可編輯提示詞與秒數後再生成</div>
+                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>🎬 待生成 Reels — 可編輯提示詞、選模型後再生成</div>
                               <textarea value={editedVideoPrompts[msg.id] ?? msg.response.videoPrompt}
                                 onChange={e => setEditedVideoPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireVideo() } }}
                                 style={{ width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 6 }} />
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 5)}
-                                  onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
+                                <select value={videoEngine}
+                                  onChange={e => setVideoEngine(e.target.value)}
+                                  title="影片模型"
                                   style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                  {[5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
+                                  <option value="fal-hailuo">Hailuo（最省）</option>
+                                  <option value="fal-grok-video">Grok（含音訊）</option>
+                                  <option value="fal-kling-26">Kling 2.6（高品質）</option>
                                 </select>
                                 <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={fireVideo}>🎬 生成 Reels 影片</button>
                               </div>
@@ -1100,21 +1103,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                     <Icon name="send" size={15} color="white" />
                   </button>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingRight: 2 }}>
-                  <label style={{ fontSize: 11, color: 'var(--ad-text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    🎬 影片模型
-                    <select
-                      value={videoEngine}
-                      onChange={e => setVideoEngine(e.target.value)}
-                      style={{ fontSize: 11, padding: '1px 4px', borderRadius: 4, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', outline: 'none', cursor: 'pointer' }}
-                    >
-                      <option value="fal-hailuo">Hailuo（預設・最省）</option>
-                      <option value="fal-grok-video">Grok（含音訊）</option>
-                      <option value="fal-kling-26">Kling 2.6（高品質）</option>
-                    </select>
-                  </label>
-                  <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>Enter 換行　Shift+Enter 送出</span>
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4, paddingRight: 2 }}>Enter 換行　Shift+Enter 送出</div>
               </div>
             </>
           )}

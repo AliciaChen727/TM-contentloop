@@ -29,6 +29,8 @@ export async function getTier(uid: string): Promise<Tier> {
 }
 
 export async function checkImageQuota(uid: string): Promise<{ ok: boolean; tier: Tier; used: number; limit: number }> {
+  // Owners pay for the API directly → unlimited, no quota gate.
+  if (OWNER_UIDS.has(uid)) return { ok: true, tier: 'pro', used: 0, limit: Number.MAX_SAFE_INTEGER }
   const [tier, usageDoc] = await Promise.all([
     getTier(uid),
     adminDb.collection('users').doc(uid).collection('usage').doc(currentMonth()).get(),
@@ -39,6 +41,8 @@ export async function checkImageQuota(uid: string): Promise<{ ok: boolean; tier:
 }
 
 export async function checkVideoQuota(uid: string, requestedSeconds: number): Promise<{ ok: boolean; tier: Tier; usedSeconds: number; limit: number }> {
+  // Owners pay for the API directly → unlimited, no quota gate.
+  if (OWNER_UIDS.has(uid)) return { ok: true, tier: 'pro', usedSeconds: 0, limit: Number.MAX_SAFE_INTEGER }
   const [tier, usageDoc] = await Promise.all([
     getTier(uid),
     adminDb.collection('users').doc(uid).collection('usage').doc(currentMonth()).get(),
