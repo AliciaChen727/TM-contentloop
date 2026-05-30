@@ -15,10 +15,12 @@ import { AudienceSection } from '@/components/ads/sections/AudienceSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
+import { InsightsSection } from '@/components/ads/sections/InsightsSection'
 import type { NavId, Post, AdData, DiagItem, LabelEntry, Experiment } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
+  { id: 'insights', label: '洞察報告', icon: 'chart' },
   { id: 'diagnosis', label: '診斷建議', icon: 'alert' },
   { id: 'creative', label: '素材庫', icon: 'creative' },
   { id: 'trends', label: '成效趨勢', icon: 'chart' },
@@ -29,7 +31,7 @@ const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
 ]
 
 const NAV_LABELS: Record<NavId, string> = {
-  overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', trends: '成效趨勢',
+  overview: '總覽', insights: '洞察報告', diagnosis: '診斷建議', creative: '素材庫', trends: '成效趨勢',
   audience: '受眾分析', posts: '內容表現', time: '最佳時段', budget: '預算模擬',
 }
 
@@ -913,6 +915,7 @@ export default function AdsPage() {
           ) : (
             <>
               {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} optimizationGoal={optimizationGoal} />}
+              {active === 'insights' && <InsightsSection pageId={selectedPageId} onAskAI={canSidekick ? openSidekick : undefined} />}
               {active === 'diagnosis' && <DiagnosisSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} />}
               {active === 'creative' && <CreativeSection
                 data={adData}
