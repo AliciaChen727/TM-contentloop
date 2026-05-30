@@ -43,15 +43,23 @@ export async function POST(req: NextRequest) {
     })
     // res.url is the final URL after redirects (short link → full design URL).
     const fromUrl = res.url.match(DESIGN_RE)
-    if (fromUrl) return NextResponse.json({ designId: fromUrl[1] })
+    if (fromUrl) {
+      console.log(`[canva/resolve-link] ${url} -> ${res.url} designId=${fromUrl[1]}`)
+      return NextResponse.json({ designId: fromUrl[1] })
+    }
 
     // Fallback: some short links land on an HTML page; scan it for the ID.
     const text = await res.text().catch(() => '')
     const fromBody = text.match(DESIGN_RE)
-    if (fromBody) return NextResponse.json({ designId: fromBody[1] })
+    if (fromBody) {
+      console.log(`[canva/resolve-link] ${url} body-matched designId=${fromBody[1]} (finalUrl=${res.url})`)
+      return NextResponse.json({ designId: fromBody[1] })
+    }
 
-    return NextResponse.json({ error: 'NO_DESIGN_ID' }, { status: 422 })
-  } catch {
+    console.error(`[canva/resolve-link] no design id. status=${res.status} finalUrl=${res.url}`)
+    return NextResponse.json({ error: 'NO_DESIGN_ID', finalUrl: res.url }, { status: 422 })
+  } catch (e) {
+    console.error(`[canva/resolve-link] fetch failed for ${url}: ${e instanceof Error ? e.message : e}`)
     return NextResponse.json({ error: 'RESOLVE_FAILED' }, { status: 502 })
   }
 }

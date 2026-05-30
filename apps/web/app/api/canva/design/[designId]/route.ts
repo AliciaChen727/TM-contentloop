@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { canvaFetch } from '@/lib/canva/client'
@@ -14,18 +15,6 @@ async function verifyUser(req: NextRequest): Promise<string | null> {
   }
 }
 
-function extractText(element: Record<string, unknown>): string[] {
-  const texts: string[] = []
-  if (element.type === 'text' && typeof element.text === 'string' && element.text.trim()) {
-    texts.push(element.text.trim())
-  }
-  const children = element.children as Record<string, unknown>[] | undefined
-  if (Array.isArray(children)) {
-    for (const child of children) texts.push(...extractText(child))
-  }
-  return texts
-}
-
 export async function GET(
   req: NextRequest,
   { params }: { params: { designId: string } },
@@ -35,37 +24,54 @@ export async function GET(
 
   const { designId } = params
 
-  const [designRes, pagesRes] = await Promise.all([
-    canvaFetch(uid, `/designs/${designId}`),
-    canvaFetch(uid, `/designs/${designId}/pages`),
-  ])
+  let designRes: Response, pagesRes: Response
+  try {
+    [designRes, pagesRes] = await Promise.all([
+      canvaFetch(uid, `/designs/${designId}`),
+      canvaFetch(uid, `/designs/${designId}/pages`),
+    ])
+  } catch (e) {
+    // getValidAccessToken throws when there's no stored token or refresh failed.
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`[canva/design] token error for uid=${uid}: ${msg}`)
+    return NextResponse.json({ error: 'CANVA_NOT_CONNECTED', detail: msg }, { status: 401 })
+  }
 
   if (!designRes.ok) {
+    const detail = await designRes.text().catch(() => '')
+    console.error(`[canva/design] designId=${designId} canva status=${designRes.status} body=${detail.slice(0, 300)}`)
     if (designRes.status === 401 || designRes.status === 403) {
-      return NextResponse.json({ error: 'CANVA_NOT_CONNECTED' }, { status: 401 })
+      // 401/403 here means this design isn't owned by / accessible to the connected account.
+      return NextResponse.json({ error: 'CANVA_DESIGN_FORBIDDEN', canvaStatus: designRes.status }, { status: 403 })
     }
-    return NextResponse.json({ error: 'Design not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Design not found', canvaStatus: designRes.status }, { status: 404 })
   }
 
   const { design } = await designRes.json()
   const editUrl = `https://www.canva.com/design/${designId}/edit`
 
-  if (!pagesRes.ok) {
-    return NextResponse.json({ title: design.title ?? '', textContent: [], editUrl })
-  }
-
-  const { pages } = await pagesRes.json()
-  const textContent: string[] = []
-  for (const page of pages ?? []) {
-    const elements = page.elements as Record<string, unknown>[] | undefined
-    if (Array.isArray(elements)) {
-      for (const el of elements) textContent.push(...extractText(el))
+  // Canva's API does NOT expose a design's text/element content — only page
+  // metadata + a thumbnail image. So we fetch the first page's thumbnail and let
+  // the AI analyse the design visually (it can read the text from the image).
+  let thumbnail: { data: string; mimeType: string } | null = null
+  if (pagesRes.ok) {
+    try {
+      const { pages } = await pagesRes.json()
+      const thumbUrl = pages?.[0]?.thumbnail?.url as string | undefined
+      if (thumbUrl) {
+        const imgRes = await fetch(thumbUrl)
+        if (imgRes.ok) {
+          const buf = Buffer.from(await imgRes.arrayBuffer())
+          thumbnail = {
+            data: buf.toString('base64'),
+            mimeType: imgRes.headers.get('content-type') ?? 'image/png',
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`[canva/design] thumbnail fetch failed: ${e instanceof Error ? e.message : e}`)
     }
   }
 
-  return NextResponse.json({
-    title: design.title ?? '',
-    textContent: textContent.filter((t, i) => textContent.indexOf(t) === i),
-    editUrl,
-  })
+  return NextResponse.json({ title: design.title ?? '', editUrl, thumbnail })
 }

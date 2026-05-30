@@ -217,21 +217,32 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
       })
 
       if (!res.ok) {
-        setErrorMsg('無法讀取設計稿，請確認連結是否正確')
+        const ed = await res.json().catch(() => ({}))
+        if (ed.error === 'CANVA_DESIGN_FORBIDDEN') {
+          setErrorMsg('讀不到這份設計稿：它必須是「你連接的 Canva 帳號」自己擁有的設計。請貼自己帳號裡的設計連結。')
+        } else if (ed.error === 'CANVA_NOT_CONNECTED') {
+          setErrorMsg('Canva 授權已失效，請到設定頁重新連接 Canva。')
+        } else {
+          setErrorMsg('無法讀取設計稿，請確認連結是否正確')
+        }
         setStep('error')
         return
       }
 
-      const { title, textContent, editUrl } = await res.json()
+      const { title, thumbnail, editUrl } = await res.json() as {
+        title: string; editUrl: string; thumbnail: { data: string; mimeType: string } | null
+      }
       setDesignEditUrl(editUrl)
 
-      const textSummary = textContent.length > 0
-        ? `設計稿中的文字內容：\n${textContent.map((t: string) => `• ${t}`).join('\n')}`
-        : '（設計稿中未偵測到文字層）'
+      const prompt = `請分析我的 Canva 廣告設計稿「${title || designId}」，並根據我的廣告數據給我具體的優化建議。請針對：\n1. 視覺設計（配色、版面、圖片風格）\n2. 主標題 / 副標題 / CTA 文案改寫方向\n3. 整體訴求角度調整`
 
-      onSendToChat(
-        `請分析我的 Canva 廣告設計稿「${title || designId}」，並根據我的廣告數據給我具體的優化建議。\n\n${textSummary}\n\n請針對以下項目給建議：\n1. 主標題 / 副標題改寫方向\n2. CTA 文案優化\n3. 整體訴求角度調整`,
-      )
+      // Canva's API exposes only a page thumbnail (no text content), so we send
+      // the thumbnail image to the AI for visual analysis (it reads the text itself).
+      if (thumbnail?.data) {
+        onSendToChat(prompt, { data: thumbnail.data, mimeType: thumbnail.mimeType, name: `${title || designId}.png` })
+      } else {
+        onSendToChat(`${prompt}\n\n（這份設計稿讀不到縮圖，請直接描述內容或貼上主要文案，我再給建議。）`)
+      }
       setStep('done')
     } catch {
       setErrorMsg('讀取設計稿失敗，請稍後再試')
