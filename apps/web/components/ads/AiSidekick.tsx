@@ -344,6 +344,8 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [typingLabel, setTypingLabel] = useState('正在載入數據⋯')
   const [imageEngine, setImageEngine] = useState('fal-grok-image')
   const [videoEngine, setVideoEngine] = useState('fal-hailuo')
+  const [canvaConnected, setCanvaConnected] = useState(false)
+  const [canvaPushing, setCanvaPushing] = useState<string | null>(null)
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadPct, setVideoUploadPct] = useState(0)
   const [showHistory, setShowHistory] = useState(false)
@@ -388,6 +390,31 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : '網路錯誤'
       setMessages(p => p.map(m => m.id === msgId ? { ...m, imageLoading: false, imageError: errMsg } : m))
+    }
+  }, [])
+
+  const pushToCanva = useCallback(async (msgId: string, imageUrl: string) => {
+    const user = auth.currentUser
+    const idToken = user ? await user.getIdToken() : null
+    if (!idToken) return
+    setCanvaPushing(msgId)
+    try {
+      const base64 = imageUrl.split(',')[1] ?? ''
+      const res = await fetch('/api/canva/create-design', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ imageData: base64, title: 'AI Sidekick 廣告素材' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.editUrl) {
+        alert(data.error === 'CANVA_NOT_CONNECTED' ? 'Canva 授權已失效，請到設定頁重新連接。' : '推送 Canva 失敗，請稍後再試。')
+        return
+      }
+      window.open(data.editUrl, '_blank')
+    } catch {
+      alert('推送 Canva 失敗，請稍後再試。')
+    } finally {
+      setCanvaPushing(null)
     }
   }, [])
 
@@ -560,14 +587,16 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     sessionIdRef.current = Date.now().toString(36) + Math.random().toString(36).slice(2)
     convStartedRef.current = false
     turnCountRef.current = 0
-    if (pageId) {
-      auth.currentUser?.getIdToken().then(async idToken => {
-        try {
-          const res = await fetch(`/api/user/role?pageId=${pageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
-          if (res.ok) { const d = await res.json(); setIsOwner(!!d.isOwner) }
-        } catch { /* non-critical */ }
-      })
-    }
+    auth.currentUser?.getIdToken().then(async idToken => {
+      try {
+        const [roleRes, canvaRes] = await Promise.all([
+          pageId ? fetch(`/api/user/role?pageId=${pageId}`, { headers: { Authorization: `Bearer ${idToken}` } }) : Promise.resolve(null),
+          fetch('/api/canva/status', { headers: { Authorization: `Bearer ${idToken}` } }),
+        ])
+        if (roleRes?.ok) { const d = await roleRes.json(); setIsOwner(!!d.isOwner) }
+        if (canvaRes.ok) { const d = await canvaRes.json(); setCanvaConnected(!!d.connected) }
+      } catch { /* non-critical */ }
+    })
   }, [open, pageId])
 
   // Write endedAt when drawer closes
@@ -1037,6 +1066,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                   ⬇ 下載圖片
                                 </a>
                               </div>
+                              {canvaConnected && (
+                                <button
+                                  onClick={() => pushToCanva(msg.id, msg.imageUrl!)}
+                                  disabled={canvaPushing === msg.id}
+                                  style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '7px 0', borderRadius: 8, border: 'none', background: canvaPushing === msg.id ? '#b2dfdb' : '#4dd0c4', color: '#fff', cursor: canvaPushing === msg.id ? 'default' : 'pointer', fontWeight: 500 }}>
+                                  {canvaPushing === msg.id ? '推送中⋯' : '🎨 推到 Canva 建立設計稿'}
+                                </button>
+                              )}
                             </div>
                           )
                         })()}
