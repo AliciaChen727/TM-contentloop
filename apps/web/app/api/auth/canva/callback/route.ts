@@ -12,15 +12,17 @@ export async function GET(req: NextRequest) {
 
   const cookieStore = await cookies()
   const savedState = cookieStore.get('canva_oauth_state')?.value
+  const codeVerifier = cookieStore.get('canva_oauth_verifier')?.value
   const idToken = cookieStore.get('canva_oauth_id_token')?.value
 
   cookieStore.delete('canva_oauth_state')
+  cookieStore.delete('canva_oauth_verifier')
   cookieStore.delete('canva_oauth_id_token')
 
   if (error) {
     return NextResponse.redirect(new URL('/dashboard/settings?canva=error', req.nextUrl.origin))
   }
-  if (!code || !state || state !== savedState || !idToken) {
+  if (!code || !state || state !== savedState || !idToken || !codeVerifier) {
     return NextResponse.redirect(new URL('/dashboard/settings?canva=error', req.nextUrl.origin))
   }
 
@@ -38,6 +40,7 @@ export async function GET(req: NextRequest) {
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
+      code_verifier: codeVerifier,
       redirect_uri: process.env.CANVA_REDIRECT_URI!,
       client_id: process.env.CANVA_CLIENT_ID!,
       client_secret: process.env.CANVA_CLIENT_SECRET!,

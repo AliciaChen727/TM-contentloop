@@ -23,20 +23,27 @@ export async function GET(req: NextRequest) {
   }
 
   const state = crypto.randomBytes(16).toString('hex')
+
+  // Canva OAuth requires PKCE (RFC 7636). Without code_challenge the
+  // authorize endpoint returns 400. code_verifier is 43-128 chars from the
+  // unreserved set; base64url of 32 random bytes satisfies this.
+  const codeVerifier = crypto.randomBytes(32).toString('base64url')
+  const codeChallenge = crypto
+    .createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64url')
+
   const cookieStore = await cookies()
-  cookieStore.set('canva_oauth_state', state, {
+  const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 600,
     path: '/',
-  })
+  } as const
+  cookieStore.set('canva_oauth_state', state, cookieOpts)
+  cookieStore.set('canva_oauth_verifier', codeVerifier, cookieOpts)
   // Stash the idToken in a short-lived cookie so callback can identify the user
-  cookieStore.set('canva_oauth_id_token', idToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 600,
-    path: '/',
-  })
+  cookieStore.set('canva_oauth_id_token', idToken, cookieOpts)
 
   const params = new URLSearchParams({
     client_id: process.env.CANVA_CLIENT_ID!,
@@ -44,6 +51,8 @@ export async function GET(req: NextRequest) {
     response_type: 'code',
     scope: SCOPES,
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   })
 
   return NextResponse.redirect(
