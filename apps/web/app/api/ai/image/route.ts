@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
-// Some engines (gpt-image-2, grok) take 10–30s; raise the function timeout.
-export const maxDuration = 60
+// Some engines (gpt-image-2) can take 60-90s; use 120s to stay under Vercel Pro limit.
+export const maxDuration = 120
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { recordImageGeneration } from '@/lib/usage'
