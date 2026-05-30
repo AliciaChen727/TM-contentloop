@@ -19,25 +19,46 @@ export async function GET(req: NextRequest) {
   cookieStore.delete('canva_oauth_verifier')
   cookieStore.delete('canva_oauth_id_token')
 
-  // Surface the precise failure point (reason=...) so connection issues can be
-  // diagnosed from the URL without digging through server logs.
-  const fail = (reason: string) => {
-    console.error('[canva/callback] failed:', reason)
-    return NextResponse.redirect(new URL(`/dashboard/settings?canva=error&reason=${reason}`, req.nextUrl.origin))
+  const origin = req.nextUrl.origin
+
+  // The flow runs in a popup so canva.com never enters the main window's
+  // history. Return a tiny HTML page that posts the result back to the opener
+  // and closes itself; if there's no opener (popup blocked → full-page flow),
+  // fall back to redirecting the settings page with ?canva=... (+reason).
+  const respond = (status: 'connected' | 'error', reason?: string) => {
+    if (status === 'error') console.error('[canva/callback] failed:', reason)
+    const result = JSON.stringify({ type: 'canva-result', status, reason: reason ?? null })
+    const fallbackUrl = `/dashboard/settings?canva=${status}${reason ? `&reason=${reason}` : ''}`
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Canva</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;color:#555">處理中…
+<script>
+(function(){
+  var result = ${result};
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(result, ${JSON.stringify(origin)});
+      window.close();
+      return;
+    }
+  } catch (e) {}
+  window.location.replace(${JSON.stringify(fallbackUrl)});
+})();
+</script></body></html>`
+    return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
 
-  if (error) return fail(`oauth_${error}`)
-  if (!code) return fail('no_code')
-  if (!state || !savedState || state !== savedState) return fail('bad_state')
-  if (!codeVerifier) return fail('no_verifier')
-  if (!idToken) return fail('no_id_token')
+  if (error) return respond('error', `oauth_${error}`)
+  if (!code) return respond('error', 'no_code')
+  if (!state || !savedState || state !== savedState) return respond('error', 'bad_state')
+  if (!codeVerifier) return respond('error', 'no_verifier')
+  if (!idToken) return respond('error', 'no_id_token')
 
   let uid: string
   try {
     const decoded = await adminAuth.verifyIdToken(idToken)
     uid = decoded.uid
   } catch {
-    return fail('bad_id_token')
+    return respond('error', 'bad_id_token')
   }
 
   // Canva's token endpoint authenticates the client via HTTP Basic auth
@@ -63,7 +84,7 @@ export async function GET(req: NextRequest) {
   if (!tokenRes.ok) {
     const detail = await tokenRes.text().catch(() => '')
     console.error('[canva/callback] token exchange failed:', tokenRes.status, detail)
-    return fail(`token_${tokenRes.status}`)
+    return respond('error', `token_${tokenRes.status}`)
   }
 
   const data = await tokenRes.json()
@@ -73,5 +94,5 @@ export async function GET(req: NextRequest) {
     expiresAt: Date.now() + data.expires_in * 1000,
   })
 
-  return NextResponse.redirect(new URL('/dashboard/settings?canva=connected', req.nextUrl.origin))
+  return respond('connected')
 }
