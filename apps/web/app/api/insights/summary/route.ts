@@ -149,11 +149,16 @@ export async function GET(req: NextRequest) {
 
   // Extract goal-relevant ad metrics
   const adCtr = adsSummaryRaw.ctr ?? 0
-  const adCpc = adsSummaryRaw.cpc ?? 0
+  const adSpendRaw = adsSummaryRaw.spend ?? 0
+  const adClicksRaw = adsSummaryRaw.clicks ?? 0
+  // CPC may not be pre-computed in summary; derive from spend/clicks if missing
+  const adCpc = adsSummaryRaw.cpc > 0
+    ? adsSummaryRaw.cpc
+    : (adSpendRaw > 0 && adClicksRaw > 0 ? adSpendRaw / adClicksRaw : 0)
   const adCpm = adsSummaryRaw.cpm ?? 0
-  const adSpend = adsSummaryRaw.spend ?? 0
+  const adSpend = adSpendRaw
   const adImpressions = adsSummaryRaw.impressions ?? 0
-  const adClicks = adsSummaryRaw.clicks ?? 0
+  const adClicks = adClicksRaw
   const adFrequency = adsSummaryRaw.frequency ?? 0
   const adReach = adsSummaryRaw.reach ?? 0
 
