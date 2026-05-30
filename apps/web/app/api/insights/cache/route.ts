@@ -33,7 +33,12 @@ export async function GET(req: NextRequest) {
   const doc = await adminDb.collection('pages').doc(pageId).collection('insightReports').doc(periodKey).get()
   if (!doc.exists) return NextResponse.json({ cached: null })
 
-  return NextResponse.json({ cached: doc.data() })
+  const data = doc.data() ?? {}
+  // Normalize Firestore Timestamp → ISO string so the client gets a parseable date.
+  const gen = data.generatedAt
+  const generatedAt = gen?.toDate ? gen.toDate().toISOString() : (typeof gen === 'string' ? gen : null)
+
+  return NextResponse.json({ cached: { ...data, generatedAt } })
 }
 
 // POST /api/insights/cache — save generated report

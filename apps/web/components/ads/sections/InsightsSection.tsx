@@ -53,6 +53,13 @@ interface Summary {
   adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
 }
 
+// Returns a Date only if the input parses to a valid one, else null.
+function validDate(s: string): Date | null {
+  if (!s) return null
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
+}
+
 // Normalize text for fuzzy name matching (strip punctuation/brackets/spaces).
 function normalizeName(s: string): string {
   return (s || '').replace(/[「」『』《》【】\[\]()（）"'：:、，。.,#＃\s]/g, '').toLowerCase()
@@ -279,7 +286,8 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             // Data unchanged → reuse cached Claude report (no tokens burned)
             setReport(cached.report)
             setFromCache(true)
-            const ts = cached.generatedAt?.toDate?.()?.toISOString?.() ?? cached.generatedAt ?? ''
+            // Server already normalizes generatedAt to an ISO string (or null)
+            const ts = typeof cached.generatedAt === 'string' ? cached.generatedAt : ''
             setGeneratedAt(ts)
           } else {
             // Data changed (or legacy cache w/o fingerprint) → mark stale, prompt regenerate
@@ -430,14 +438,14 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
 
         {/* Status indicators */}
         {cacheChecking && <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>檢查快取⋯</span>}
-        {fromCache && !loading && (
+        {fromCache && !loading && validDate(generatedAt) && (
           <span style={{ fontSize: 11, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: 10 }}>
-            ⚡ 快取載入 · {generatedAt ? new Date(generatedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+            ⚡ 快取載入 · {validDate(generatedAt)!.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
-        {!fromCache && generatedAt && !loading && (
+        {!fromCache && !loading && validDate(generatedAt) && (
           <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>
-            生成於 {new Date(generatedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
+            生成於 {validDate(generatedAt)!.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
       </div>

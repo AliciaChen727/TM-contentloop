@@ -80,11 +80,24 @@ ${JSON.stringify(underPosts, null, 2)}`
     })
 
     const raw = res.content[0]?.type === 'text' ? res.content[0].text : ''
+    // Extract the FIRST complete balanced {...} object (ignore any trailing prose
+    // Claude may append after it, which caused "non-whitespace after JSON" errors).
     const startIdx = raw.indexOf('{')
-    const endIdx = raw.lastIndexOf('}')
-    if (startIdx === -1 || endIdx === -1) {
-      return NextResponse.json({ error: '報告格式異常，請重試' }, { status: 500 })
+    if (startIdx === -1) return NextResponse.json({ error: '報告格式異常，請重試' }, { status: 500 })
+    let depth = 0, endIdx = -1, inStr = false, esc = false
+    for (let i = startIdx; i < raw.length; i++) {
+      const ch = raw[i]
+      if (inStr) {
+        if (esc) esc = false
+        else if (ch === '\\') esc = true
+        else if (ch === '"') inStr = false
+      } else {
+        if (ch === '"') inStr = true
+        else if (ch === '{') depth++
+        else if (ch === '}') { depth--; if (depth === 0) { endIdx = i; break } }
+      }
     }
+    if (endIdx === -1) return NextResponse.json({ error: '報告格式異常，請重試' }, { status: 500 })
 
     const jsonSlice = raw.slice(startIdx, endIdx + 1)
 
@@ -93,17 +106,7 @@ ${JSON.stringify(underPosts, null, 2)}`
       report = JSON.parse(jsonSlice)
     } catch {
       // Claude sometimes emits literal newlines/tabs inside JSON string values
-      const cleaned = jsonSlice
-        .split('').map(ch => {
-          const code = ch.charCodeAt(0)
-          // Replace control chars (except valid JSON whitespace between tokens)
-          if (code < 0x20 && code !== 0x09 && code !== 0x0A && code !== 0x0D) return ' '
-          return ch
-        }).join('')
-        // Replace actual newlines/tabs that ended up inside string values
-        .replace(/\n/g, ' ')
-        .replace(/\r/g, '')
-        .replace(/\t/g, ' ')
+      const cleaned = jsonSlice.replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
       report = JSON.parse(cleaned)
     }
 
