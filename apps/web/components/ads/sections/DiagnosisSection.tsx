@@ -16,7 +16,8 @@ function resolvePostLink(storyId: string | null | undefined, posts: Post[]): str
   return `https://www.facebook.com/${storyId}`
 }
 
-export function DiagnosisSection({ data, posts = [], onAskAI }: { data: AdData; posts?: Post[]; onAskAI?: (q: string) => void }) {
+export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts?: Post[] | null; onAskAI?: (q: string) => void }) {
+  const postList = posts ?? []
   const icons: Record<string, string> = { critical: '🚨', warning: '⚠️', good: '✅' }
   const labels: Record<string, string> = { critical: '嚴重', warning: '警告', good: '優化機會' }
   const lc: Record<string, [string, string]> = {
@@ -67,7 +68,7 @@ export function DiagnosisSection({ data, posts = [], onAskAI }: { data: AdData; 
 
       <div className="ads-diag-list">
         {data.diagnosis.map(d => {
-          const postUrl = resolvePostLink(d.storyId, posts)
+          const postUrl = resolvePostLink(d.storyId, postList)
           const hasPreview = !!(d.thumbnailUrl || postUrl)
           return (
           <div key={d.id} className={`ads-diag-item ${d.severity}`}>
