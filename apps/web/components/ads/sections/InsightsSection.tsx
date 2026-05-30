@@ -158,10 +158,16 @@ const CURRENT_MONTH = new Date().getMonth() + 1
 const CURRENT_QUARTER = Math.ceil(CURRENT_MONTH / 3)
 const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR].filter(y => y >= 2024)
 
-function StatusBadge({ status }: { status: 'above' | 'below' }) {
-  return status === 'above'
-    ? <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#16a34a', fontWeight: 600 }}>優於同業 ↑</span>
-    : <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#ca8a04', fontWeight: 600 }}>低於同業 ↓</span>
+// lowerIsBetter: for CPC/CPM — lower value = cheaper = better performance
+function StatusBadge({ status, lowerIsBetter = false }: { status: 'above' | 'below'; lowerIsBetter?: boolean }) {
+  // For lowerIsBetter metrics: 'above' means value <= benchmark (cheaper = good)
+  const good = status === 'above'
+  const label = lowerIsBetter
+    ? (good ? '較省 ✓' : '較貴 ↑')
+    : (good ? '優於同業 ↑' : '低於同業 ↓')
+  return good
+    ? <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#16a34a', fontWeight: 600 }}>{label}</span>
+    : <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#ca8a04', fontWeight: 600 }}>{label}</span>
 }
 
 const selectStyle: React.CSSProperties = {
@@ -275,13 +281,13 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
     }
   }
 
-  const metricRow = (label: string, data: BenchmarkStatus, unit = '%') => (
+  const metricRow = (label: string, data: BenchmarkStatus, unit = '%', lowerIsBetter = false) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--ad-border)' }}>
       <span style={{ fontSize: 13, color: 'var(--ad-text2)' }}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>{data.value}{unit}</span>
         <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>同業 {data.benchmark}{unit}</span>
-        <StatusBadge status={data.status} />
+        <StatusBadge status={data.status} lowerIsBetter={lowerIsBetter} />
       </div>
     </div>
   )
@@ -404,8 +410,8 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {metricRow('FB 平均互動率', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? ['adCtr']).includes('adCtr') && metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
-          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPC', summary.benchmarkCompare.fb.adCpc, '')}
-          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '')}
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPC', summary.benchmarkCompare.fb.adCpc, '', true)}
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '', true)}
           {summary.adsDateRange && (
             <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 6 }}>
               廣告資料：{summary.adsDateRange.start} ~ {summary.adsDateRange.end}
