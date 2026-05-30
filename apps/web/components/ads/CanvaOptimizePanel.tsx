@@ -175,13 +175,6 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
   }
 
   async function handleCanvaLink() {
-    const designId = parseDesignId(canvaUrl.trim())
-    if (!designId) {
-      setErrorMsg('無法解析 Design ID，請確認連結格式為 canva.com/design/D.../...')
-      setStep('error')
-      return
-    }
-
     setMode('canva')
     setStep('fetching')
 
@@ -189,6 +182,24 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
       const user = auth.currentUser
       if (!user) throw new Error('未登入')
       const idToken = await user.getIdToken()
+
+      // Resolve the design ID. Full canva.com/design/D... links parse locally;
+      // short canva.link/... links are expanded server-side (follow redirect).
+      let designId = parseDesignId(canvaUrl.trim())
+      if (!designId) {
+        const r = await fetch('/api/canva/resolve-link', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: canvaUrl.trim() }),
+        })
+        const rd = await r.json().catch(() => ({}))
+        if (r.ok && rd.designId) designId = rd.designId
+      }
+      if (!designId) {
+        setErrorMsg('無法解析這個 Canva 連結，請改貼設計稿的完整網址（canva.com/design/...）')
+        setStep('error')
+        return
+      }
 
       const res = await fetch(`/api/canva/design/${designId}`, {
         headers: { Authorization: `Bearer ${idToken}` },
