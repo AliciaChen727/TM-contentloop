@@ -79,9 +79,12 @@ export async function GET(req: NextRequest) {
   const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
   // --- Read page profile (optimizationGoal, industry) ---
-  const [profileSnap, adsSnap] = await Promise.all([
+  const [profileSnap, adsSnapUser, adsSnapShared] = await Promise.all([
     adminDb.collection('pages').doc(pageId).get(),
+    // User-level path (synced by this specific user)
     adminDb.collection('users').doc(dataOwnerUid).collection('pages').doc(pageId).collection('adInsights').doc('latest').get(),
+    // Shared path (merged from all admins, more complete)
+    adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get(),
   ])
   const profile = profileSnap.data() ?? {}
   const optimizationGoal = (profile.optimizationGoal ?? 'clicks') as string
@@ -142,8 +145,13 @@ export async function GET(req: NextRequest) {
   const latestFollowers = followerStats[followerStats.length - 1]?.total ?? 0
   const followerGrowthRate = latestFollowers > 0 ? Number((followerGrowth / latestFollowers * 100).toFixed(2)) : 0
 
-  // --- Ads data ---
-  const adsRaw = adsSnap.data() ?? {}
+  // --- Ads data: prefer user path; fall back to shared path (mirrors ads/data route) ---
+  // Shared path tends to have more complete/accurate summary data
+  const adsRawUser = adsSnapUser.data() ?? {}
+  const adsRawShared = adsSnapShared.data() ?? {}
+  // Use shared if user path has no summary.cpc (or 0), otherwise prefer user path
+  const userCpc = (adsRawUser.summary as Record<string, number> | undefined)?.cpc ?? 0
+  const adsRaw = userCpc > 0 ? adsRawUser : (adsSnapShared.exists ? adsRawShared : adsRawUser)
   const adsSummaryRaw = (adsRaw.summary ?? {}) as Record<string, number>
   const adsDateRange = adsRaw.dateRange as { from?: string; to?: string } | undefined
 
