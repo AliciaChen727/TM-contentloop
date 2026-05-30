@@ -8,7 +8,9 @@ import { BENCHMARKS, getBenchmarkByGoal } from '@/lib/benchmarks'
 function getPeriodRange(year: number, periodType: 'month' | 'quarter', value: number): {
   start: Date; end: Date; label: string; isPartial: boolean; periodKey: string
 } {
-  const now = new Date()
+  // Use Taiwan time (UTC+8) so "today" / month boundaries match the user's calendar.
+  // A Date shifted +8h reads its Taiwan wall-clock date via toISOString().
+  const now = new Date(Date.now() + 8 * 3600 * 1000)
   if (periodType === 'month') {
     const start = new Date(year, value - 1, 1)
     const fullEnd = new Date(year, value, 0, 23, 59, 59)

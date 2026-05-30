@@ -342,10 +342,6 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
     </div>
   )
 
-  const isCurrentPeriod = periodType === 'month'
-    ? year === CURRENT_YEAR && month === CURRENT_MONTH
-    : year === CURRENT_YEAR && quarter === CURRENT_QUARTER
-
   return (
     <div>
       {/* Header */}
@@ -430,10 +426,14 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
         )}
       </div>
 
-      {/* Partial period warning */}
-      {(isCurrentPeriod || (summary?.isPartial)) && (
-        <div style={{ marginBottom: 14, padding: '8px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fcd34d', fontSize: 12, color: '#92400e' }}>
-          ⏳ 本期間尚未結束，統計至 {summary?.dataAsOf ?? new Date().toISOString().slice(0, 10)}
+      {/* Period range banner — always selected month 1st → month-end (or today if not reached) */}
+      {summary && (
+        <div style={{ marginBottom: 14, padding: '8px 14px', borderRadius: 8, fontSize: 12,
+          background: summary.isPartial ? '#fffbeb' : '#f0f9ff',
+          border: `1px solid ${summary.isPartial ? '#fcd34d' : '#bae6fd'}`,
+          color: summary.isPartial ? '#92400e' : '#0369a1' }}>
+          📅 資料區間 {summary.dateRange.start} ~ {summary.dateRange.end}
+          {summary.isPartial && '（本期尚未結束，統計至今日）'}
         </div>
       )}
 
@@ -473,9 +473,9 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? ['adCtr']).includes('adCtr') && metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPA（每次行動成本）', summary.benchmarkCompare.fb.adCpc, '', true)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '', true)}
-          {summary.adsDateRange && (
+          {summary.adsDateRange && (summary.adsDateRange.start !== summary.dateRange.start || summary.adsDateRange.end !== summary.dateRange.end) && (
             <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 6 }}>
-              廣告資料：{summary.adsDateRange.start} ~ {summary.adsDateRange.end}
+              ※ 廣告數據實際涵蓋 {summary.adsDateRange.start} ~ {summary.adsDateRange.end}（最近同步區間）
             </div>
           )}
         </div>
