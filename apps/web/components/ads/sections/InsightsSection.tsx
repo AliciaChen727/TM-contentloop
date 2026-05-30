@@ -62,8 +62,13 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
   const ov = summary.overview
   const GOAL_MAP: Record<string, string> = { clicks: '提升點擊率', conversion: '提升轉換與ROI', reach: '擴大品牌觸及', event: '活動報名推廣' }
 
-  const bmRow = (label: string, value: string, bench: string, status: 'above' | 'below') =>
-    `<tr><td>${label}</td><td><strong>${value}</strong></td><td style="color:#888">${bench}</td><td style="color:${status === 'above' ? '#16a34a' : '#ca8a04'}">${status === 'above' ? '優於同業 ↑' : '低於同業 ↓'}</td></tr>`
+  const bmRow = (label: string, value: string, bench: string, status: 'above' | 'below' | 'nodata', lowerIsBetter = false) => {
+    let badge: string, color: string
+    if (status === 'nodata') { badge = '無資料'; color = '#9ca3af' }
+    else if (status === 'above') { badge = lowerIsBetter ? '較省 ✓' : '優於同業 ↑'; color = '#16a34a' }
+    else { badge = lowerIsBetter ? '較貴 ↑' : '低於同業 ↓'; color = '#ca8a04' }
+    return `<tr><td>${label}</td><td><strong>${value}</strong></td><td style="color:#888">${bench}</td><td style="color:${color}">${badge}</td></tr>`
+  }
 
   const statCard = (label: string, value: string) =>
     `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`
@@ -116,7 +121,7 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
 ${bmRow('FB 平均互動率', `${bm.engagementRate.value}%`, `${bm.engagementRate.benchmark}%`, bm.engagementRate.status)}
 ${bmRow('追蹤者成長率', `${bm.followerGrowth.value}%`, `${bm.followerGrowth.benchmark}%`, bm.followerGrowth.status)}
 ${bmRow('廣告 CTR', `${bm.adCtr.value}%`, `${bm.adCtr.benchmark}%`, bm.adCtr.status)}
-${bmRow('廣告 CPC', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benchmark}`, bm.adCpc.status)}
+${bmRow('廣告 CPC', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benchmark}`, bm.adCpc.status, true)}
 </tbody></table>
 <div class="benchmark-insight" style="margin-top:10px">${report.benchmarkInsight}</div>
 
