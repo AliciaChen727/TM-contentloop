@@ -82,6 +82,23 @@ export default function SettingsPage() {
     if (!popup) window.location.href = url
   }
 
+  // Switch account: forget the current Canva token, then re-open OAuth so the
+  // user can pick a different account (via "切換帳號" on Canva's consent screen).
+  async function switchCanvaAccount() {
+    if (!idToken) return
+    await fetch('/api/canva/disconnect', { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } })
+    setCanvaConnected(false)
+    setCanvaMsg(null)
+    connectCanva()
+  }
+
+  async function disconnectCanva() {
+    if (!idToken) return
+    await fetch('/api/canva/disconnect', { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } })
+    setCanvaConnected(false)
+    setCanvaMsg(null)
+  }
+
   const needsOtherText = industry === 'other'
   const goalReady = !!adGoal && !!industry && (!needsOtherText || industryOther.trim().length > 0)
 
@@ -376,7 +393,23 @@ export default function SettingsPage() {
               </button>
             )}
             {canvaConnected && (
-              <span className="text-xs text-green-600 font-semibold">✓ 授權有效</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-green-600 font-semibold">✓ 授權有效</span>
+                <button
+                  onClick={switchCanvaAccount}
+                  disabled={!idToken}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  切換帳號
+                </button>
+                <button
+                  onClick={disconnectCanva}
+                  disabled={!idToken}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                >
+                  中斷連接
+                </button>
+              </div>
             )}
           </div>
           {canvaMsg === 'connected' && (
