@@ -10,15 +10,42 @@ interface Props {
   onSendToChat: (message: string, imageBase64?: { data: string; mimeType: string; name: string }) => void
 }
 
-type Step = 'pick' | 'uploading' | 'fetching' | 'done' | 'error'
-type Mode = 'upload' | 'canva'
+type Step = 'pick' | 'uploading' | 'fetching' | 'generateInput' | 'generating' | 'done' | 'genResult' | 'error'
+type Mode = 'upload' | 'canva' | 'generate'
+
+interface GeneratedCreative {
+  imageData: string
+  mimeType: string
+  headline: string
+  subhead: string
+  cta: string
+  rationale: string
+}
 
 function parseDesignId(url: string): string | null {
   const m = url.match(/canva\.com\/design\/(D[A-Za-z0-9_-]{10,})/i)
   return m?.[1] ?? null
 }
 
-export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
+// One row of suggested copy with a copy-to-clipboard button. Chinese copy is
+// kept as text (not baked into the AI image) so it can be pasted into Canva.
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+      <span style={{ color: 'var(--ad-text3)', minWidth: 44 }}>{label}</span>
+      <span style={{ flex: 1, color: 'var(--ad-text)', fontWeight: 500 }}>{value}</span>
+      <button
+        onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+        style={{ background: 'none', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: 'var(--ad-blue)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+      >
+        {copied ? '已複製' : '複製'}
+      </button>
+    </div>
+  )
+}
+
+export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<Step>('pick')
   const [mode, setMode] = useState<Mode | null>(null)
@@ -27,6 +54,8 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
   const [errorMsg, setErrorMsg] = useState('')
   const [assetId, setAssetId] = useState<string | null>(null)
   const [designEditUrl, setDesignEditUrl] = useState<string | null>(null)
+  const [briefText, setBriefText] = useState('')
+  const [gen, setGen] = useState<GeneratedCreative | null>(null)
   // null = checking, true/false = known
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
 
@@ -53,6 +82,45 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
     setErrorMsg('')
     setAssetId(null)
     setDesignEditUrl(null)
+    setBriefText('')
+    setGen(null)
+  }
+
+  async function handleGenerate() {
+    setMode('generate')
+    setStep('generating')
+    try {
+      const user = auth.currentUser
+      if (!user) throw new Error('未登入')
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/ai/creative', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, brief: briefText.trim() || undefined, engine: 'fal-recraft' }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        setErrorMsg(d.error === 'NO_API_KEY' ? '尚未設定 AI API 金鑰，請先到設定頁設定。' : (d.error ?? '生成失敗，請稍後再試'))
+        setStep('error')
+        return
+      }
+      setGen({
+        imageData: d.imageData, mimeType: d.mimeType,
+        headline: d.headline ?? '', subhead: d.subhead ?? '', cta: d.cta ?? '', rationale: d.rationale ?? '',
+      })
+      setStep('genResult')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : '生成失敗，請稍後再試')
+      setStep('error')
+    }
+  }
+
+  function downloadGenerated() {
+    if (!gen) return
+    const a = document.createElement('a')
+    a.href = `data:${gen.mimeType};base64,${gen.imageData}`
+    a.download = `contentloop-creative-${Date.now()}.png`
+    a.click()
   }
 
   async function handleImageFile(file: File) {
@@ -256,7 +324,100 @@ export function CanvaOptimizePanel({ open, onClose, onSendToChat }: Props) {
                 </div>
               )}
             </div>
+
+            {/* AI generate card — produces an optimized visual from scratch */}
+            <button
+              onClick={() => { setMode('generate'); setStep('generateInput') }}
+              style={{
+                width: '100%', padding: '16px', borderRadius: 12,
+                border: '1.5px solid var(--ad-border)', background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,111,212,0.06))',
+                cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = '#8B5CF6')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--ad-border)')}
+            >
+              <div style={{ fontSize: 22, marginBottom: 6 }}>✨</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text)', marginBottom: 3 }}>AI 生成優化視覺</div>
+              <div style={{ fontSize: 12, color: 'var(--ad-text3)' }}>依品牌資料產出全新廣告底圖 + 建議文案</div>
+            </button>
           </>
+        )}
+
+        {/* Step: generate input */}
+        {step === 'generateInput' && (
+          <div>
+            <p style={{ fontSize: 13, color: 'var(--ad-text2)', marginBottom: 10 }}>
+              想強調什麼？（選填，留空則依品牌資料自動發想）
+            </p>
+            <textarea
+              value={briefText}
+              onChange={e => setBriefText(e.target.value)}
+              placeholder="例如：主打 6/6 台北演講節早鳥報名，氛圍要熱血、專業"
+              rows={4}
+              style={{
+                width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 10,
+                border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text)',
+                outline: 'none', resize: 'vertical', fontFamily: 'inherit',
+              }}
+            />
+            <p style={{ fontSize: 11, color: 'var(--ad-text3)', margin: '8px 0 14px' }}>
+              ⚠️ AI 圖片無法正確顯示中文，底圖只放視覺與英文字；中文標題會另外列出，之後可貼到 Canva 當文字。
+            </p>
+            <button
+              onClick={handleGenerate}
+              style={{
+                width: '100%', padding: '11px', borderRadius: 10, border: 'none',
+                background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              ✨ 生成優化視覺
+            </button>
+          </div>
+        )}
+
+        {/* Step: generating */}
+        {step === 'generating' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🎨</div>
+            <p style={{ fontSize: 14, color: 'var(--ad-text)' }}>AI 生成中⋯</p>
+            <p style={{ fontSize: 12, color: 'var(--ad-text3)', marginTop: 6 }}>產出創意文案並繪製視覺，約需 10–20 秒</p>
+          </div>
+        )}
+
+        {/* Step: generate result */}
+        {step === 'genResult' && gen && (
+          <div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`data:${gen.mimeType};base64,${gen.imageData}`}
+              alt="AI 生成廣告視覺"
+              style={{ width: '100%', borderRadius: 12, marginBottom: 14, display: 'block' }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+              {gen.headline && <CopyRow label="主標題" value={gen.headline} />}
+              {gen.subhead && <CopyRow label="副標題" value={gen.subhead} />}
+              {gen.cta && <CopyRow label="CTA" value={gen.cta} />}
+            </div>
+            {gen.rationale && (
+              <p style={{ fontSize: 12, color: 'var(--ad-text2)', background: 'var(--ad-surface)', padding: '10px 12px', borderRadius: 8, marginBottom: 14 }}>
+                💡 {gen.rationale}
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={downloadGenerated}
+                style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                ⬇ 下載底圖
+              </button>
+              <button
+                onClick={() => { setGen(null); setStep('generateInput') }}
+                style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--ad-border)', background: 'none', color: 'var(--ad-text2)', fontSize: 13, cursor: 'pointer' }}
+              >
+                ↻ 重新生成
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Step: uploading */}
