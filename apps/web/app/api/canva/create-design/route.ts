@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const uid = await verifyUser(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { imageData, mimeType, title } = await req.json() as {
+  const { imageData, title } = await req.json() as {
     imageData?: string; mimeType?: string; title?: string
   }
   if (!imageData) return NextResponse.json({ error: 'Missing imageData' }, { status: 400 })
@@ -39,7 +39,9 @@ export async function POST(req: NextRequest) {
     createRes = await canvaFetch(uid, '/asset-uploads', {
       method: 'POST',
       headers: {
-        'Content-Type': mimeType || 'image/png',
+        // Canva's binary asset upload requires octet-stream, NOT the image mime
+        // type (image/png → 415 Unsupported Media Type).
+        'Content-Type': 'application/octet-stream',
         'Asset-Upload-Metadata': JSON.stringify({ name_base64: nameB64 }),
       },
       body: buf,
