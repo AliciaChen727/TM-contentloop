@@ -34,20 +34,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard/settings?canva=error', req.nextUrl.origin))
   }
 
+  // Canva's token endpoint authenticates the client via HTTP Basic auth
+  // (base64 of client_id:client_secret), NOT credentials in the body.
+  const basic = Buffer.from(
+    `${process.env.CANVA_CLIENT_ID}:${process.env.CANVA_CLIENT_SECRET}`,
+  ).toString('base64')
+
   const tokenRes = await fetch('https://api.canva.com/rest/v1/oauth/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${basic}`,
+    },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
       code_verifier: codeVerifier,
       redirect_uri: process.env.CANVA_REDIRECT_URI!,
-      client_id: process.env.CANVA_CLIENT_ID!,
-      client_secret: process.env.CANVA_CLIENT_SECRET!,
     }),
   })
 
   if (!tokenRes.ok) {
+    const detail = await tokenRes.text().catch(() => '')
+    console.error('[canva/callback] token exchange failed:', tokenRes.status, detail)
     return NextResponse.redirect(new URL('/dashboard/settings?canva=error', req.nextUrl.origin))
   }
 
