@@ -95,8 +95,11 @@ export async function GET(req: NextRequest) {
     adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get(),
   ])
   const profile = profileSnap.data() ?? {}
-  const optimizationGoal = (profile.optimizationGoal ?? 'clicks') as string
-  const industry = (profile.industry ?? 'event') as string
+  // Goal/industry live under onboardingData (page-scoped); fall back to any
+  // legacy flat fields, then defaults.
+  const ob = (profile.onboardingData ?? {}) as Record<string, unknown>
+  const optimizationGoal = (ob.optimizationGoal ?? profile.optimizationGoal ?? 'clicks') as string
+  const industry = (ob.industry ?? profile.industry ?? 'event') as string
 
   // --- Fetch FB posts: both page-scoped (live sync) + legacy (CSV/MD import) ---
   // Limit caps Firestore reads/cost. We fetch the latest N then filter by the

@@ -431,7 +431,7 @@ export default function AdsPage() {
         }
         setAuthed(true)
 
-        fetch('/api/user/onboarding', { headers }).then(async r => {
+        fetch(`/api/user/onboarding${pageId ? `?pageId=${pageId}` : ''}`, { headers }).then(async r => {
           if (!r.ok) return
           const j = await r.json()
           if (j.data?.optimizationGoal) setOptimizationGoal(j.data.optimizationGoal)
