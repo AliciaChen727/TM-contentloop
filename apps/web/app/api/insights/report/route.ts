@@ -20,8 +20,9 @@ const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，專門為非營
 
 【廣告分析規則】
 - topAdAnalysis/underAdAnalysis 針對「廣告素材」（不是有機貼文），用 CTR 衡量
+- 若只提供 1 則廣告：topAdAnalysis 放該廣告的完整分析（成效、原因、可優化方向都寫在 whyItWorked/replicablePattern），underAdAnalysis 回傳 []
 - 若提供了 A/B 測試數據，abTestInsight 要結合測試結果（哪個版本勝出、為什麼），否則 abTestInsight 寫 ""
-- 若無廣告數據，topAdAnalysis/underAdAnalysis 回傳空陣列 []`
+- 若無廣告數據，topAdAnalysis/underAdAnalysis 都回傳空陣列 []`
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')

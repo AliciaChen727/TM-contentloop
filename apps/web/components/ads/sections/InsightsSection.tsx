@@ -230,7 +230,7 @@ ${report.topPostAnalysis.map((p, i) => postCard(p, 'top', i)).join('')}
 <h2>📉 需改善貼文分析</h2>
 ${report.underPerformerAnalysis.map((p, i) => postCard(p, 'under', i)).join('')}
 ${report.abTestInsight ? `<h2>🧪 A/B 測試洞察</h2><div class="benchmark-insight">${report.abTestInsight}</div>` : ''}
-${(report.topAdAnalysis && report.topAdAnalysis.length > 0) ? `<h2>🏆 表現最佳廣告分析</h2>${report.topAdAnalysis.map(a => `<div class="post-card top"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」</div><div>💡 ${a.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${a.replicablePattern}</div></div>`).join('')}` : ''}
+${(report.topAdAnalysis && report.topAdAnalysis.length > 0) ? `<h2>${report.topAdAnalysis.length === 1 && (!report.underAdAnalysis || report.underAdAnalysis.length === 0) ? '📊 廣告分析' : '🏆 表現最佳廣告分析'}</h2>${report.topAdAnalysis.map(a => `<div class="post-card top"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」</div><div>💡 ${a.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${a.replicablePattern}</div></div>`).join('')}` : ''}
 ${(report.underAdAnalysis && report.underAdAnalysis.length > 0) ? `<h2>📉 需改善廣告分析</h2>${report.underAdAnalysis.map(a => `<div class="post-card under"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」</div><div>⚠️ 問題：${a.issue}</div><div class="post-pattern">🔧 建議：${a.improvement}</div></div>`).join('')}` : ''}
 
 <h2>🎯 Top 3 行動建議</h2>
@@ -650,10 +650,12 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             </div>
           )}
 
-          {/* Best ads */}
+          {/* Best ads (single ad → just "廣告分析") */}
           {report.topAdAnalysis && report.topAdAnalysis.length > 0 && (
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 18px' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🏆 表現最佳廣告分析</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                {report.topAdAnalysis.length === 1 && (!report.underAdAnalysis || report.underAdAnalysis.length === 0) ? '📊 廣告分析' : '🏆 表現最佳廣告分析'}
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {report.topAdAnalysis.map((a, i) => {
                   const link = matchAdLink(summary.topAds, a.ctr, i)

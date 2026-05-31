@@ -294,8 +294,13 @@ export async function GET(req: NextRequest) {
       }
     })
     .filter(c => c.spend > 0 || c.impressions > 0)
-  const topAds = [...rawCreatives].sort((a, b) => b.ctr - a.ctr).slice(0, 3)
-  const underAds = [...rawCreatives].filter(c => c.spend > 0).sort((a, b) => a.ctr - b.ctr).slice(0, 3)
+  // Split into best/worst WITHOUT overlap. With only 1 ad → analyze just that one
+  // (topAds=[ad], underAds=[]); with 2+ ads → top half vs the rest.
+  const sortedAds = [...rawCreatives].sort((a, b) => b.ctr - a.ctr) // high → low CTR
+  const n = sortedAds.length
+  const topCount = n <= 1 ? n : Math.min(3, Math.ceil(n / 2))
+  const topAds = sortedAds.slice(0, topCount)
+  const underAds = n <= 1 ? [] : sortedAds.slice(topCount).filter(c => c.spend > 0).slice(-3)
 
   // --- A/B test context (experiments + creative variant labels) ---
   const [abSnap, expColSnap, labelsColSnap] = await Promise.all([
