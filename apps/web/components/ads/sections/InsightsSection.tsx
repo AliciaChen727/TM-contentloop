@@ -21,6 +21,8 @@ interface InsightReport {
 
 interface OverviewData {
   totalPosts: number
+  fbCount?: number
+  igCount?: number
   avgEngRate: number
   avgReach: number
   followerGrowth: number
@@ -34,6 +36,7 @@ interface RawPost {
   message: string
   engRate: number
   permalink: string
+  platform?: 'FB' | 'IG'
 }
 
 interface Summary {
@@ -162,7 +165,7 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
 
 <h2>📈 同業 Benchmark 比較</h2>
 <table><thead><tr><th>指標</th><th>本期表現</th><th>同業基準</th><th>評估</th></tr></thead><tbody>
-${bmRow('FB 平均互動率', `${bm.engagementRate.value}%`, `${bm.engagementRate.benchmark}%`, bm.engagementRate.status)}
+${bmRow('平均互動率（FB+IG）', `${bm.engagementRate.value}%`, `${bm.engagementRate.benchmark}%`, bm.engagementRate.status)}
 ${bmRow('追蹤者成長率', `${bm.followerGrowth.value}%`, `${bm.followerGrowth.benchmark}%`, bm.followerGrowth.status)}
 ${bmRow('廣告 CTR', `${bm.adCtr.value}%`, `${bm.adCtr.benchmark}%`, bm.adCtr.status)}
 ${bmRow('廣告 CPA（每次行動成本）', `$${Number(bm.adCpc.value).toFixed(2)}`, `$${bm.adCpc.benchmark}`, bm.adCpc.status, true)}
@@ -495,7 +498,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             </div>
             <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>基準：{summary.benchmarkIndustry}</span>
           </div>
-          {metricRow('FB 平均互動率', summary.benchmarkCompare.fb.engagementRate)}
+          {metricRow('平均互動率（FB+IG）', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? ['adCtr']).includes('adCtr') && metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPA（每次行動成本）', summary.benchmarkCompare.fb.adCpc, '', true)}
@@ -515,7 +518,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ad-text3)', marginBottom: 6, letterSpacing: '0.05em' }}>有機貼文</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }}>
             {[
-              { label: '發文數', value: String(summary.overview.totalPosts), unit: '則' },
+              { label: '發文數', value: String(summary.overview.totalPosts), unit: summary.overview.fbCount != null ? `則（FB ${summary.overview.fbCount}・IG ${summary.overview.igCount ?? 0}）` : '則' },
               { label: '平均互動率', value: `${summary.overview.avgEngRate}%`, unit: '' },
               { label: '平均觸及', value: summary.overview.avgReach.toLocaleString(), unit: '人' },
               { label: '追蹤成長', value: `+${summary.overview.followerGrowth}`, unit: '人' },

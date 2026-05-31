@@ -143,11 +143,50 @@ export async function GET(req: NextRequest) {
         comments,
         shares,
         saves: p.insights?.saves ?? 0,
+        platform: 'FB' as const,
         permalink: p.permalink ?? '',
         engRate,
       }
     })
     .filter(p => typeof p.message === 'string' && p.message.trim().length > 0)
+
+  // --- Fetch IG posts for the period (page-scoped) ---
+  const igSnap = await userRef.collection('pages').doc(pageId).collection('igPosts')
+    .orderBy('timestamp', 'desc').limit(POST_FETCH_LIMIT).get()
+  const igPosts = igSnap.docs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map(d => ({ id: d.id, ...(d.data() as any) }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((p: any) => {
+      const ms = tsMillis(p.timestamp)
+      return ms > 0 && ms >= start.getTime() && ms <= end.getTime()
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((p: any) => {
+      const reach = p.insights?.reach ?? 0
+      const likes = p.insights?.likes ?? 0
+      const comments = p.insights?.comments ?? 0
+      const saves = p.insights?.saves ?? 0
+      const engRate = reach > 0 ? Number(((likes + comments + saves) / reach * 100).toFixed(2)) : 0
+      const createdTime = p.timestamp?.toDate?.()?.toISOString?.() ?? (typeof p.timestamp === 'string' ? p.timestamp : '')
+      return {
+        id: p.id,
+        message: (p.caption ?? '').slice(0, 120),
+        createdTime,
+        reach,
+        reactions: likes,
+        comments,
+        shares: 0,
+        saves,
+        platform: 'IG' as const,
+        permalink: p.permalink ?? '',
+        engRate,
+      }
+    })
+    .filter(p => typeof p.message === 'string' && p.message.trim().length > 0)
+
+  // Combine FB + IG for all aggregations
+  const allPosts = [...fbPosts, ...igPosts]
 
   // --- Follower stats ---
   const statsSnap = await userRef.collection('pages').doc(pageId).collection('pageStats').get()
@@ -204,12 +243,22 @@ export async function GET(req: NextRequest) {
   const adCreativesCount = Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives.length : 0
   const adCount = advertisedPostCount > 0 ? advertisedPostCount : adCreativesCount
 
-  // --- Post aggregates ---
-  const totalFbPosts = fbPosts.length
-  const avgEngRate = totalFbPosts > 0 ? Number((fbPosts.reduce((s, p) => s + p.engRate, 0) / totalFbPosts).toFixed(2)) : 0
-  const avgReach = totalFbPosts > 0 ? Math.round(fbPosts.reduce((s, p) => s + p.reach, 0) / totalFbPosts) : 0
-  const topPosts = [...fbPosts].sort((a, b) => b.engRate - a.engRate).slice(0, 3)
-  const underPosts = [...fbPosts].filter(p => p.reach > 50).sort((a, b) => a.engRate - b.engRate).slice(0, 3)
+  // --- Post aggregates (FB + IG combined) ---
+  const totalPosts = allPosts.length
+  // Engagement rate is only meaningful for posts that actually have insights synced
+  // (reach > 0). Posts with reach 0 (engagement not yet synced/imported) are excluded
+  // from the average so they don't drag it to 0%.
+  const postsWithReach = allPosts.filter(p => p.reach > 0)
+  const avgEngRate = postsWithReach.length > 0
+    ? Number((postsWithReach.reduce((s, p) => s + p.engRate, 0) / postsWithReach.length).toFixed(2))
+    : 0
+  const avgReach = postsWithReach.length > 0
+    ? Math.round(postsWithReach.reduce((s, p) => s + p.reach, 0) / postsWithReach.length)
+    : 0
+  const fbCount = fbPosts.length
+  const igCount = igPosts.length
+  const topPosts = [...postsWithReach].sort((a, b) => b.engRate - a.engRate).slice(0, 3)
+  const underPosts = [...postsWithReach].filter(p => p.reach > 50).sort((a, b) => a.engRate - b.engRate).slice(0, 3)
 
   // --- Goal-aware benchmark comparison ---
   const goalBenchmarks = getBenchmarkByGoal(optimizationGoal)
@@ -229,7 +278,7 @@ export async function GET(req: NextRequest) {
     dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
     adsDateRange: adsDateRange ? { start: adsDateRange.from ?? '', end: adsDateRange.to ?? '' } : null,
     optimizationGoal, industry,
-    overview: { totalPosts: totalFbPosts, avgEngRate, avgReach, followerGrowth, followerGrowthRate, latestFollowers },
+    overview: { totalPosts, fbCount, igCount, avgEngRate, avgReach, followerGrowth, followerGrowthRate, latestFollowers },
     topPosts, underPosts,
     benchmarkCompare,
     benchmarkIndustry: BENCHMARKS.industry,
