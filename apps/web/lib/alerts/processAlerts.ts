@@ -49,19 +49,21 @@ export async function processPageAlerts(pageId: string): Promise<{
     }
   }
 
-  // 4. Recipient email (override → owner's auth email)
-  let to: string = profile.alertEmail ?? ''
-  if (!to) {
+  // 4. Recipient emails (alertEmails array → legacy alertEmail → owner auth email)
+  let recipients: string[] = profile.alertEmails ?? []
+  if (recipients.length === 0 && profile.alertEmail) recipients = [profile.alertEmail]
+  if (recipients.length === 0) {
     const ownerUid = await resolvePageOwnerUid(pageId)
     if (ownerUid) {
-      try { to = (await adminAuth.getUser(ownerUid)).email ?? '' } catch { /* no auth user */ }
+      try { const email = (await adminAuth.getUser(ownerUid)).email ?? ''; if (email) recipients = [email] } catch { /* no auth user */ }
     }
   }
-  if (!to) return { sent: false, reason: 'no recipient email', alertCount: alerts.length }
+  if (recipients.length === 0) return { sent: false, reason: 'no recipient email', alertCount: alerts.length }
 
-  // 5. Send + record state
+  // 5. Send to all recipients + record state
   const pageName = profile.pageName ?? profile.brandName ?? pageId
-  const result = await sendAlertEmail(to, pageName, toSend)
+  const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, toSend)))
+  const result = results.find(r => r.ok) ?? results[0]
   await stateRef.set({
     sentKeys: alerts.map(a => a.key),
     lastSentAt: result.ok ? FieldValue.serverTimestamp() : (lastState.lastSentAt ?? null),

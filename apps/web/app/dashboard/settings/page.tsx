@@ -43,8 +43,9 @@ export default function SettingsPage() {
   const [brandSaveState, setBrandSaveState] = useState<SaveState>('idle')
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
   const [canvaMsg, setCanvaMsg] = useState<'connected' | 'error' | null>(null)
-  const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('daily')
-  const [alertEmail, setAlertEmail] = useState('')
+  const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('off')
+  const [alertEmails, setAlertEmails] = useState<string[]>([''])
+  const [newEmail, setNewEmail] = useState('')
   const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
   const [pages, setPages] = useState<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }[]>([])
   const [selectedPageId, setSelectedPageId] = useState('')
@@ -147,7 +148,7 @@ export default function SettingsPage() {
             setBrandName(j.data?.brandName ?? '')
             setExtraContext(j.data?.extraContext ?? '')
           }
-          if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'daily'); setAlertEmail(a.alertEmail ?? '') }
+          if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'off'); setAlertEmails(a.alertEmails?.length ? a.alertEmails : ['']) }
         }
       }
       setLoading(false)
@@ -189,7 +190,7 @@ export default function SettingsPage() {
     setSelectedPageId(pageId)
     localStorage.setItem('selectedPageId', pageId)
     setCopyBanner(false)
-    setAlertFreq('daily'); setAlertEmail('')
+    setAlertFreq('off'); setAlertEmails(['']); setNewEmail('')
     setAdGoal(''); setIndustry(''); setIndustryOther(''); setBrandName(''); setExtraContext('')
     if (!pageId || !idToken) return
     const [onbRes, alertRes] = await Promise.all([
@@ -210,7 +211,7 @@ export default function SettingsPage() {
         if (firstPage && firstPage.pageId !== pageId) setCopyBanner(true)
       }
     }
-    if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'daily'); setAlertEmail(a.alertEmail ?? '') }
+    if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'off'); setAlertEmails(a.alertEmails?.length ? a.alertEmails : ['']) }
   }
 
   async function handleCopyFromFirst() {
@@ -237,7 +238,7 @@ export default function SettingsPage() {
     const res = await fetch('/api/alerts/settings', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, alertFrequency: alertFreq, alertEmail: alertEmail.trim() }),
+      body: JSON.stringify({ pageId, alertFrequency: alertFreq, alertEmails: alertEmails.map(e => e.trim()).filter(Boolean) }),
     })
     if (res.ok) { setAlertSaveState('ok'); setTimeout(() => setAlertSaveState('idle'), 2500) }
     else { setAlertSaveState('error'); setTimeout(() => setAlertSaveState('idle'), 3000) }
@@ -491,8 +492,22 @@ export default function SettingsPage() {
           </div>
           <div className="mb-4">
             <div className="text-xs text-gray-500 mb-2">通知 Email（留空則寄到你的登入信箱）</div>
-            <input type="email" value={alertEmail} onChange={e => setAlertEmail(e.target.value)} placeholder="選填，自訂收件信箱"
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700" />
+            <div className="space-y-2">
+              {alertEmails.map((email, i) => (
+                <div key={i} className="flex gap-2">
+                  <input type="email" value={email}
+                    onChange={e => { const arr = [...alertEmails]; arr[i] = e.target.value; setAlertEmails(arr) }}
+                    placeholder={i === 0 ? '選填，自訂收件信箱' : '新增信箱'}
+                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700" />
+                  {alertEmails.length > 1 && (
+                    <button onClick={() => setAlertEmails(alertEmails.filter((_, j) => j !== i))}
+                      className="px-2 text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => setAlertEmails([...alertEmails, ''])}
+                className="text-xs text-blue-500 hover:text-blue-700 font-medium mt-1">+ 新增收件人</button>
+            </div>
           </div>
           <button onClick={handleAlertSave} disabled={alertSaveState === 'saving'}
             className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">

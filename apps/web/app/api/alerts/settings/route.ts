@@ -23,16 +23,19 @@ export async function GET(req: NextRequest) {
   if (!uid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const data = (await adminDb.collection('pages').doc(pageId).get()).data() ?? {}
+  // Migrate legacy single alertEmail → alertEmails array
+  const legacyEmail: string = data.alertEmail ?? ''
+  const alertEmails: string[] = data.alertEmails ?? (legacyEmail ? [legacyEmail] : [])
   return NextResponse.json({
-    alertFrequency: data.alertFrequency ?? 'daily',
-    alertEmail: data.alertEmail ?? '',
+    alertFrequency: data.alertFrequency ?? 'off',
+    alertEmails,
   })
 }
 
-// POST /api/alerts/settings  { pageId, alertFrequency, alertEmail? }
+// POST /api/alerts/settings  { pageId, alertFrequency, alertEmails? }
 export async function POST(req: NextRequest) {
-  const { pageId, alertFrequency, alertEmail } = await req.json() as {
-    pageId: string; alertFrequency: string; alertEmail?: string
+  const { pageId, alertFrequency, alertEmails } = await req.json() as {
+    pageId: string; alertFrequency: string; alertEmails?: string[]
   }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   const uid = await authPage(req, pageId)
@@ -41,7 +44,9 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update: Record<string, any> = { alertFrequency }
-  if (alertEmail !== undefined) update.alertEmail = (alertEmail || '').trim()
+  if (alertEmails !== undefined) {
+    update.alertEmails = alertEmails.map(e => e.trim()).filter(Boolean)
+  }
 
   await adminDb.collection('pages').doc(pageId).set(update, { merge: true })
   return NextResponse.json({ ok: true })
