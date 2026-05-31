@@ -3,6 +3,7 @@ import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { detectAdAlerts } from './detector'
 import { sendAlertEmail } from './emailSender'
+import { writeInAppNotification, resolveUidsFromEmails, buildAdAnomalyNotification } from '@/lib/notifications/store'
 
 // Taiwan (UTC+8) wall-clock components.
 function taiwanNow(): { weekday: number; hour: number; dateStr: string } {
@@ -95,11 +96,30 @@ export async function processPageAlerts(pageId: string): Promise<{
   const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, alerts, pageId)))
   const result = results.find(r => r.ok) ?? results[0]
 
+  // In-app notification sink (Phase 2, option A — alongside the scheduled email).
+  // Fan out to recipient admins by UID. Resolve UIDs from the recipient emails
+  // and always include the configuring admin's UID (most reliable source). The
+  // deterministic per-day doc id makes this idempotent across cron re-runs.
+  let inAppWritten = 0
+  try {
+    const emailUids = await resolveUidsFromEmails(recipients)
+    const configuredByUid = (profile.alertConfiguredByUid as string) ?? null
+    const targetUids = Array.from(new Set([...emailUids, ...(configuredByUid ? [configuredByUid] : [])]))
+    const notif = buildAdAnomalyNotification(pageId, pageName, alerts, dateStr)
+    const res = await writeInAppNotification(targetUids, notif)
+    inAppWritten = res.written
+  } catch (e) {
+    // In-app failure must not break the email flow.
+    console.error('[processPageAlerts] in-app notification failed', e)
+  }
+
   await stateRef.set({
     sentKeys: alerts.map(a => a.key),
     lastScheduledSendDate: result.ok ? dateStr : (lastState.lastScheduledSendDate ?? null),
     lastSentAt: result.ok ? FieldValue.serverTimestamp() : (lastState.lastSentAt ?? null),
     lastError: result.ok ? null : (result.error ?? 'unknown'),
+    lastInAppNotifDate: inAppWritten > 0 ? dateStr : (lastState.lastInAppNotifDate ?? null),
+    lastInAppNotifCount: inAppWritten,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
 

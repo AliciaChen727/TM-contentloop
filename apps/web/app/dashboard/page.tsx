@@ -17,6 +17,7 @@ import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
 import { ProfileMenu } from '@/components/ProfileMenu'
+import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingModal } from '@/components/OnboardingModal'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
@@ -370,6 +371,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <NotificationBell />
             {(() => {
               const activePerms = pages.find(p => p.pageId === selectedPageId)?.permissions ?? null
               return (<>
