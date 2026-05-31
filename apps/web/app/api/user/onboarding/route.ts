@@ -80,9 +80,12 @@ export async function POST(req: NextRequest) {
     if (body.brandName !== undefined) patch.brandName = body.brandName ?? null
     if (body.extraContext !== undefined) patch.extraContext = body.extraContext ?? null
 
-    const update: Record<string, unknown> = { onboardingUpdatedAt: FieldValue.serverTimestamp() }
-    for (const [k, v] of Object.entries(patch)) update[`onboardingData.${k}`] = v
-    await adminDb.collection('pages').doc(body.pageId).set(update, { merge: true })
+    // Nested object + merge: set({merge:true}) deep-merges the onboardingData
+    // map. (Dot-path keys would create a literal "onboardingData.x" field.)
+    await adminDb.collection('pages').doc(body.pageId).set({
+      onboardingUpdatedAt: FieldValue.serverTimestamp(),
+      onboardingData: patch,
+    }, { merge: true })
     return NextResponse.json({ success: true })
   }
 
