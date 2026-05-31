@@ -124,3 +124,7 @@ git push → GitHub Actions
   ├── Vercel Production (main branch)
   └── Firebase Deploy (functions/ 變更時)
 ```
+
+## Roadmap
+
+廣告告警 → 通知 → 優化 → 自動更新的分階段規劃：**Phase 2** 站內通知中心（[`phase-2-notification-center.md`](./phase-2-notification-center.md)）→ **Phase 3** AI Sidekick 優化 loop + 自我學習（[`phase-3-sidekick-self-learning.md`](./phase-3-sidekick-self-learning.md)，含批次審查 agent / Quality evaluator / feedback memory，agent 採 Anthropic 原生）→ **Phase 4** 半自動廣告更新（[`phase-4-ad-automation.md`](./phase-4-ad-automation.md)，需 Meta `ads_management` 寫入權限 + App Review）。
