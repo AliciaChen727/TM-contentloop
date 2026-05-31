@@ -3,15 +3,17 @@ import type { AdAlert } from './detector'
 
 const GMAIL_USER = process.env.GMAIL_USER ?? ''
 const FROM = `ContentLoop <${GMAIL_USER}>`
-const DASHBOARD_URL = 'https://tm-contentloop.vercel.app/dashboard/ads'
+const DASHBOARD_BASE = 'https://tm-contentloop.vercel.app/dashboard/ads'
 
 const TYPE_EMOJI: Record<AdAlert['type'], string> = {
   ctr_drop: '📉', frequency_high: '⚠️', cpc_spike: '💸',
 }
 
 // Send one digest email listing all current ad alerts for a page.
+// pageId is appended to the dashboard link so the "AI 診斷" button opens the
+// correct page directly.
 export async function sendAlertEmail(
-  to: string, pageName: string, alerts: AdAlert[],
+  to: string, pageName: string, alerts: AdAlert[], pageId?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return { ok: false, error: 'GMAIL_USER / GMAIL_APP_PASSWORD not configured' }
   if (!to || alerts.length === 0) return { ok: false, error: 'no recipient or no alerts' }
@@ -20,6 +22,8 @@ export async function sendAlertEmail(
     service: 'gmail',
     auth: { user: GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
   })
+
+  const dashboardUrl = pageId ? `${DASHBOARD_BASE}?pageId=${encodeURIComponent(pageId)}` : DASHBOARD_BASE
 
   const rows = alerts.map(a => `
     <tr><td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px;line-height:1.5;color:#1f2937">
@@ -32,7 +36,7 @@ export async function sendAlertEmail(
     <p style="font-size:13px;color:#6b7280;margin-top:0">偵測到 ${alerts.length} 項需要注意的廣告異常：</p>
     <table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;overflow:hidden">${rows}</table>
     <p style="margin-top:20px">
-      <a href="${DASHBOARD_URL}" style="display:inline-block;background:#3b6fd4;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px">查看 AI 診斷 →</a>
+      <a href="${dashboardUrl}" style="display:inline-block;background:#3b6fd4;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px">查看 AI 診斷 →</a>
     </p>
     <p style="font-size:11px;color:#9ca3af;margin-top:24px">ContentLoop · 你可在設定頁調整通知頻率或關閉警示</p>
   </div>`

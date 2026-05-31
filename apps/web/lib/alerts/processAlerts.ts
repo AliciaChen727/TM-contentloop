@@ -79,9 +79,20 @@ export async function processPageAlerts(pageId: string): Promise<{
   }
   if (recipients.length === 0) return { sent: false, reason: 'no recipient email', alertCount: alerts.length }
 
+  // Resolve a human page name. pages/{pageId} docs are often phantom, so fall
+  // back to the owner's metaTokens (where the real FB page name lives).
+  let pageName: string = (profile.pageName as string) ?? (profile.brandName as string) ?? ''
+  if (!pageName) {
+    const ownerUid = await resolvePageOwnerUid(pageId)
+    if (ownerUid) {
+      const tok = await adminDb.collection('users').doc(ownerUid).collection('metaTokens').doc(pageId).get()
+      pageName = tok.data()?.pageName ?? ''
+    }
+  }
+  if (!pageName) pageName = pageId
+
   // Send full current digest to all recipients
-  const pageName = profile.pageName ?? profile.brandName ?? pageId
-  const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, alerts)))
+  const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, alerts, pageId)))
   const result = results.find(r => r.ok) ?? results[0]
 
   await stateRef.set({

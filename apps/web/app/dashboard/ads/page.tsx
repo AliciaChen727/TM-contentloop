@@ -392,7 +392,9 @@ export default function AdsPage() {
       try {
         const idToken = await u.getIdToken()
         const headers = { Authorization: `Bearer ${idToken}` }
-        const pageId = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : '') ?? ''
+        // URL ?pageId= wins (e.g. from email "AI 診斷" link), else last selection
+        const urlPageId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('pageId') : null
+        const pageId = urlPageId || ((typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : '') ?? '')
         const pageName = (typeof window !== 'undefined' ? localStorage.getItem('selectedPageName') : '') ?? ''
         setSelectedPageId(pageId)
         setSelectedPageName(pageName)
@@ -403,6 +405,15 @@ export default function AdsPage() {
           const pagesJson = await pagesRes.json()
           const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }> = pagesJson.pages ?? []
           setPages(allPages)
+          // Sync display name + persist selection for the resolved pageId
+          const matched = allPages.find(p => p.pageId === pageId)
+          if (matched?.pageName) {
+            setSelectedPageName(matched.pageName)
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('selectedPageId', pageId)
+              localStorage.setItem('selectedPageName', matched.pageName)
+            }
+          }
           // Pages from metaTokens (admin pages) have no permissions field; viewer pages have permissions object
           const isAdminUser = allPages.some(p => p.permissions === undefined || p.permissions === null)
           if (!isAdminUser) {
