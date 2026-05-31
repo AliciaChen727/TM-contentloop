@@ -210,6 +210,13 @@ export default function AdsPage() {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
   const [active, setActive] = useState<NavId>('overview')
+  // Deep link: ?section=diagnosis opens that nav section directly (from the alert
+  // email「查看 AI 診斷」button and the 鈴鐺 notification deepLink).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const s = new URLSearchParams(window.location.search).get('section')
+    if (s && NAV.some(n => n.id === s)) setActive(s as NavId)
+  }, [])
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
   const [skAutoSend, setSkAutoSend] = useState(false)

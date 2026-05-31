@@ -19,7 +19,9 @@ export async function sendAlertEmail(
     auth: { user: GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
   })
 
-  const dashboardUrl = pageId ? `${DASHBOARD_BASE}?pageId=${encodeURIComponent(pageId)}` : DASHBOARD_BASE
+  const dashboardUrl = pageId
+    ? `${DASHBOARD_BASE}?pageId=${encodeURIComponent(pageId)}&section=diagnosis`
+    : `${DASHBOARD_BASE}?section=diagnosis`
 
   const rows = alerts.map(a => `
     <tr><td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px;line-height:1.5;color:#1f2937">

@@ -43,7 +43,7 @@ export function buildAdAnomalyNotification(
     advice,
     actionPrompt: null,
     alertKeys: alerts.map((a) => a.key),
-    deepLink: `/dashboard/ads?pageId=${pageId}`,
+    deepLink: `/dashboard/ads?pageId=${pageId}&section=diagnosis`,
     dateStr,
   }
 }
