@@ -69,9 +69,24 @@ export async function POST(req: NextRequest) {
     const batch = adminDb.batch()
     const now = Timestamp.now()
 
-    for (const post of posts) {
-      if (!post.message && !post.story) continue
-      batch.set(fbPostsCol.doc(post.id), {
+    // Read existing docs first so we never lose previously-synced engagement to an
+    // intermittent empty API response. FB's reactions/comments fields are flaky —
+    // taking max(existing, new) per metric keeps the real number and prevents the
+    // "engagement flickers in and out" bug.
+    const writable = posts.filter(p => p.message || p.story)
+    const existingSnaps = writable.length > 0
+      ? await adminDb.getAll(...writable.map(p => fbPostsCol.doc(p.id)))
+      : []
+    const existingById = new Map<string, FirebaseFirestore.DocumentData>()
+    for (const snap of existingSnaps) if (snap.exists) existingById.set(snap.id, snap.data()!)
+
+    for (const post of writable) {
+      const prev = existingById.get(post.id)?.insights ?? {}
+      const r = post.reactions?.summary?.total_count
+      const c = post.comments?.summary?.total_count
+      const s = post.shares?.count
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const record: Record<string, any> = {
         postId: post.id,
         message: post.message ?? post.story ?? '',
         createdTime: Timestamp.fromDate(new Date(post.created_time)),
@@ -79,11 +94,12 @@ export async function POST(req: NextRequest) {
         snapshotAt: now,
         engagementAvailable,
         insights: {
-          reactions: post.reactions?.summary?.total_count ?? 0,
-          comments: post.comments?.summary?.total_count ?? 0,
-          shares: post.shares?.count ?? 0,
+          reactions: Math.max(prev.reactions ?? 0, r ?? 0),
+          comments: Math.max(prev.comments ?? 0, c ?? 0),
+          shares: Math.max(prev.shares ?? 0, s ?? 0),
         },
-      }, { merge: true })
+      }
+      batch.set(fbPostsCol.doc(post.id), record, { merge: true })
     }
 
     await batch.commit()
