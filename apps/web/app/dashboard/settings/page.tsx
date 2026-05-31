@@ -43,6 +43,9 @@ export default function SettingsPage() {
   const [brandSaveState, setBrandSaveState] = useState<SaveState>('idle')
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
   const [canvaMsg, setCanvaMsg] = useState<'connected' | 'error' | null>(null)
+  const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('daily')
+  const [alertEmail, setAlertEmail] = useState('')
+  const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
 
   // Fallback path only: if the OAuth flow ran full-page (popup blocked), the
   // callback redirects here with ?canva=... — read it once, then strip it so
@@ -132,6 +135,14 @@ export default function SettingsPage() {
         const c = await canvaRes.json()
         setCanvaConnected(!!c.connected)
       }
+      // Ad-alert notification settings (page-scoped)
+      const pageId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
+      if (pageId) {
+        try {
+          const aRes = await fetch(`/api/alerts/settings?pageId=${pageId}`, { headers: { Authorization: `Bearer ${token}` } })
+          if (aRes.ok) { const a = await aRes.json(); setAlertFreq(a.alertFrequency ?? 'daily'); setAlertEmail(a.alertEmail ?? '') }
+        } catch { /* non-critical */ }
+      }
       setLoading(false)
     })
     return unsub
@@ -164,6 +175,19 @@ export default function SettingsPage() {
       setGoalSaveState('error')
       setTimeout(() => setGoalSaveState('idle'), 3000)
     }
+  }
+
+  async function handleAlertSave() {
+    const pageId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
+    if (!pageId) { setAlertSaveState('error'); setTimeout(() => setAlertSaveState('idle'), 3000); return }
+    setAlertSaveState('saving')
+    const res = await fetch('/api/alerts/settings', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId, alertFrequency: alertFreq, alertEmail: alertEmail.trim() }),
+    })
+    if (res.ok) { setAlertSaveState('ok'); setTimeout(() => setAlertSaveState('idle'), 2500) }
+    else { setAlertSaveState('error'); setTimeout(() => setAlertSaveState('idle'), 3000) }
   }
 
   async function handleBrandSave() {
@@ -369,6 +393,32 @@ export default function SettingsPage() {
               {brandSaveState === 'saving' ? '儲存中⋯' : brandSaveState === 'ok' ? '已儲存 ✓' : brandSaveState === 'error' ? '儲存失敗' : '儲存'}
             </button>
           </div>
+        </div>
+
+        {/* Ad Alert Notifications */}
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-1">廣告警示通知</h2>
+          <p className="text-xs text-gray-400 mb-5">每日同步後自動偵測廣告異常（CTR 下滑、素材疲勞、CPC 飆高），以 Email 通知你。</p>
+          <div className="mb-4">
+            <div className="text-xs text-gray-500 mb-2">通知頻率</div>
+            <div className="flex gap-2">
+              {([['daily', '每日'], ['weekly', '每週（週一彙整）'], ['off', '關閉']] as const).map(([v, label]) => (
+                <button key={v} onClick={() => setAlertFreq(v)}
+                  className={`px-4 py-2 text-sm rounded-lg border transition-colors ${alertFreq === v ? 'border-blue-400 bg-blue-50 text-blue-600 font-semibold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="text-xs text-gray-500 mb-2">通知 Email（留空則寄到你的登入信箱）</div>
+            <input type="email" value={alertEmail} onChange={e => setAlertEmail(e.target.value)} placeholder="選填，自訂收件信箱"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700" />
+          </div>
+          <button onClick={handleAlertSave} disabled={alertSaveState === 'saving'}
+            className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+            {alertSaveState === 'saving' ? '儲存中⋯' : alertSaveState === 'ok' ? '已儲存 ✓' : alertSaveState === 'error' ? '儲存失敗（請先選擇粉專）' : '儲存'}
+          </button>
         </div>
 
 
