@@ -69,13 +69,14 @@ interface Summary {
   adsDateRange: { start: string; end: string } | null
   optimizationGoal: string
   industry: string
+  conversionType?: string
   overview: OverviewData
   topPosts?: RawPost[]
   underPosts?: RawPost[]
   topAds?: RawAd[]
   underAds?: RawAd[]
   hasAbTest?: boolean
-  benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus; adCpc: BenchmarkStatus; adCpm: BenchmarkStatus } }
+  benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus; adCpc: BenchmarkStatus; adCpm: BenchmarkStatus; adRoas?: BenchmarkStatus } }
   benchmarkIndustry: string
   adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
 }
@@ -130,7 +131,7 @@ const GOAL_LABELS: Record<string, string> = {
 // Which ad benchmark rows to show per goal
 const GOAL_AD_METRICS: Record<string, string[]> = {
   clicks: ['adCtr', 'adCpc'],
-  conversion: ['adCtr', 'adCpc'],
+  conversion: ['adRoas', 'adCtr', 'adCpc'],
   reach: ['adCpm'],
   event: ['adCtr', 'adCpc', 'adCpm'],
 }
@@ -541,9 +542,24 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           </div>
           {metricRow('平均互動率（FB+IG）', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
+          {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adRoas') && (
+            summary.conversionType === 'purchase' && summary.benchmarkCompare.fb.adRoas
+              ? metricRow('廣告 ROAS', summary.benchmarkCompare.fb.adRoas, 'x')
+              : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--ad-border)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--ad-text2)' }}>廣告 ROAS</span>
+                  <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>N/A · 需設定購買轉換追蹤</span>
+                </div>
+              )
+          )}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? ['adCtr']).includes('adCtr') && metricRow('廣告 CTR', summary.benchmarkCompare.fb.adCtr)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpc') && metricRow('廣告 CPA（每次行動成本）', summary.benchmarkCompare.fb.adCpc, '', true)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '', true)}
+          {summary.optimizationGoal === 'conversion' && summary.conversionType !== 'purchase' && (
+            <div style={{ fontSize: 10, color: 'var(--ad-text3)', marginTop: 6 }}>
+              ※ 此活動為連結點擊目標，無購買營收追蹤，故 ROAS 無法計算；可參考廣告 CPA（每次行動成本）與點擊效益評估投放成效。
+            </div>
+          )}
           {summary.adsDateRange && (summary.adsDateRange.start !== summary.dateRange.start || summary.adsDateRange.end !== summary.dateRange.end) && (
             <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 6 }}>
               ※ 廣告數據實際涵蓋 {summary.adsDateRange.start} ~ {summary.adsDateRange.end}（此區間有投放數據；如需補齊請調整表頭日期重新同步）

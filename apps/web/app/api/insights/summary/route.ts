@@ -212,6 +212,10 @@ export async function GET(req: NextRequest) {
   const adsRaw = userHasData ? adsRawUser : (adsSnapShared.exists ? adsRawShared : adsRawUser)
   const adsSummaryRaw = (adsRaw.summary ?? {}) as Record<string, number>
   const snapshotDateRange = adsRaw.dateRange as { from?: string; to?: string } | undefined
+  // 'purchase' campaigns carry real revenue → true ROAS. 'link_click'/'video_view'
+  // report no purchase value (revenue == conversions), so ROAS is N/A.
+  const conversionType = (adsRaw.conversionType as string) ?? 'link_click'
+  const hasPurchase = conversionType === 'purchase'
 
   // --- Slice the daily ad data to the SELECTED period so ad metrics match the
   // chosen month exactly (not the whole-snapshot summary which spans the last
@@ -430,6 +434,10 @@ export async function GET(req: NextRequest) {
       adCtr: { value: Number(adCtr.toFixed(2)), benchmark: goalBenchmarks.ctr, status: adCtr === 0 ? 'nodata' : adCtr >= goalBenchmarks.ctr ? 'above' : 'below' as const },
       adCpc: { value: Number(adCpc.toFixed(2)), benchmark: goalBenchmarks.cpc, status: adCpc === 0 ? 'nodata' : adCpc <= goalBenchmarks.cpc ? 'above' : 'below' as const },
       adCpm: { value: Number(adCpm.toFixed(2)), benchmark: goalBenchmarks.cpm, status: adCpm === 0 ? 'nodata' : adCpm <= goalBenchmarks.cpm ? 'above' : 'below' as const },
+      // ROAS only meaningful with purchase tracking; otherwise N/A.
+      adRoas: hasPurchase
+        ? { value: Number((adsSummaryRaw.roas ?? 0).toFixed(2)), benchmark: 0, status: 'above' as const }
+        : { value: 0, benchmark: 0, status: 'nodata' as const },
     },
   }
 
@@ -438,7 +446,7 @@ export async function GET(req: NextRequest) {
     dataAsOf: end.toISOString().slice(0, 10),
     dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
     adsDateRange: adCoverage,
-    optimizationGoal, industry,
+    optimizationGoal, industry, conversionType,
     overview: { totalPosts, fbCount, igCount, avgEngRate, avgReach, followerGrowth, followerGrowthRate, latestFollowers },
     topPosts, underPosts,
     topAds, underAds,
