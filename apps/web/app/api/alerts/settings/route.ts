@@ -3,7 +3,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
 
-const VALID_FREQ = ['daily', 'weekly', 'off']
+// Derive new-style schedule from a page profile, migrating legacy alertFrequency.
+function deriveSchedule(data: Record<string, unknown>) {
+  if (typeof data.alertEnabled === 'boolean') {
+    return {
+      alertEnabled: data.alertEnabled,
+      alertDays: Array.isArray(data.alertDays) ? data.alertDays as number[] : [0, 1, 2, 3, 4, 5, 6],
+      alertHour: typeof data.alertHour === 'number' ? data.alertHour as number : 9,
+    }
+  }
+  const freq = (data.alertFrequency ?? 'off') as string
+  if (freq === 'off') return { alertEnabled: false, alertDays: [1, 2, 3, 4, 5], alertHour: 9 }
+  if (freq === 'weekly') return { alertEnabled: true, alertDays: [1], alertHour: 9 }
+  return { alertEnabled: true, alertDays: [0, 1, 2, 3, 4, 5, 6], alertHour: 9 }
+}
 
 async function authPage(req: NextRequest, pageId: string): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -27,23 +40,32 @@ export async function GET(req: NextRequest) {
   const legacyEmail: string = data.alertEmail ?? ''
   const alertEmails: string[] = data.alertEmails ?? (legacyEmail ? [legacyEmail] : [])
   return NextResponse.json({
-    alertFrequency: data.alertFrequency ?? 'off',
+    ...deriveSchedule(data),
     alertEmails,
   })
 }
 
-// POST /api/alerts/settings  { pageId, alertFrequency, alertEmails? }
+// POST /api/alerts/settings  { pageId, alertEnabled, alertDays, alertHour, alertEmails? }
 export async function POST(req: NextRequest) {
-  const { pageId, alertFrequency, alertEmails } = await req.json() as {
-    pageId: string; alertFrequency: string; alertEmails?: string[]
+  const { pageId, alertEnabled, alertDays, alertHour, alertEmails } = await req.json() as {
+    pageId: string; alertEnabled?: boolean; alertDays?: number[]; alertHour?: number; alertEmails?: string[]
   }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   const uid = await authPage(req, pageId)
   if (!uid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!VALID_FREQ.includes(alertFrequency)) return NextResponse.json({ error: 'Invalid frequency' }, { status: 400 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const update: Record<string, any> = { alertFrequency }
+  const update: Record<string, any> = {}
+  if (alertEnabled !== undefined) update.alertEnabled = !!alertEnabled
+  if (alertDays !== undefined) {
+    update.alertDays = Array.from(new Set(alertDays.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))).sort()
+  }
+  if (alertHour !== undefined) {
+    if (!Number.isInteger(alertHour) || alertHour < 0 || alertHour > 23) {
+      return NextResponse.json({ error: 'Invalid hour' }, { status: 400 })
+    }
+    update.alertHour = alertHour
+  }
   if (alertEmails !== undefined) {
     update.alertEmails = alertEmails.map(e => e.trim()).filter(Boolean)
   }

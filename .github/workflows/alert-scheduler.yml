@@ -1,0 +1,27 @@
+name: Ad Alert Scheduler
+
+on:
+  schedule:
+    # 每小時整點觸發（UTC）。各粉專的台灣時間排程由後端依設定判斷是否寄送。
+    - cron: '0 * * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  send-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger scheduled ad-alert emails
+        run: |
+          body=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST https://tm-contentloop.vercel.app/api/cron/send-alerts \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          status=$(echo "$body" | grep "HTTP_STATUS:" | cut -d: -f2)
+          response=$(echo "$body" | grep -v "HTTP_STATUS:")
+          echo "Response status: $status"
+          echo "Response body: $response"
+          if [ "$status" != "200" ]; then
+            echo "Alert scheduler failed with status $status"
+            exit 1
+          fi
+          echo "Alert scheduler completed successfully"

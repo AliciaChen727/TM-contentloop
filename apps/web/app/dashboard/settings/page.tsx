@@ -43,7 +43,9 @@ export default function SettingsPage() {
   const [brandSaveState, setBrandSaveState] = useState<SaveState>('idle')
   const [canvaConnected, setCanvaConnected] = useState<boolean | null>(null)
   const [canvaMsg, setCanvaMsg] = useState<'connected' | 'error' | null>(null)
-  const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('off')
+  const [alertEnabled, setAlertEnabled] = useState(false)
+  const [alertDays, setAlertDays] = useState<number[]>([1, 2, 3, 4, 5])
+  const [alertHour, setAlertHour] = useState(9)
   const [alertEmails, setAlertEmails] = useState<string[]>([''])
   const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
   const [pages, setPages] = useState<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }[]>([])
@@ -147,7 +149,7 @@ export default function SettingsPage() {
             setBrandName(j.data?.brandName ?? '')
             setExtraContext(j.data?.extraContext ?? '')
           }
-          if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'off'); setAlertEmails(a.alertEmails?.length ? a.alertEmails : ['']) }
+          if (alertRes.ok) { const a = await alertRes.json(); setAlertEnabled(!!a.alertEnabled); setAlertDays(a.alertDays ?? [1,2,3,4,5]); setAlertHour(a.alertHour ?? 9); setAlertEmails(a.alertEmails?.length ? a.alertEmails : ['']) }
         }
       }
       setLoading(false)
@@ -189,7 +191,7 @@ export default function SettingsPage() {
     setSelectedPageId(pageId)
     localStorage.setItem('selectedPageId', pageId)
     setCopyBanner(false)
-    setAlertFreq('off'); setAlertEmails([''])
+    setAlertEnabled(false); setAlertDays([1,2,3,4,5]); setAlertHour(9); setAlertEmails([''])
     setAdGoal(''); setIndustry(''); setIndustryOther(''); setBrandName(''); setExtraContext('')
     if (!pageId || !idToken) return
     const [onbRes, alertRes] = await Promise.all([
@@ -210,7 +212,7 @@ export default function SettingsPage() {
         if (firstPage && firstPage.pageId !== pageId) setCopyBanner(true)
       }
     }
-    if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'off'); setAlertEmails(a.alertEmails?.length ? a.alertEmails : ['']) }
+    if (alertRes.ok) { const a = await alertRes.json(); setAlertEnabled(!!a.alertEnabled); setAlertDays(a.alertDays ?? [1,2,3,4,5]); setAlertHour(a.alertHour ?? 9); setAlertEmails(a.alertEmails?.length ? a.alertEmails : ['']) }
   }
 
   async function handleCopyFromFirst() {
@@ -237,7 +239,7 @@ export default function SettingsPage() {
     const res = await fetch('/api/alerts/settings', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, alertFrequency: alertFreq, alertEmails: alertEmails.map(e => e.trim()).filter(Boolean) }),
+      body: JSON.stringify({ pageId, alertEnabled, alertDays, alertHour, alertEmails: alertEmails.map(e => e.trim()).filter(Boolean) }),
     })
     if (res.ok) { setAlertSaveState('ok'); setTimeout(() => setAlertSaveState('idle'), 2500) }
     else { setAlertSaveState('error'); setTimeout(() => setAlertSaveState('idle'), 3000) }
@@ -477,18 +479,46 @@ export default function SettingsPage() {
         {!!pages.find(p => p.pageId === selectedPageId)?.permissions === false &&
         <div className="bg-white rounded-2xl shadow-sm p-6">
           <h2 className="text-sm font-bold text-gray-800 mb-1">廣告警示通知</h2>
-          <p className="text-xs text-gray-400 mb-5">每日同步後自動偵測廣告異常（CTR 下滑、素材疲勞、CPC 飆高），以 Email 通知你。</p>
+          <p className="text-xs text-gray-400 mb-5">自動偵測廣告異常（CTR 下滑、素材疲勞、CPC 飆高），在你設定的星期與時間以 Email 通知你（台灣時間）。</p>
           <div className="mb-4">
-            <div className="text-xs text-gray-500 mb-2">通知頻率</div>
+            <div className="text-xs text-gray-500 mb-2">通知狀態</div>
             <div className="flex gap-2">
-              {([['daily', '每日'], ['weekly', '每週（週一彙整）'], ['off', '關閉']] as const).map(([v, label]) => (
-                <button key={v} onClick={() => setAlertFreq(v)}
-                  className={`px-4 py-2 text-sm rounded-lg border transition-colors ${alertFreq === v ? 'border-blue-400 bg-blue-50 text-blue-600 font-semibold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+              {([[true, '開啟'], [false, '關閉']] as const).map(([v, label]) => (
+                <button key={String(v)} onClick={() => setAlertEnabled(v)}
+                  className={`px-4 py-2 text-sm rounded-lg border transition-colors ${alertEnabled === v ? 'border-blue-400 bg-blue-50 text-blue-600 font-semibold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                   {label}
                 </button>
               ))}
             </div>
           </div>
+          {alertEnabled && (
+            <>
+              <div className="mb-4">
+                <div className="text-xs text-gray-500 mb-2">通知星期</div>
+                <div className="flex gap-2">
+                  {['日','一','二','三','四','五','六'].map((label, d) => {
+                    const on = alertDays.includes(d)
+                    return (
+                      <button key={d}
+                        onClick={() => setAlertDays(on ? alertDays.filter(x => x !== d) : [...alertDays, d].sort())}
+                        className={`w-9 h-9 rounded-full text-sm font-semibold transition-colors ${on ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="mb-4">
+                <div className="text-xs text-gray-500 mb-2">通知時間（整點）</div>
+                <select value={alertHour} onChange={e => setAlertHour(Number(e.target.value))}
+                  className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700 bg-white">
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
           <div className="mb-4">
             <div className="text-xs text-gray-500 mb-2">通知 Email（留空則寄到你的登入信箱）</div>
             <div className="space-y-2">

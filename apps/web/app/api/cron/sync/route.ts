@@ -4,7 +4,6 @@ import { adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 import { syncIgStories } from '@/lib/meta/igStories'
-import { processPageAlerts } from '@/lib/alerts/processAlerts'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -525,16 +524,10 @@ export async function POST(req: NextRequest) {
 
     await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
 
-    // Phase 2A: ad-performance alert emails (frequency-aware, deduped). Non-fatal.
-    const alertResults = await Promise.all(
-      Array.from(pageIdsToMerge).map(async pid => {
-        try { return { pageId: pid, ...(await processPageAlerts(pid)) } }
-        catch (e) { return { pageId: pid, sent: false, reason: e instanceof Error ? e.message : 'alert error' } }
-      })
-    )
-    console.log('[cron/sync] alerts=', JSON.stringify(alertResults))
+    // Alert emails are decoupled: sent on a per-page schedule by
+    // /api/cron/send-alerts (hourly). Sync only refreshes data here.
 
-    return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge), alerts: alertResults })
+    return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge) })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[cron/sync] FATAL ERROR:', msg, err)
