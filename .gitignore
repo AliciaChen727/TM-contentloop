@@ -17,3 +17,4 @@ cors.json
 onboarding-step1.png
 test-send-alert.mjs
 apps/web/scripts/test-notification.mjs
+apps/web/scripts/preview-alert-email.mjs
