@@ -46,9 +46,9 @@ export default function SettingsPage() {
   const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('daily')
   const [alertEmail, setAlertEmail] = useState('')
   const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
-  const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
+  const [pages, setPages] = useState<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }[]>([])
   const [selectedPageId, setSelectedPageId] = useState('')
-  const [copyBanner, setCopyBanner] = useState(false) // show "copy from first page?" prompt
+  const [copyBanner, setCopyBanner] = useState(false)
 
   // Fallback path only: if the OAuth flow ran full-page (popup blocked), the
   // callback redirects here with ?canva=... — read it once, then strip it so
@@ -473,7 +473,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Ad Alert Notifications */}
+        {/* Ad Alert Notifications — admin only */}
+        {!!pages.find(p => p.pageId === selectedPageId)?.permissions === false &&
         <div className="bg-white rounded-2xl shadow-sm p-6">
           <h2 className="text-sm font-bold text-gray-800 mb-1">廣告警示通知</h2>
           <p className="text-xs text-gray-400 mb-5">每日同步後自動偵測廣告異常（CTR 下滑、素材疲勞、CPC 飆高），以 Email 通知你。</p>
@@ -497,8 +498,7 @@ export default function SettingsPage() {
             className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
             {alertSaveState === 'saving' ? '儲存中⋯' : alertSaveState === 'ok' ? '已儲存 ✓' : alertSaveState === 'error' ? '儲存失敗，請重試' : '儲存'}
           </button>
-        </div>
-
+        </div>}
 
         {/* Canva Integration */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
