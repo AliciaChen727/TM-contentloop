@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 import { syncIgStories } from '@/lib/meta/igStories'
 
@@ -465,6 +466,11 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     new Set(deduped.flatMap(s => (s.adPostIds as string[] | undefined) ?? []))
   )
 
+  const mergedCreatives = Array.from(creativesById.values())
+  // Compute + store diagnosis from the same inputs the 診斷建議 page uses, so the
+  // in-app 紅點 / email / dashboard all share one rule engine. Refreshed each sync.
+  const diag = computeDiagnosisFromSnapshot({ summary: mergedSummary, adCreatives: mergedCreatives })
+
   await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
     dateRange: { from: mergedDaily[0]?.date ?? '', to: mergedDaily[mergedDaily.length - 1]?.date ?? '' },
@@ -474,7 +480,10 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     daily: mergedDaily,
     hourly: mergeHourlyArrays(deduped as { hourly?: HourRow[] }[]),
     adPostIds: mergedPostIds,
-    adCreatives: Array.from(creativesById.values()),
+    adCreatives: mergedCreatives,
+    diagnosis: diag.items,
+    diagnosisCounts: { critical: diag.criticalCount, warning: diag.warningCount },
+    diagnosisUpdatedAt: Timestamp.now(),
   }, { merge: true })
 }
 

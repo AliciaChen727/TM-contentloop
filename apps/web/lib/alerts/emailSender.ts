@@ -1,19 +1,15 @@
 import nodemailer from 'nodemailer'
-import type { AdAlert } from './detector'
+import type { AlertItem } from './types'
 
 const GMAIL_USER = process.env.GMAIL_USER ?? ''
 const FROM = `ContentLoop <${GMAIL_USER}>`
 const DASHBOARD_BASE = 'https://tm-contentloop.vercel.app/dashboard/ads'
 
-const TYPE_EMOJI: Record<AdAlert['type'], string> = {
-  ctr_drop: '📉', frequency_high: '⚠️', cpc_spike: '💸',
-}
-
 // Send one digest email listing all current ad alerts for a page.
 // pageId is appended to the dashboard link so the "AI 診斷" button opens the
 // correct page directly.
 export async function sendAlertEmail(
-  to: string, pageName: string, alerts: AdAlert[], pageId?: string,
+  to: string, pageName: string, alerts: AlertItem[], pageId?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return { ok: false, error: 'GMAIL_USER / GMAIL_APP_PASSWORD not configured' }
   if (!to || alerts.length === 0) return { ok: false, error: 'no recipient or no alerts' }
@@ -27,7 +23,8 @@ export async function sendAlertEmail(
 
   const rows = alerts.map(a => `
     <tr><td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px;line-height:1.5;color:#1f2937">
-      <span style="font-size:16px">${TYPE_EMOJI[a.type]}</span>&nbsp; ${a.message}
+      <span style="font-size:16px">${a.emoji}</span>&nbsp; <strong>${a.title}</strong>：${a.message}<br/>
+      <span style="font-size:12px;color:#6b7280">建議：${a.advice}</span>
     </td></tr>`).join('')
 
   const html = `

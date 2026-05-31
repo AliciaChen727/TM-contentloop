@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { MOCK_DATA } from '@/components/ads/mockData'
+import { mapRawAdCreative, buildDiagnosis } from '@/lib/ads/diagnosis'
 import { Icon } from '@/components/ads/Icon'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import { OverviewSection } from '@/components/ads/sections/OverviewSection'
@@ -16,7 +17,7 @@ import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
 import { InsightsSection } from '@/components/ads/sections/InsightsSection'
-import type { NavId, Post, AdData, DiagItem, LabelEntry, Experiment } from '@/components/ads/types'
+import type { NavId, Post, AdData, LabelEntry, Experiment } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
@@ -90,136 +91,6 @@ function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<strin
   }
 }
 
-function inferCreativeType(name: string): string {
-  if (/reels/i.test(name)) return 'Reels'
-  if (/stories|story/i.test(name)) return 'Stories'
-  if (/海報/.test(name)) return '海報'
-  return '貼文'
-}
-function inferThumb(type: string): 'reels' | 'post' | 'stories' | 'poster' {
-  if (type === 'Reels') return 'reels'
-  if (type === 'Stories') return 'stories'
-  if (type === '海報') return 'poster'
-  return 'post'
-}
-function inferStatus(roas: number): 'top' | 'good' | 'ok' | 'bad' {
-  if (roas >= 4) return 'top'
-  if (roas >= 3) return 'good'
-  if (roas >= 1.5) return 'ok'
-  return 'bad'
-}
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRawAdCreative(c: any, idx: number) {
-  const spend = parseFloat(c.spend ?? '0')
-  const impressions = parseInt(c.impressions ?? '0')
-  const ctr = parseFloat(c.ctr ?? '0')
-  const actions: { action_type: string; value: string }[] = c.actions ?? []
-  const actionValues: { action_type: string; value: string }[] = c.action_values ?? []
-  const purchases = parseFloat(actions.find(a => a.action_type === 'purchase')?.value ?? '0')
-  const linkClicks = parseFloat(actions.find(a => a.action_type === 'link_click')?.value ?? '0')
-  const videoViews = parseFloat(actions.find(a => a.action_type === 'video_view')?.value ?? '0')
-  const revenue = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value ?? '0')
-  const hasPurchase = purchases > 0
-  const primaryMetric = hasPurchase ? revenue : linkClicks > 0 ? linkClicks : videoViews
-  // For non-revenue accounts (e.g. D67 non-profit), ROAS is meaningless.
-  // Instead, compute a "Click Efficiency Score" = link_clicks / spend * 100
-  // which represents "how many clicks per $1 spent × 100".
-  // If purchases exist, use real ROAS. Otherwise use click efficiency score.
-  const clickEfficiency = spend > 0 && linkClicks > 0
-    ? parseFloat((linkClicks / spend * 100).toFixed(2))
-    : 0
-  const roas = spend > 0 && primaryMetric > 0
-    ? (hasPurchase
-        ? parseFloat((primaryMetric / spend).toFixed(2))   // Real ROAS for e-commerce
-        : clickEfficiency)                                  // Click efficiency score for non-profit
-    : 0
-  const cpa = primaryMetric > 0 ? parseFloat((spend / primaryMetric).toFixed(2)) : 0
-  const postTitle = c.post_title ? (c.post_title as string).slice(0, 60) : null
-  const type = inferCreativeType(c.ad_name ?? '')
-  const storyId = (c.effective_object_story_id as string | undefined) ?? null
-  return {
-    id: c.ad_id ?? String(idx),
-    name: postTitle ?? c.ad_name ?? `廣告 ${idx + 1}`,
-    type,
-    channel: 'Meta',
-    spend,
-    impressions,
-    ctr,
-    roas,
-    cpa,
-    thumb: inferThumb(type),
-    status: inferStatus(roas),
-    linkClicks: linkClicks > 0 ? linkClicks : 0,
-    cpc: linkClicks > 0 ? parseFloat((spend / linkClicks).toFixed(2)) : 0,
-    adName: c.ad_name ?? '',
-    campaignName: c.campaign_name ?? '',
-    budget: typeof c.budget === 'number' ? c.budget : 0,
-    thumbnailUrl: (c.thumbnail_url as string | undefined) ?? null,
-    storyId,
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof mapRawAdCreative>[], budget: number): DiagItem[] {
-  const items: DiagItem[] = []
-
-  if ((s.frequency ?? 0) > 3.5) {
-    items.push({ id: 'd1', severity: 'critical', type: 'audience_fatigue', title: '受眾疲乏警告',
-      desc: `整體帳戶頻率已達 ${(s.frequency).toFixed(2)}，建議暫停或更換素材。`,
-      adset: '整體帳戶', metric: `Frequency ${(s.frequency).toFixed(2)}`, threshold: '> 3.5', action: '更換素材 / 擴大受眾' })
-  }
-
-  // For non-profit accounts (no revenue): skip ROAS warning entirely.
-  // Instead, warn if CPL (cost per link click) is high (> $10 per click).
-  const cpl = (s.conversions ?? 0) > 0 ? (s.spend ?? 0) / (s.conversions ?? 1) : 0
-  if ((s.spend ?? 0) > 0 && (s.conversions ?? 0) === 0) {
-    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: '尚無點擊轉換數據',
-      desc: '目前未偵測到報名連結點擊數據，建議確認廣告目標是否設為「流量」或「互動」。',
-      adset: '整體帳戶', metric: '轉換數 0', threshold: '需 > 0', action: '檢查廣告目標設定 / 確認連結正確' })
-  } else if (cpl > 10 && (s.spend ?? 0) > 0) {
-    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: 'CPL 偏高',
-      desc: `每次點擊報名連結成本為 $${cpl.toFixed(2)}，建議優化素材或縮小受眾。`,
-      adset: '整體帳戶', metric: `CPL $${cpl.toFixed(2)}`, threshold: '建議 < $10', action: '優化 CTA 文案 / 縮小受眾' })
-  }
-
-  const budgetPct = budget > 0 ? (s.spend / budget) * 100 : 0
-  if (budgetPct > 80) {
-    items.push({ id: 'd3', severity: budgetPct > 95 ? 'critical' : 'warning', type: 'budget', title: '預算超支風險',
-      desc: `目前花費進度 ${budgetPct.toFixed(1)}%，需注意月底前燒速。`,
-      adset: '整體帳戶', metric: `已花 $${Math.round(s.spend).toLocaleString('zh-TW')}`,
-      threshold: `預算 $${Math.round(budget).toLocaleString('zh-TW')}`, action: budgetPct > 95 ? '立即暫停低效組合' : '維持現況，每日監控' })
-  }
-
-  const lowCtr = creatives.find(c => c.ctr > 0 && c.ctr < 1.5 && c.spend > 0)
-  if (lowCtr) {
-    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低素材',
-      desc: `素材「${lowCtr.name.slice(0, 25)}」CTR 僅 ${lowCtr.ctr.toFixed(2)}%，低於建議值 1.5%。`,
-      adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材',
-      thumbnailUrl: lowCtr.thumbnailUrl, storyId: lowCtr.storyId })
-  } else if ((s.ctr ?? 0) > 0 && (s.ctr) < 1.5) {
-    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低',
-      desc: `整體 CTR 僅 ${(s.ctr).toFixed(2)}%，低於建議值 1.5%。`,
-      adset: '整體帳戶', metric: `CTR ${(s.ctr).toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材' })
-  }
-
-  const top = [...creatives].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas)[0]
-  if (top && top.roas >= 5) {
-    items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: '最佳點擊效率素材',
-      desc: `素材「${top.name.slice(0, 25)}」點擊效率達 ${top.roas.toFixed(1)}x，建議增加預算。`,
-      adset: top.name.slice(0, 30), metric: `點擊效率 ${top.roas.toFixed(1)}`, threshold: '目標 > 5', action: `增加預算 20-30%`,
-      thumbnailUrl: top.thumbnailUrl, storyId: top.storyId })
-  }
-
-  if (items.length === 0) {
-    items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '帳戶表現良好',
-      desc: `CTR ${(s.ctr ?? 0).toFixed(2)}%，點擊效益正常，各項指標正常。`,
-      adset: '整體帳戶', metric: `CTR ${(s.ctr ?? 0).toFixed(2)}%`, threshold: '正常', action: '持續監控，維持現況' })
-  }
-
-  return items
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildAdData(raw: any): AdData {
   const s = raw.summary ?? {}

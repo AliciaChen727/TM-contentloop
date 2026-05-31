@@ -1,6 +1,6 @@
 import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import type { AdAlert } from '@/lib/alerts/detector'
+import type { AlertItem } from '@/lib/alerts/types'
 
 // Phase 2 — in-app notification center.
 // Writes notifications to users/{uid}/notifications, fanned out to each recipient
@@ -22,35 +22,25 @@ export interface NotificationInput {
   dateStr: string                // YYYY-MM-DD, used for per-day dedup id
 }
 
-// Rule-based optimization advice per alert type (Phase 2). Phase 3 upgrades this
-// to LLM-generated, ad-specific advice — see docs/phase-3-sidekick-self-learning.md.
-const ADVICE_BY_TYPE: Record<AdAlert['type'], string> = {
-  ctr_drop: 'CTR 下滑通常是素材疲乏，建議更換主視覺或重寫開頭 hook 文案。',
-  frequency_high: '曝光頻次過高代表受眾被洗版，建議擴大受眾或調降預算/換素材。',
-  cpc_spike: 'CPC 飆高多為競價或相關性下降，建議檢查受眾精準度與素材相關度分數。',
-}
-
-// Build a combined advice string covering each distinct alert type present.
-export function buildAdvice(alerts: AdAlert[]): string {
-  const types = Array.from(new Set(alerts.map((a) => a.type)))
-  return types.map((t) => ADVICE_BY_TYPE[t]).filter(Boolean).join('\n')
-}
-
-// Resolve a digest notification payload for a batch of ad alerts.
+// Resolve a digest notification payload for a batch of alert items. The advice
+// comes straight from the diagnosis engine (DiagItem.action) so the 紅點 matches
+// the 診斷建議 page. Phase 3 upgrades advice to LLM-generated, ad-specific text —
+// see docs/phase-3-sidekick-self-learning.md.
 export function buildAdAnomalyNotification(
   pageId: string,
   pageName: string,
-  alerts: AdAlert[],
+  alerts: AlertItem[],
   dateStr: string,
 ): NotificationInput {
-  const body = alerts.map((a) => `• ${a.message}`).join('\n')
+  const body = alerts.map((a) => `${a.emoji} ${a.title}：${a.message}`).join('\n')
+  const advice = Array.from(new Set(alerts.map((a) => a.advice).filter(Boolean))).join('\n')
   return {
     type: 'ad_anomaly',
     pageId,
     pageName,
-    title: `${pageName}：${alerts.length} 則廣告出現異常`,
+    title: `${pageName}：${alerts.length} 項廣告需要注意`,
     body,
-    advice: buildAdvice(alerts),
+    advice,
     actionPrompt: null,
     alertKeys: alerts.map((a) => a.key),
     deepLink: `/dashboard/ads?pageId=${pageId}`,

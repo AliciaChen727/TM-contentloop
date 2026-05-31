@@ -1,8 +1,10 @@
 import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { FieldValue } from 'firebase-admin/firestore'
-import { detectAdAlerts } from './detector'
 import { sendAlertEmail } from './emailSender'
+import { computeDiagnosisFromSnapshot, diagnosisToAlertItems } from '@/lib/ads/diagnosis'
+import type { DiagItem } from '@/components/ads/types'
+import type { Timestamp } from 'firebase-admin/firestore'
 import { writeInAppNotification, resolveUidsFromEmails, buildAdAnomalyNotification } from '@/lib/notifications/store'
 
 // Taiwan (UTC+8) wall-clock components.
@@ -61,10 +63,20 @@ export async function processPageAlerts(pageId: string): Promise<{
     return { sent: false, reason: 'already sent today' }
   }
 
-  // Latest snapshot → detect
+  // Latest snapshot → diagnosis. Prefer the diagnosis stored at sync time; fall
+  // back to recomputing from the snapshot when it's missing or stale (older than
+  // the latest sync). Same engine as the 診斷建議 page → 紅點 stays in sync.
   const snap = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data()
   if (!snap) return { sent: false, reason: 'no snapshot' }
-  const alerts = detectAdAlerts(snap)
+
+  const syncedMs = (snap.syncedAt as Timestamp | undefined)?.toMillis?.() ?? 0
+  const diagMs = (snap.diagnosisUpdatedAt as Timestamp | undefined)?.toMillis?.() ?? 0
+  const storedDiag = Array.isArray(snap.diagnosis) ? (snap.diagnosis as DiagItem[]) : null
+  const items = storedDiag && diagMs >= syncedMs
+    ? storedDiag
+    : computeDiagnosisFromSnapshot(snap).items
+
+  const alerts = diagnosisToAlertItems(items)
   if (alerts.length === 0) return { sent: false, reason: 'no alerts', alertCount: 0 }
 
   // Recipient emails. Priority:
