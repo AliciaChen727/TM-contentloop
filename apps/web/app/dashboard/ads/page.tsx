@@ -601,6 +601,25 @@ export default function AdsPage() {
     return () => clearInterval(id)
   }, [authed, selectedPageId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep the optimization goal in sync with the active page (drives KPI ordering).
+  // Single source of truth: refetch whenever selectedPageId changes.
+  useEffect(() => {
+    if (!authed || !selectedPageId) return
+    const u = auth.currentUser
+    if (!u) return
+    let cancelled = false
+    u.getIdToken().then(token =>
+      fetch(`/api/user/onboarding?pageId=${selectedPageId}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(async r => {
+          if (!r.ok) { if (!cancelled) setOptimizationGoal(null); return }
+          const j = await r.json()
+          if (!cancelled) setOptimizationGoal(j.data?.optimizationGoal ?? null)
+        })
+        .catch(() => {})
+    )
+    return () => { cancelled = true }
+  }, [authed, selectedPageId])
+
   async function handlePageSwitch(pid: string, pname: string) {
     setShowPageMenu(false)
     if (pid === selectedPageId) return
@@ -615,12 +634,7 @@ export default function AdsPage() {
     const idToken = await u.getIdToken()
     const headers = { Authorization: `Bearer ${idToken}` }
     const qs = pid ? `?pageId=${pid}` : ''
-    // Refresh the goal so the overview KPI ordering follows the new page.
-    fetch(`/api/user/onboarding${qs}`, { headers }).then(async r => {
-      if (!r.ok) { setOptimizationGoal(null); return }
-      const j = await r.json()
-      setOptimizationGoal(j.data?.optimizationGoal ?? null)
-    }).catch(() => {})
+    // (optimizationGoal is refreshed by the selectedPageId-keyed effect.)
     const [fbRes, igRes, adRes] = await Promise.all([
       fetch(`/api/insights/fb${qs}`, { headers }),
       fetch(`/api/insights/ig${qs}`, { headers }),
