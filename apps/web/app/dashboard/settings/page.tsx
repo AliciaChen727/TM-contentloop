@@ -45,7 +45,6 @@ export default function SettingsPage() {
   const [canvaMsg, setCanvaMsg] = useState<'connected' | 'error' | null>(null)
   const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('off')
   const [alertEmails, setAlertEmails] = useState<string[]>([''])
-  const [newEmail, setNewEmail] = useState('')
   const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
   const [pages, setPages] = useState<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }[]>([])
   const [selectedPageId, setSelectedPageId] = useState('')
@@ -190,7 +189,7 @@ export default function SettingsPage() {
     setSelectedPageId(pageId)
     localStorage.setItem('selectedPageId', pageId)
     setCopyBanner(false)
-    setAlertFreq('off'); setAlertEmails(['']); setNewEmail('')
+    setAlertFreq('off'); setAlertEmails([''])
     setAdGoal(''); setIndustry(''); setIndustryOther(''); setBrandName(''); setExtraContext('')
     if (!pageId || !idToken) return
     const [onbRes, alertRes] = await Promise.all([
