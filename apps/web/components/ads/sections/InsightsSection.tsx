@@ -225,6 +225,7 @@ ${bmRow('廣告 CPA（每次行動成本）', `$${Number(bm.adCpc.value).toFixed
   ${statCard('CPM', `$${Number(ads.cpm).toFixed(2)}`)}
   ${statCard('總花費', `$${Number(ads.spend).toLocaleString()}`)}
   ${statCard('連結點擊', `${ads.clicks.toLocaleString()} 次`)}
+  ${statCard('點擊效益', ads.spend > 0 ? `${((ads.clicks / ads.spend) * 100).toFixed(2)} 次/百元` : '-')}
   ${statCard('觸及人數', ads.reach > 0 ? `${(ads.reach / 10000).toFixed(1)} 萬` : '-')}
   ${statCard('頻率', String(ads.frequency))}
   ${statCard('廣告數', `${ads.adCount} 則`)}
@@ -589,18 +590,19 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {/* Row 2: Ads */}
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ad-text3)', marginBottom: 6, letterSpacing: '0.05em' }}>廣告投放</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-            {[
+            {([
               { label: '廣告 CTR', value: `${summary.adsSummary.ctr}%`, unit: '' },
               { label: '廣告 CPA', value: `$${Number(summary.adsSummary.cpc).toFixed(2)}`, unit: '' },
               { label: '廣告 CPM', value: `$${Number(summary.adsSummary.cpm).toFixed(2)}`, unit: '' },
               { label: '總花費', value: `$${Number(summary.adsSummary.spend).toLocaleString()}`, unit: '' },
               { label: '連結點擊數', value: summary.adsSummary.clicks.toLocaleString(), unit: '次' },
+              { label: '點擊效益', value: summary.adsSummary.spend > 0 ? ((summary.adsSummary.clicks / summary.adsSummary.spend) * 100).toFixed(2) : '0', unit: '次/百元', tip: '點擊效益＝每花 NT$100 取得的連結點擊次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。' },
               { label: '觸及人數', value: summary.adsSummary.reach > 0 ? (summary.adsSummary.reach / 10000).toFixed(1) + '萬' : '-', unit: '' },
               { label: '頻率', value: String(summary.adsSummary.frequency), unit: '' },
               { label: '廣告數', value: String(summary.adsSummary.adCount), unit: '則' },
-            ].map(c => (
-              <div key={c.label} style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '12px 16px' }}>
-                <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4 }}>{c.label}</div>
+            ] as { label: string; value: string; unit: string; tip?: string }[]).map(c => (
+              <div key={c.label} title={c.tip} style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginBottom: 4 }}>{c.label}{c.tip && <span style={{ marginLeft: 4, cursor: 'help' }} title={c.tip}>ⓘ</span>}</div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{c.value}<span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ad-text3)', marginLeft: 2 }}>{c.unit}</span></div>
               </div>
             ))}
