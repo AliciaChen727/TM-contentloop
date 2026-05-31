@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 const BASE = 'https://graph.facebook.com/v19.0'
@@ -766,6 +767,22 @@ export async function POST(req: NextRequest) {
       igPostIds,
       igPostMetrics,
     }, { merge: true })
+  }
+
+  // Refresh stored diagnosis on the canonical page snapshot so the 紅點 reflects
+  // a manual sync immediately (no waiting for the daily cron). Recompute from the
+  // doc's authoritative merged state — avoids clobbering the cron-merged summary.
+  if (pageId) {
+    const latestRef = adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest')
+    const latest = (await latestRef.get()).data()
+    if (latest) {
+      const diag = computeDiagnosisFromSnapshot(latest)
+      await latestRef.set({
+        diagnosis: diag.items,
+        diagnosisCounts: { critical: diag.criticalCount, warning: diag.warningCount },
+        diagnosisUpdatedAt: Timestamp.now(),
+      }, { merge: true })
+    }
   }
 
   return NextResponse.json({
