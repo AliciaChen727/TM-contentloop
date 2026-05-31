@@ -47,6 +47,9 @@ export async function POST(req: NextRequest) {
   if (alertEmails !== undefined) {
     update.alertEmails = alertEmails.map(e => e.trim()).filter(Boolean)
   }
+  // Record who configured this so the "empty = my login email" fallback in
+  // processAlerts resolves to THIS admin, not the page owner.
+  update.alertConfiguredByUid = uid
 
   await adminDb.collection('pages').doc(pageId).set(update, { merge: true })
   return NextResponse.json({ ok: true })

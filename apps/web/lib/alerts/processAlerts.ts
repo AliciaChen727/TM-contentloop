@@ -49,13 +49,15 @@ export async function processPageAlerts(pageId: string): Promise<{
     }
   }
 
-  // 4. Recipient emails (alertEmails array → legacy alertEmail → owner auth email)
+  // 4. Recipient emails. Priority:
+  //    explicit alertEmails → legacy alertEmail → configuring admin's login
+  //    email → page owner's email (last resort).
   let recipients: string[] = profile.alertEmails ?? []
   if (recipients.length === 0 && profile.alertEmail) recipients = [profile.alertEmail]
   if (recipients.length === 0) {
-    const ownerUid = await resolvePageOwnerUid(pageId)
-    if (ownerUid) {
-      try { const email = (await adminAuth.getUser(ownerUid)).email ?? ''; if (email) recipients = [email] } catch { /* no auth user */ }
+    const fallbackUid = profile.alertConfiguredByUid ?? await resolvePageOwnerUid(pageId)
+    if (fallbackUid) {
+      try { const email = (await adminAuth.getUser(fallbackUid)).email ?? ''; if (email) recipients = [email] } catch { /* no auth user */ }
     }
   }
   if (recipients.length === 0) return { sent: false, reason: 'no recipient email', alertCount: alerts.length }
