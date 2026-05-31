@@ -208,24 +208,51 @@ export async function GET(req: NextRequest) {
     || ((adsRawUser.summary as Record<string, number> | undefined)?.spend ?? 0) > 0
   const adsRaw = userHasData ? adsRawUser : (adsSnapShared.exists ? adsRawShared : adsRawUser)
   const adsSummaryRaw = (adsRaw.summary ?? {}) as Record<string, number>
-  const adsDateRange = adsRaw.dateRange as { from?: string; to?: string } | undefined
+  const snapshotDateRange = adsRaw.dateRange as { from?: string; to?: string } | undefined
 
-  // Extract goal-relevant ad metrics (match 總覽 / OverviewSection exactly)
-  const adCtr = adsSummaryRaw.ctr ?? 0
-  const adSpendRaw = adsSummaryRaw.spend ?? 0
-  // link clicks = conversions (for non-purchase accounts the action IS a link click)
-  const adLinkClicks = adsSummaryRaw.conversions ?? 0
-  // CPC = cpa (cost per link click); 總覽 shows this value as CPC. Fall back to spend/link_clicks.
-  const adCpc = (adsSummaryRaw.cpa ?? 0) > 0
-    ? adsSummaryRaw.cpa
-    : (adSpendRaw > 0 && adLinkClicks > 0 ? Number((adSpendRaw / adLinkClicks).toFixed(2)) : 0)
-  const adCpm = adsSummaryRaw.cpm ?? 0
-  const adSpend = adSpendRaw
-  const adImpressions = adsSummaryRaw.impressions ?? 0
-  // 連結點擊數 = conversions (link clicks), matching 總覽; fall back to all clicks
-  const adClicks = adLinkClicks > 0 ? adLinkClicks : (adsSummaryRaw.clicks ?? 0)
-  const adFrequency = adsSummaryRaw.frequency ?? 0
-  const adReach = adsSummaryRaw.reach ?? 0
+  // --- Slice the daily ad data to the SELECTED period so ad metrics match the
+  // chosen month exactly (not the whole-snapshot summary which spans the last
+  // sync's range). Falls back to the snapshot summary when daily doesn't cover it.
+  const startStr = start.toISOString().slice(0, 10)
+  const endStr = end.toISOString().slice(0, 10)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dailyAll = Array.isArray(adsRaw.daily) ? (adsRaw.daily as any[]) : []
+  const dailyInPeriod = dailyAll.filter(d => typeof d?.date === 'string' && d.date >= startStr && d.date <= endStr)
+
+  let adCtr: number, adSpend: number, adLinkClicks: number, adCpc: number, adCpm: number,
+    adImpressions: number, adClicks: number, adFrequency: number, adReach: number
+  let adCoverage: { start: string; end: string } | null = null
+
+  if (dailyInPeriod.length > 0) {
+    // Aggregate from daily within the selected period (same formulas as sync's page summary)
+    const sum = (k: string) => dailyInPeriod.reduce((s, d) => s + (Number(d[k]) || 0), 0)
+    adSpend = sum('spend')
+    adImpressions = sum('impressions')
+    adReach = sum('reach')
+    const allClicks = sum('clicks')
+    adLinkClicks = sum('conversions')
+    adCtr = adImpressions > 0 ? Number((allClicks / adImpressions * 100).toFixed(2)) : 0
+    adCpc = adLinkClicks > 0 ? Number((adSpend / adLinkClicks).toFixed(2)) : 0
+    adCpm = adImpressions > 0 ? Number((adSpend / adImpressions * 1000).toFixed(2)) : 0
+    adFrequency = adReach > 0 ? Number((adImpressions / adReach).toFixed(2)) : 0
+    adClicks = adLinkClicks > 0 ? adLinkClicks : allClicks
+    const dates = dailyInPeriod.map(d => d.date as string).sort()
+    adCoverage = { start: dates[0], end: dates[dates.length - 1] }
+  } else {
+    // Fallback: whole-snapshot summary (period not covered by daily data)
+    adCtr = adsSummaryRaw.ctr ?? 0
+    adSpend = adsSummaryRaw.spend ?? 0
+    adLinkClicks = adsSummaryRaw.conversions ?? 0
+    adCpc = (adsSummaryRaw.cpa ?? 0) > 0
+      ? adsSummaryRaw.cpa
+      : (adSpend > 0 && adLinkClicks > 0 ? Number((adSpend / adLinkClicks).toFixed(2)) : 0)
+    adCpm = adsSummaryRaw.cpm ?? 0
+    adImpressions = adsSummaryRaw.impressions ?? 0
+    adClicks = adLinkClicks > 0 ? adLinkClicks : (adsSummaryRaw.clicks ?? 0)
+    adFrequency = adsSummaryRaw.frequency ?? 0
+    adReach = adsSummaryRaw.reach ?? 0
+    adCoverage = snapshotDateRange ? { start: snapshotDateRange.from ?? '', end: snapshotDateRange.to ?? '' } : null
+  }
 
   // Ad count = number of advertised posts in the snapshot (FB + IG), matching the
   // dashboard's "共 X 篇貼文有投廣告". adCreatives alone only counts ACTIVE creatives
@@ -276,7 +303,7 @@ export async function GET(req: NextRequest) {
     period: label, periodKey, periodType, isPartial,
     dataAsOf: end.toISOString().slice(0, 10),
     dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
-    adsDateRange: adsDateRange ? { start: adsDateRange.from ?? '', end: adsDateRange.to ?? '' } : null,
+    adsDateRange: adCoverage,
     optimizationGoal, industry,
     overview: { totalPosts, fbCount, igCount, avgEngRate, avgReach, followerGrowth, followerGrowthRate, latestFollowers },
     topPosts, underPosts,

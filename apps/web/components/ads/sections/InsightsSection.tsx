@@ -505,7 +505,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adCpm') && metricRow('廣告 CPM', summary.benchmarkCompare.fb.adCpm, '', true)}
           {summary.adsDateRange && (summary.adsDateRange.start !== summary.dateRange.start || summary.adsDateRange.end !== summary.dateRange.end) && (
             <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 6 }}>
-              ※ 廣告數據實際涵蓋 {summary.adsDateRange.start} ~ {summary.adsDateRange.end}（最近同步區間）
+              ※ 廣告數據實際涵蓋 {summary.adsDateRange.start} ~ {summary.adsDateRange.end}（此區間有投放數據；如需補齊請調整表頭日期重新同步）
             </div>
           )}
         </div>
