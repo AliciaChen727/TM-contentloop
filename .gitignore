@@ -10,3 +10,9 @@ dist/
 firebase-debug.log
 firestore-debug.log
 .vercel
+
+# Debug / local artifacts
+.playwright-mcp/
+cors.json
+onboarding-step1.png
+test-send-alert.mjs
