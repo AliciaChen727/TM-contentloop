@@ -113,9 +113,28 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
             return (
               <tr key={s.id}>
                 <td className="ads-posts-date">{fullDate(s.timestamp)}</td>
-                <td style={{ maxWidth: 200 }}>
-                  <div style={{ fontSize: 13, color: 'var(--ad-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.caption || '（無文字內容）'}>
-                    {s.caption ? s.caption : <span style={{ color: 'var(--ad-text3)' }}>（無文字內容）</span>}
+                <td style={{ maxWidth: 220 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Story media is video/image with text baked in — show the thumbnail
+                        as the "content" since the caption is usually empty. */}
+                    {s.thumbnailUrl ? (
+                      s.permalink ? (
+                        <a href={s.permalink} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={s.thumbnailUrl} alt="限動截圖" width={36} height={48}
+                            style={{ borderRadius: 6, objectFit: 'cover', background: '#f3f4f6', border: '1px solid var(--ad-border)' }}
+                            onError={e => { e.currentTarget.style.display = 'none' }} />
+                        </a>
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={s.thumbnailUrl} alt="限動截圖" width={36} height={48}
+                          style={{ borderRadius: 6, objectFit: 'cover', flexShrink: 0, background: '#f3f4f6', border: '1px solid var(--ad-border)' }}
+                          onError={e => { e.currentTarget.style.display = 'none' }} />
+                      )
+                    ) : null}
+                    <div style={{ fontSize: 13, color: 'var(--ad-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.caption || '（影音內容，文字在畫面中）'}>
+                      {s.caption ? s.caption : <span style={{ color: 'var(--ad-text3)' }}>{s.thumbnailUrl ? '（影音內容）' : '（無文字內容）'}</span>}
+                    </div>
                   </div>
                 </td>
                 <td>
