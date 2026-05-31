@@ -1,8 +1,29 @@
 # ContentLoop — 專案世界觀 (CLAUDE.md)
 
 ## 專案定位
-個人品牌經營者用的 AI 內容操作工具。
-**Phase 1 範圍**：從 Toastmasters 分會 FB 粉專 + 連動 IG 抓取貼文成效資料，儲存到 Firestore，用 Next.js 儀表板呈現。
+Toastmasters 分會用的 AI 廣告／內容成效儀表板。從 FB 粉專 + 連動 IG 抓貼文/廣告成效，存 Firestore，用 Next.js 儀表板呈現，並提供 AI 診斷、洞察報告、AI Sidekick 與廣告異常通知。
+
+**現況**：Phase 1（資料抓取 + 儀表板）已上線。目前在做通知 → 優化 → 自動化的 roadmap。
+
+## Roadmap（單一事實來源在 `docs/`）
+| Phase | 內容 | 文件 |
+|-------|------|------|
+| 1 | Meta OAuth + 定時抓 FB/IG 成效 + 儀表板 | ✅ 已上線 |
+| 2 | 站內通知中心（紅點）+ 排程 email 告警 | ✅ `docs/phase-2-notification-center.md` |
+| 3 | AI Sidekick 優化 loop + 自我學習（批次審查 agent / Quality evaluator / feedback memory；agent = **Anthropic 原生**，非 LangChain）| 📋 `docs/phase-3-sidekick-self-learning.md` |
+| 4 | 半自動廣告更新（Meta Marketing API 寫入，需 `ads_management` + App Review）| 📋 `docs/phase-4-ad-automation.md` |
+
+系統架構詳見 `docs/architecture.md`；廣告目標→指標對照見 `docs/goal-metrics.md`。
+
+## 開發指令（monorepo：程式在 `apps/web`）
+```bash
+cd apps/web
+npm run dev          # 本機開發
+npx tsc --noEmit     # 型別檢查
+npx eslint <files>   # lint
+npm run build        # production build（commit/push 前務必跑過）
+```
+**紀律**：每次改完 → `tsc` + `eslint` + `next build` 三關全綠才 commit。部署：push `main` → Vercel 自動部署（前端）；`functions/` 變更 → Firebase deploy。
 
 ## 技術棧
 | 層 | 技術 |
@@ -26,15 +47,6 @@
 3. **一次完成一個 vertical slice**，不東改西改
 4. **每個檔案職責單一**，component 不超過 200 行
 5. 所有 secret / token 只存 `.env.local`（前端）或 Firebase Secret Manager（後端），絕不 commit
-
-## Vertical Slices 規劃（Phase 1）
-| # | Slice | 狀態 |
-|---|---|---|
-| 1 | Meta OAuth + 取得 Long-lived Page Token | 🔲 未開始 |
-| 2 | Cloud Function 定時抓 FB Insights，寫入 Firestore | 🔲 未開始 |
-| 3 | Cloud Function 定時抓 IG Insights，寫入 Firestore | 🔲 未開始 |
-| 4 | Next.js 儀表板：FB 貼文成效表格 + 圖表 | 🔲 未開始 |
-| 5 | Next.js 儀表板：IG 貼文成效表格 + 圖表 | 🔲 未開始 |
 
 ## Firestore 資料模型（草案）
 ```
@@ -77,6 +89,32 @@ users/{uid}
 ### Firestore 路徑
 - 有 `pageId`：`pages/{pageId}/sidekickConversations/{sessionId}`（對話存檔、歷史、CSV 匯出）
 - 無 `pageId`：fallback 讀 `users/{uid}/aiInsights`（舊系統，不支援匯出）
+
+## 🩺 診斷引擎 — 單一事實來源（改規則必讀）
+
+診斷的規則**只有一份**：`apps/web/lib/ads/diagnosis.ts`（純函式，server/client 共用）。
+要改診斷門檻/文案，**只動這個檔**，下列三個消費端會同步生效：
+
+| 消費端 | 檔案 | 說明 |
+|--------|------|------|
+| 診斷建議頁 | `app/dashboard/ads/page.tsx`（`buildAdData`）| 依使用者選的日期區間，client 即時算 |
+| 紅點通知 + 告警 email | `lib/alerts/processAlerts.ts` | 用 canonical 快照算；只有 `critical`/`warning` 發通知，`good`-only 靜默 |
+| 「AI 投手建議」紫框 | `components/ads/sections/DiagnosisSection.tsx`（`aiSummary`）| 模板字串拼接，**非 LLM**（Phase 3 才升級）|
+
+- **不要**再用 `lib/alerts/detector.ts`（`detectAdAlerts`）當通知來源 —— 已被診斷引擎取代（檔案保留未刪）。
+- 診斷存於 `pages/{pageId}/adInsights/latest` 的 `diagnosis` / `diagnosisCounts` / `diagnosisUpdatedAt`，三條路徑更新：每日 cron（`api/cron/sync`）、手動同步（`api/ads/sync`，重算但不覆寫合併 summary）、通知 cron fallback（存的比 `syncedAt` 舊就重算）。
+- 診斷頁是「依日期區間即時算」，紅點是「用最新 canonical 快照算」→ **規則同源、日期範圍可能不同**，屬預期行為。
+
+## 🔔 站內通知中心（Phase 2）
+- 通知存 per-user：`users/{uid}/notifications/{docId}`，deterministic per-day id `{type}__{pageId}__{dateStr}`（同日冪等、保留已讀狀態）。
+- API：`GET /api/notifications`（最近 20 + unreadCount）、`POST /api/notifications/read`（`{id}` | `{all}`），皆用呼叫者自己的 ID token 驗身。
+- UI：`components/NotificationBell.tsx` 掛在 dashboard header。BFF 架構（全走 Admin SDK + verifyIdToken）→ **不需要 firestore.rules**。
+
+## 🤖 使用的 Model
+- `claude-sonnet-4-6`：AI Sidekick 對話、洞察報告（`api/insights/report`）
+- `claude-haiku-4-5`：素材生成（`api/ai/creative`）
+- 診斷引擎本身 = 規則，**無 model**
+- 告警 email：nodemailer + Gmail（寄件者 `courage727@gmail.com`，App Password）
 
 ## ⚠️ Legacy Collection 隔離規則（防止跨頁資料洩漏）
 
