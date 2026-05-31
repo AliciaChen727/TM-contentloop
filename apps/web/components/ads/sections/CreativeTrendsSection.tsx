@@ -18,7 +18,7 @@ const METRICS: Record<MetricKey, MetricDef> = {
   ctr: { label: 'CTR', kind: 'percent', perDay: d => d.ctr },
   cpc: { label: 'CPC', kind: 'currency', perDay: d => (d.clicks > 0 ? d.spend / d.clicks : 0) },
   cpm: { label: 'CPM', kind: 'currency', perDay: d => (d.impressions > 0 ? d.spend / d.impressions * 1000 : 0) },
-  roas: { label: 'ROAS', kind: 'ratio', perDay: d => d.roas },
+  roas: { label: '點擊效益', kind: 'ratio', perDay: d => d.roas },
 }
 const METRIC_ORDER: MetricKey[] = ['spend', 'reach', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'roas']
 
@@ -175,9 +175,10 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
     )
   }
 
-  const ROWS: { key: MetricKey | 'conversions' | 'revenue'; label: string; kind: MetricDef['kind']; reserved?: boolean }[] = [
+  const ROWS: { key: MetricKey | 'conversions' | 'revenue' | 'roasReal'; label: string; kind: MetricDef['kind']; reserved?: boolean; naDash?: boolean; note?: string }[] = [
     { key: 'ctr', label: 'CTR', kind: 'percent' },
-    { key: 'roas', label: 'ROAS', kind: 'ratio' },
+    { key: 'roas', label: '點擊效益', kind: 'ratio' },
+    { key: 'roasReal', label: 'ROAS', kind: 'ratio', reserved: true, naDash: true, note: '需購買追蹤' },
     { key: 'clicks', label: '點擊數', kind: 'int' },
     { key: 'impressions', label: '曝光', kind: 'int' },
     { key: 'reach', label: '觸及', kind: 'int' },
@@ -241,7 +242,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
                     <th style={{ textAlign: 'right', padding: '8px 12px' }}>點擊</th>
                     <th style={{ textAlign: 'right', padding: '8px 12px' }}>CTR</th>
                     <th style={{ textAlign: 'right', padding: '8px 12px' }}>CPC</th>
-                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>ROAS</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>點擊效益</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -322,11 +323,11 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
             {ROWS.map((r, ri) => (
               <tr key={r.key} style={{ borderBottom: ri < ROWS.length - 1 ? '1px solid #F0EDE8' : 'none', background: ri % 2 ? '#FAF8F5' : 'white' }}>
                 <td style={{ padding: '10px 16px', color: r.reserved ? '#B8B2AA' : '#5C5750' }}>
-                  {r.label}{r.reserved && <span style={{ fontSize: 10, marginLeft: 4 }}>(待接 GA)</span>}
+                  {r.label}{r.reserved && <span style={{ fontSize: 10, marginLeft: 4 }}>({r.note ?? '待接 GA'})</span>}
                 </td>
                 {weeks.map((w, wi) => (
                   <td key={w.label} style={{ padding: '10px 16px', textAlign: 'center', fontFamily: 'var(--font-dm-mono)', color: r.reserved ? '#B8B2AA' : '#2A2722' }}>
-                    {fmtVal((weeklyAgg[wi] as Record<string, number>)[r.key] ?? 0, r.kind)}
+                    {r.naDash ? '—' : fmtVal((weeklyAgg[wi] as Record<string, number>)[r.key] ?? 0, r.kind)}
                   </td>
                 ))}
               </tr>

@@ -576,8 +576,8 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
                   {!isBase && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: pctColor(stats.cpa, baseStats.cpa, false) }}>{pct(stats.cpa, baseStats.cpa)}</span>}
                 </div>
                 <div>
-                  <span style={{ color: '#64748b' }}>ROAS </span>
-                  <span style={{ fontWeight: 600 }}>{stats.roas.toFixed(1)}x</span>
+                  <span style={{ color: '#64748b' }}>點擊效益 </span>
+                  <span style={{ fontWeight: 600 }}>{stats.roas.toFixed(1)}<span style={{ fontSize: 10, fontWeight: 400, color: '#94a3b8' }}> 次/百元</span></span>
                   {!isBase && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: pctColor(stats.roas, baseStats.roas, true) }}>{pct(stats.roas, baseStats.roas)}</span>}
                 </div>
               </div>
