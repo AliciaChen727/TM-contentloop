@@ -46,6 +46,9 @@ export default function SettingsPage() {
   const [alertFreq, setAlertFreq] = useState<'daily' | 'weekly' | 'off'>('daily')
   const [alertEmail, setAlertEmail] = useState('')
   const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
+  const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
+  const [selectedPageId, setSelectedPageId] = useState('')
+  const [copyBanner, setCopyBanner] = useState(false) // show "copy from first page?" prompt
 
   // Fallback path only: if the OAuth flow ran full-page (popup blocked), the
   // callback redirects here with ?canva=... — read it once, then strip it so
@@ -110,38 +113,42 @@ export default function SettingsPage() {
       if (!u) { router.replace('/auth/login'); return }
       const token = await u.getIdToken()
       setIdToken(token)
-      const [prefRes, usageRes, onbRes, canvaRes] = await Promise.all([
+      const [prefRes, usageRes, canvaRes, pagesRes] = await Promise.all([
         fetch('/api/user/preferences', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/user/usage', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/user/onboarding', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/canva/status', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/pages', { headers: { Authorization: `Bearer ${token}` } }),
       ])
       if (prefRes.ok) {
         const data = await prefRes.json()
         setLanguage(data.language ?? 'zh-TW')
       }
-      if (usageRes.ok) {
-        setUsage(await usageRes.json())
-      }
-      if (onbRes.ok) {
-        const j = await onbRes.json()
-        if (j.data?.optimizationGoal) setAdGoal(j.data.optimizationGoal)
-        if (j.data?.industry) setIndustry(j.data.industry)
-        if (j.data?.industryOther) setIndustryOther(j.data.industryOther)
-        if (j.data?.brandName) setBrandName(j.data.brandName)
-        if (j.data?.extraContext) setExtraContext(j.data.extraContext)
-      }
-      if (canvaRes.ok) {
-        const c = await canvaRes.json()
-        setCanvaConnected(!!c.connected)
-      }
-      // Ad-alert notification settings (page-scoped)
-      const pageId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
-      if (pageId) {
-        try {
-          const aRes = await fetch(`/api/alerts/settings?pageId=${pageId}`, { headers: { Authorization: `Bearer ${token}` } })
-          if (aRes.ok) { const a = await aRes.json(); setAlertFreq(a.alertFrequency ?? 'daily'); setAlertEmail(a.alertEmail ?? '') }
-        } catch { /* non-critical */ }
+      if (usageRes.ok) setUsage(await usageRes.json())
+      if (canvaRes.ok) { const c = await canvaRes.json(); setCanvaConnected(!!c.connected) }
+
+      // Load pages, then load all page-scoped settings for the active page
+      if (pagesRes.ok) {
+        const d = await pagesRes.json()
+        const pageList: { pageId: string; pageName: string }[] = d.pages ?? []
+        setPages(pageList)
+        const savedId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
+        const activeId = (savedId && pageList.find(p => p.pageId === savedId)) ? savedId : pageList[0]?.pageId ?? ''
+        setSelectedPageId(activeId)
+        if (activeId) {
+          const [onbRes, alertRes] = await Promise.all([
+            fetch(`/api/user/onboarding?pageId=${activeId}`, { headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`/api/alerts/settings?pageId=${activeId}`, { headers: { Authorization: `Bearer ${token}` } }),
+          ])
+          if (onbRes.ok) {
+            const j = await onbRes.json()
+            setAdGoal(j.data?.optimizationGoal ?? '')
+            setIndustry(j.data?.industry ?? '')
+            setIndustryOther(j.data?.industryOther ?? '')
+            setBrandName(j.data?.brandName ?? '')
+            setExtraContext(j.data?.extraContext ?? '')
+          }
+          if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'daily'); setAlertEmail(a.alertEmail ?? '') }
+        }
       }
       setLoading(false)
     })
@@ -161,6 +168,7 @@ export default function SettingsPage() {
     if (!goalReady) return
     setGoalSaveState('saving')
     const body: Record<string, unknown> = { optimizationGoal: adGoal, industry }
+    if (selectedPageId) body.pageId = selectedPageId
     if (needsOtherText) body.industryOther = industryOther.trim()
     else body.industryOther = null
     const res = await fetch('/api/user/onboarding', {
@@ -177,8 +185,53 @@ export default function SettingsPage() {
     }
   }
 
+  async function handlePageSwitch(pageId: string) {
+    setSelectedPageId(pageId)
+    localStorage.setItem('selectedPageId', pageId)
+    setCopyBanner(false)
+    setAlertFreq('daily'); setAlertEmail('')
+    setAdGoal(''); setIndustry(''); setIndustryOther(''); setBrandName(''); setExtraContext('')
+    if (!pageId || !idToken) return
+    const [onbRes, alertRes] = await Promise.all([
+      fetch(`/api/user/onboarding?pageId=${pageId}`, { headers: { Authorization: `Bearer ${idToken}` } }),
+      fetch(`/api/alerts/settings?pageId=${pageId}`, { headers: { Authorization: `Bearer ${idToken}` } }),
+    ])
+    if (onbRes.ok) {
+      const j = await onbRes.json()
+      if (j.data) {
+        setAdGoal(j.data.optimizationGoal ?? '')
+        setIndustry(j.data.industry ?? '')
+        setIndustryOther(j.data.industryOther ?? '')
+        setBrandName(j.data.brandName ?? '')
+        setExtraContext(j.data.extraContext ?? '')
+      } else {
+        // New page with no settings — offer to copy from first page
+        const firstPage = pages[0]
+        if (firstPage && firstPage.pageId !== pageId) setCopyBanner(true)
+      }
+    }
+    if (alertRes.ok) { const a = await alertRes.json(); setAlertFreq(a.alertFrequency ?? 'daily'); setAlertEmail(a.alertEmail ?? '') }
+  }
+
+  async function handleCopyFromFirst() {
+    const firstPage = pages[0]
+    if (!firstPage || !idToken) return
+    const res = await fetch(`/api/user/onboarding?pageId=${firstPage.pageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
+    if (res.ok) {
+      const j = await res.json()
+      if (j.data) {
+        setAdGoal(j.data.optimizationGoal ?? '')
+        setIndustry(j.data.industry ?? '')
+        setIndustryOther(j.data.industryOther ?? '')
+        setBrandName(j.data.brandName ?? '')
+        setExtraContext(j.data.extraContext ?? '')
+      }
+    }
+    setCopyBanner(false)
+  }
+
   async function handleAlertSave() {
-    const pageId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
+    const pageId = selectedPageId
     if (!pageId) { setAlertSaveState('error'); setTimeout(() => setAlertSaveState('idle'), 3000); return }
     setAlertSaveState('saving')
     const res = await fetch('/api/alerts/settings', {
@@ -196,6 +249,7 @@ export default function SettingsPage() {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        ...(selectedPageId ? { pageId: selectedPageId } : {}),
         brandName: brandName.trim() || null,
         extraContext: extraContext.trim() || null,
       }),
@@ -226,6 +280,30 @@ export default function SettingsPage() {
       </header>
 
       <div className="mx-auto max-w-2xl px-8 py-8 space-y-6">
+
+        {/* Page selector — only shown when managing multiple pages */}
+        {pages.length > 1 && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3">
+            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">目前設定粉專</span>
+            <select value={selectedPageId} onChange={e => handlePageSwitch(e.target.value)}
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700 bg-white">
+              {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Copy-from-first banner */}
+        {copyBanner && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-blue-700">這個粉專還沒有設定，要套用「{pages[0]?.pageName}」的設定嗎？</p>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={handleCopyFromFirst}
+                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">套用</button>
+              <button onClick={() => setCopyBanner(false)}
+                className="px-3 py-1.5 border border-blue-300 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">略過</button>
+            </div>
+          </div>
+        )}
 
         {/* Usage & Plan */}
         {usage && (
@@ -417,7 +495,7 @@ export default function SettingsPage() {
           </div>
           <button onClick={handleAlertSave} disabled={alertSaveState === 'saving'}
             className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
-            {alertSaveState === 'saving' ? '儲存中⋯' : alertSaveState === 'ok' ? '已儲存 ✓' : alertSaveState === 'error' ? '儲存失敗（請先選擇粉專）' : '儲存'}
+            {alertSaveState === 'saving' ? '儲存中⋯' : alertSaveState === 'ok' ? '已儲存 ✓' : alertSaveState === 'error' ? '儲存失敗，請重試' : '儲存'}
           </button>
         </div>
 

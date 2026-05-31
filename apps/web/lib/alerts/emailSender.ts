@@ -1,7 +1,8 @@
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import type { AdAlert } from './detector'
 
-const FROM = process.env.ALERT_EMAIL_FROM ?? 'ContentLoop <onboarding@resend.dev>'
+const GMAIL_USER = process.env.GMAIL_USER ?? ''
+const FROM = `ContentLoop <${GMAIL_USER}>`
 const DASHBOARD_URL = 'https://tm-contentloop.vercel.app/dashboard/ads'
 
 const TYPE_EMOJI: Record<AdAlert['type'], string> = {
@@ -12,11 +13,13 @@ const TYPE_EMOJI: Record<AdAlert['type'], string> = {
 export async function sendAlertEmail(
   to: string, pageName: string, alerts: AdAlert[],
 ): Promise<{ ok: boolean; error?: string }> {
-  const key = process.env.RESEND_API_KEY
-  if (!key) return { ok: false, error: 'RESEND_API_KEY not configured' }
+  if (!GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return { ok: false, error: 'GMAIL_USER / GMAIL_APP_PASSWORD not configured' }
   if (!to || alerts.length === 0) return { ok: false, error: 'no recipient or no alerts' }
 
-  const resend = new Resend(key)
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+  })
 
   const rows = alerts.map(a => `
     <tr><td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px;line-height:1.5;color:#1f2937">
@@ -39,8 +42,7 @@ export async function sendAlertEmail(
     : `[ContentLoop] ${pageName} 有 ${alerts.length} 項廣告警示`
 
   try {
-    const { error } = await resend.emails.send({ from: FROM, to, subject, html })
-    if (error) return { ok: false, error: String(error) }
+    await transporter.sendMail({ from: FROM, to, subject, html })
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'send failed' }

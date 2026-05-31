@@ -20,6 +20,16 @@ export async function GET(req: NextRequest) {
   const uid = await verifyUser(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const pageId = req.nextUrl.searchParams.get('pageId')
+  if (pageId) {
+    const snap = await adminDb.collection('pages').doc(pageId).get()
+    const d = snap.data()
+    return NextResponse.json({
+      completed: !!d?.onboardingData,
+      data: d?.onboardingData ?? null,
+    })
+  }
+
   const snap = await adminDb.collection('users').doc(uid).get()
   const data = snap.data()
   return NextResponse.json({
@@ -30,6 +40,7 @@ export async function GET(req: NextRequest) {
 
 interface PostBody {
   skip?: boolean
+  pageId?: string
   optimizationGoal?: OptimizationGoal | null
   industry?: Industry | null
   industryOther?: string | null
@@ -49,6 +60,29 @@ export async function POST(req: NextRequest) {
       onboardingUpdatedAt: FieldValue.serverTimestamp(),
       onboardingData: null,
     }, { merge: true })
+    return NextResponse.json({ success: true })
+  }
+
+  // Page-scoped save: store onboardingData directly on the page document.
+  if (body.pageId) {
+    const patch: Record<string, unknown> = {}
+    if (body.optimizationGoal !== undefined) {
+      if (body.optimizationGoal === null) patch.optimizationGoal = null
+      else if (VALID_GOALS.includes(body.optimizationGoal)) patch.optimizationGoal = body.optimizationGoal
+      else return NextResponse.json({ error: 'Invalid optimizationGoal' }, { status: 400 })
+    }
+    if (body.industry !== undefined) {
+      if (body.industry === null) patch.industry = null
+      else if (VALID_INDUSTRIES.includes(body.industry)) patch.industry = body.industry
+      else return NextResponse.json({ error: 'Invalid industry' }, { status: 400 })
+    }
+    if (body.industryOther !== undefined) patch.industryOther = body.industryOther ?? null
+    if (body.brandName !== undefined) patch.brandName = body.brandName ?? null
+    if (body.extraContext !== undefined) patch.extraContext = body.extraContext ?? null
+
+    const update: Record<string, unknown> = { onboardingUpdatedAt: FieldValue.serverTimestamp() }
+    for (const [k, v] of Object.entries(patch)) update[`onboardingData.${k}`] = v
+    await adminDb.collection('pages').doc(body.pageId).set(update, { merge: true })
     return NextResponse.json({ success: true })
   }
 
