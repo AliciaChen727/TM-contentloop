@@ -188,6 +188,22 @@ export async function GET(req: NextRequest) {
   const adFrequency = adsSummaryRaw.frequency ?? 0
   const adReach = adsSummaryRaw.reach ?? 0
 
+  // Ad count = number of advertised posts in the snapshot (FB + IG), matching the
+  // dashboard's "共 X 篇貼文有投廣告". adCreatives alone only counts ACTIVE creatives
+  // (finished ads excluded), which under-counts a monthly report. Prefer the union
+  // of advertised post ids / metrics; fall back to adCreatives length.
+  const fbAdIds = new Set<string>([
+    ...(Array.isArray(adsRaw.adPostIds) ? adsRaw.adPostIds as string[] : []),
+    ...Object.keys((adsRaw.adPostMetrics as Record<string, unknown>) ?? {}),
+  ])
+  const igAdIds = new Set<string>([
+    ...(Array.isArray(adsRaw.igPostIds) ? adsRaw.igPostIds as string[] : []),
+    ...Object.keys((adsRaw.igPostMetrics as Record<string, unknown>) ?? {}),
+  ])
+  const advertisedPostCount = fbAdIds.size + igAdIds.size
+  const adCreativesCount = Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives.length : 0
+  const adCount = advertisedPostCount > 0 ? advertisedPostCount : adCreativesCount
+
   // --- Post aggregates ---
   const totalFbPosts = fbPosts.length
   const avgEngRate = totalFbPosts > 0 ? Number((fbPosts.reduce((s, p) => s + p.engRate, 0) / totalFbPosts).toFixed(2)) : 0
@@ -221,7 +237,7 @@ export async function GET(req: NextRequest) {
       spend: adSpend, impressions: adImpressions, clicks: adClicks,
       ctr: Number(adCtr.toFixed(2)), cpc: Number(adCpc.toFixed(2)),
       cpm: Number(adCpm.toFixed(2)), frequency: Number(adFrequency.toFixed(2)),
-      reach: adReach, adCount: Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives.length : 0,
+      reach: adReach, adCount,
     },
   })
 }
