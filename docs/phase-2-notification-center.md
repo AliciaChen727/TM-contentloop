@@ -43,12 +43,41 @@ detectAdAlerts                ├→ 站內通知 (Phase 2) → 優化建議 + p
 
 | type | 來源 | 範例文案 (zh-TW) | Deep link |
 |------|------|------------------|-----------|
-| `ad_anomaly` | `detectAdAlerts` (ctr_drop / frequency_high / cpc_spike) | 「D67：3 則廣告 CTR 下滑超過 20%」 | `/dashboard/ads?pageId={pageId}` |
+| `ad_anomaly` | **診斷引擎** `buildDiagnosis`（critical / warning 項，見 §2.5） | 「D67：2 項廣告需要注意」 | `/dashboard/ads?pageId={pageId}` |
 | `report_ready`（選配） | AI 洞察報告產生完成 | 「Legacy 本週洞察報告已產生」 | `/dashboard/ads?pageId={pageId}&tab=insights` |
 | `invite`（選配） | 既有邀請流程 | 「您已被加入 D67 粉專」 | `/dashboard` |
 | `system`（選配） | 系統公告 | 「Meta token 即將到期，請重新授權」 | `/dashboard/settings?pageId={pageId}` |
 
 MVP 只做 `ad_anomaly`，其餘類型用同一資料模型，之後加 sink 即可。
+
+---
+
+## 2.5 偵測來源：統一的診斷引擎（重要）
+
+> **變更紀錄**：紅點原本用 `lib/alerts/detector.ts` 的 `detectAdAlerts`（ctr_drop / frequency_high / cpc_spike），
+> 與「診斷建議」頁面的 `buildDiagnosis` 是**兩套不同規則**、結論會對不上。已統一成**單一診斷引擎**。
+
+**單一來源**：`apps/web/lib/ads/diagnosis.ts`（純函式，server/client 共用）
+- `buildDiagnosis(summary, creatives, budget)` → `DiagItem[]`（severity: `critical` / `warning` / `good`）
+- `computeDiagnosisFromSnapshot(snap)` → 從 `adInsights/latest` 快照算（server 用）
+- `diagnosisToAlertItems(items)` → 只取 `critical` + `warning` 轉成統一的 `AlertItem`（`lib/alerts/types.ts`）
+
+**三個消費端共用同一引擎**：
+| 消費端 | 檔案 | 說明 |
+|--------|------|------|
+| 診斷建議頁 | `ads/page.tsx` → `buildAdData` | 依使用者選的日期區間，client 即時算 |
+| 紅點通知 + email | `processAlerts.ts` | 用 canonical 快照算；`good`-only 不發紅點 |
+| AI 投手建議（紫框） | `DiagnosisSection.tsx` `aiSummary` | 模板字串拼接（**非 LLM**，Phase 3 再升級）|
+
+**診斷的「定期更新」三條路徑**（存於 `pages/{pageId}/adInsights/latest` 的 `diagnosis` / `diagnosisCounts` / `diagnosisUpdatedAt`）：
+1. 每日 cron sync（`api/cron/sync`）→ 算完存檔
+2. 手動「同步廣告資料」（`api/ads/sync`）→ 重讀合併後快照、重算存檔（不覆寫 cron 合併的 summary）
+3. 通知 cron（`processAlerts`）→ 存的診斷若比 `syncedAt` 舊就 fallback 重算
+
+**注意**：診斷頁是「依日期區間即時算」，紅點是「用最新 canonical 快照算」—— **規則同源，日期範圍可能不同**，屬預期行為。
+診斷規則只需改 `lib/ads/diagnosis.ts` 一處，三個消費端同步生效。
+
+> `lib/alerts/detector.ts` 已不再被通知流程使用（保留檔案，未刪）。
 
 ---
 
@@ -156,19 +185,13 @@ users/{uid}/notifications/{notifId}
 全自動改素材風險高且不成熟，因此採 **human-in-the-loop**：AI 給建議與 prompt，人類按下執行。
 分三階段交付，每階段都能獨立上線、各自有 hook，不卡在「全做或沒有」。
 
-### Phase 2 — 通知中心 + 靜態優化建議（本文件，現在）
+### Phase 2 — 通知中心 + 規則優化建議（本文件，現在）
 **目標**：把 hook 的「殼」做出來，驗證使用者會不會從通知點進去看建議。
 - 站內通知中心（§1–§9 全部）。
-- `advice` 欄位用**規則 mapping** 產生，不接 LLM（零成本、即時、可預測）：
-
-  | alert type | 規則建議文字（範例） |
-  |------------|----------------------|
-  | `ctr_drop` | 「CTR 下滑通常是素材疲乏，建議更換主視覺或重寫開頭 hook 文案。」 |
-  | `frequency_high` | 「曝光頻次過高代表受眾被洗版，建議擴大受眾或調降預算/換素材。」 |
-  | `cpc_spike` | 「CPC 飆高多為競價或相關性下降，建議檢查受眾精準度與素材相關度分數。」 |
-
+- `advice` 直接來自**診斷引擎**的 `DiagItem.action`（規則產生，不接 LLM），與「診斷建議」頁同源（見 §2.5）。
+  例：頻率 > 3.5 → 「更換素材 / 擴大受眾」；CTR < 1.5% → 「更換廣告文案或素材」；CPL 偏高 → 「優化 CTA 文案 / 縮小受眾」。
 - `actionPrompt` 先留 `null`，deepLink 跳診斷頁。
-- **驗收新增**：通知展開後看得到對應的規則建議文字。
+- **驗收新增**：通知展開後看得到對應的建議文字（= 該診斷項的 action）。
 - **驗證假設**：使用者真的會點通知 → 看建議（用點擊率/已讀率判斷是否值得投資 Phase 3）。
 
 ### Phase 3 — 通知帶 prompt + 對接 AI Sidekick（接上優化 loop）
