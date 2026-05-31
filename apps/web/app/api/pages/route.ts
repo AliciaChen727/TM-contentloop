@@ -15,8 +15,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
+  const ownOnly = req.nextUrl.searchParams.get('ownOnly') === 'true'
+
   // Super-admin: return every page in the system as owner-level access.
-  if (isSuperAdmin(uid)) {
+  // Skip this when ownOnly=true so settings page only shows managed pages.
+  if (isSuperAdmin(uid) && !ownOnly) {
     const allPages = await listAllPages()
     return NextResponse.json({ pages: allPages, isOwner: true })
   }

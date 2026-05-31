@@ -117,7 +117,7 @@ export default function SettingsPage() {
         fetch('/api/user/preferences', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/user/usage', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/canva/status', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/pages', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } }),
       ])
       if (prefRes.ok) {
         const data = await prefRes.json()
