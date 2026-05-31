@@ -99,9 +99,14 @@ export async function GET(req: NextRequest) {
   const industry = (profile.industry ?? 'event') as string
 
   // --- Fetch FB posts: both page-scoped (live sync) + legacy (CSV/MD import) ---
+  // Limit caps Firestore reads/cost. We fetch the latest N then filter by the
+  // selected period in JS (createdTime can be a Timestamp OR an ISO string from
+  // CSV/MD imports, so a date-range `where` clause is unreliable here).
+  // 2000 comfortably covers a full year for any realistic posting cadence.
+  const POST_FETCH_LIMIT = 2000
   const [newSnap, legacySnap] = await Promise.all([
-    userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(500).get(),
-    userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(500).get(),
+    userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(POST_FETCH_LIMIT).get(),
+    userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(POST_FETCH_LIMIT).get(),
   ])
 
   const byId = new Map<string, Record<string, unknown>>()
