@@ -309,10 +309,51 @@ export async function GET(req: NextRequest) {
     adminDb.collection('pages').doc(pageId).collection('creativeLabels').get(),
   ])
   const abData = abSnap.data() ?? {}
-  const experiments = expColSnap.docs.map(d => ({
-    name: d.data().name ?? '', winner: d.data().winner ?? 'pending', aiDiagnosis: (d.data().aiDiagnosis ?? '').slice(0, 500),
-  })).filter(e => e.name || e.aiDiagnosis)
   const variantLabels = labelsColSnap.docs.map(d => ({ adId: d.id, variant: d.data().variant ?? '', experimentId: d.data().experimentId ?? '' }))
+
+  // Per-ad metrics by ad_id, to compute concrete per-variant (A vs control) stats.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adById = new Map<string, { ctr: number; spend: number; impressions: number; linkClicks: number }>()
+  for (const c of (Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives as any[] : [])) {
+    if (!c.ad_id) continue
+    adById.set(c.ad_id as string, {
+      ctr: parseFloat(c.ctr ?? '0'),
+      spend: parseFloat(c.spend ?? '0'),
+      impressions: parseInt(c.impressions ?? '0'),
+      linkClicks: parseAction(c.actions, 'link_click'),
+    })
+  }
+  // Aggregate per (experimentId, variant): impression-weighted CTR, total spend/clicks.
+  function variantStatsFor(expId: string) {
+    const byVariant = new Map<string, { impressions: number; clicks: number; spend: number; linkClicks: number }>()
+    for (const lbl of variantLabels) {
+      if (lbl.experimentId !== expId || !lbl.variant) continue
+      const m = adById.get(lbl.adId)
+      if (!m) continue
+      const v = byVariant.get(lbl.variant) ?? { impressions: 0, clicks: 0, spend: 0, linkClicks: 0 }
+      v.impressions += m.impressions
+      v.clicks += Math.round(m.impressions * m.ctr / 100) // reconstruct clicks from ctr×impressions
+      v.spend += m.spend
+      v.linkClicks += m.linkClicks
+      byVariant.set(lbl.variant, v)
+    }
+    return Array.from(byVariant.entries()).map(([variant, v]) => ({
+      variant,
+      ctr: v.impressions > 0 ? Number((v.clicks / v.impressions * 100).toFixed(2)) : 0,
+      impressions: v.impressions,
+      spend: Number(v.spend.toFixed(2)),
+      linkClicks: v.linkClicks,
+      cpa: v.linkClicks > 0 ? Number((v.spend / v.linkClicks).toFixed(2)) : 0,
+    })).sort((a, b) => b.ctr - a.ctr)
+  }
+
+  const experiments = expColSnap.docs.map(d => ({
+    name: d.data().name ?? '',
+    winner: d.data().winner ?? 'pending',
+    aiDiagnosis: (d.data().aiDiagnosis ?? '').slice(0, 500),
+    variants: variantStatsFor(d.id),
+  })).filter(e => e.name || e.aiDiagnosis || e.variants.length > 0)
+
   const abTest = {
     aiDiagnosis: (abData.aiDiagnosis ?? '').slice(0, 800),
     winner: abData.winner ?? 'pending',

@@ -21,8 +21,14 @@ const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，專門為非營
 【廣告分析規則】
 - topAdAnalysis/underAdAnalysis 針對「廣告素材」（不是有機貼文），用 CTR 衡量
 - 若只提供 1 則廣告：topAdAnalysis 放該廣告的完整分析（成效、原因、可優化方向都寫在 whyItWorked/replicablePattern），underAdAnalysis 回傳 []
-- 若提供了 A/B 測試數據，abTestInsight 要結合測試結果（哪個版本勝出、為什麼），否則 abTestInsight 寫 ""
-- 若無廣告數據，topAdAnalysis/underAdAnalysis 都回傳空陣列 []`
+- 若無廣告數據，topAdAnalysis/underAdAnalysis 都回傳空陣列 []
+
+【A/B 測試分析規則（abTestInsight）— 很重要】
+每個實驗的 variants 陣列有各變體實際數據（variant 名稱、ctr、impressions、spend、linkClicks、cpa）。請：
+1. 明確指出勝出變體 vs 控制組的「具體數據對比」，例如「A 組 CTR 4.2% vs 控制組 2.1%，高出 100%」。一定要寫出雙方的實際數字。
+2. 解釋勝出的可能原因（從素材/文案角度推論）。
+3. 若 winner 為 pending：說明這可能是因為兩組投放期間或曝光量差異大（看 impressions/spend 差距）導致數據量不足、尚未達統計顯著性，所以系統標為 pending。但仍要「觀察方向性差異」——即使期間不同，仍可指出目前 A 組與控制組的 CTR/CPA 表現差異與初步趨勢，並建議延長觀察或拉齊投放條件後再定奪。
+4. 若完全沒有 variants 數據才寫籠統說明；abTestInsight 無 A/B 數據時寫 ""。`
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
