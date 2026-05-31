@@ -615,6 +615,12 @@ export default function AdsPage() {
     const idToken = await u.getIdToken()
     const headers = { Authorization: `Bearer ${idToken}` }
     const qs = pid ? `?pageId=${pid}` : ''
+    // Refresh the goal so the overview KPI ordering follows the new page.
+    fetch(`/api/user/onboarding${qs}`, { headers }).then(async r => {
+      if (!r.ok) { setOptimizationGoal(null); return }
+      const j = await r.json()
+      setOptimizationGoal(j.data?.optimizationGoal ?? null)
+    }).catch(() => {})
     const [fbRes, igRes, adRes] = await Promise.all([
       fetch(`/api/insights/fb${qs}`, { headers }),
       fetch(`/api/insights/ig${qs}`, { headers }),
