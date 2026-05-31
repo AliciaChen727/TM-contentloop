@@ -92,13 +92,12 @@ function normalizeName(s: string): string {
   return (s || '').replace(/[「」『』《》【】\[\]()（）"'：:、，。.,#＃\s]/g, '').toLowerCase()
 }
 
-// Match an AI analysis item back to the original post (for the permalink).
+// Match an AI analysis item back to the ORIGINAL post object (stable title + link).
 // 1) exact engRate match  2) name/snippet overlap with post message  3) same index.
-function matchPostLink(items: RawPost[] | undefined, engRate: number, index: number, snippet?: string): string {
-  if (!items || items.length === 0) return ''
+function matchPost(items: RawPost[] | undefined, engRate: number, index: number, snippet?: string): RawPost | null {
+  if (!items || items.length === 0) return null
   const byRate = items.find(p => Math.abs(p.engRate - engRate) < 0.01)
-  if (byRate?.permalink) return byRate.permalink
-  // Name-based: AI snippet echoes the post message
+  if (byRate) return byRate
   const n = normalizeName(snippet ?? '')
   if (n.length >= 4) {
     const byName = items.find(p => {
@@ -107,17 +106,21 @@ function matchPostLink(items: RawPost[] | undefined, engRate: number, index: num
       const a = n.slice(0, 8), b = t.slice(0, 8)
       return n.includes(b) || t.includes(a) || t.startsWith(a.slice(0, 6)) || n.startsWith(b.slice(0, 6))
     })
-    if (byName?.permalink) return byName.permalink
+    if (byName) return byName
   }
-  return items[index]?.permalink ?? ''
+  return items[index] ?? null
 }
 
-// Match an AI ad-analysis item to the original ad (by CTR, fallback index) → FB/IG link.
-function matchAdLink(items: RawAd[] | undefined, ctr: number, index: number): string {
-  if (!items || items.length === 0) return ''
-  const ad = items.find(a => Math.abs(a.ctr - ctr) < 0.01) ?? items[index] ?? null
-  if (!ad?.storyId) return ''
-  return `https://www.facebook.com/${ad.storyId}`
+// Match an AI ad-analysis item to the ORIGINAL ad object (by CTR, fallback index).
+function matchAd(items: RawAd[] | undefined, ctr: number, index: number): RawAd | null {
+  if (!items || items.length === 0) return null
+  return items.find(a => Math.abs(a.ctr - ctr) < 0.01) ?? items[index] ?? null
+}
+
+// Title from the real post/ad content (stable across regenerations), with fallback to AI snippet.
+function titleOf(realText: string | undefined, aiSnippet: string, len = 18): string {
+  const t = (realText ?? '').trim()
+  return (t || aiSnippet || '').slice(0, len)
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -150,10 +153,12 @@ function buildPrintHTML(summary: Summary, report: InsightReport): string {
     `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`
 
   const postCard = (p: PostSummary, type: 'top' | 'under', index: number) => {
-    const link = matchPostLink(type === 'top' ? summary.topPosts : summary.underPosts, p.engRate, index, p.postSnippet)
+    const post = matchPost(type === 'top' ? summary.topPosts : summary.underPosts, p.engRate, index, p.postSnippet)
+    const link = post?.permalink || ''
+    const title = titleOf(post?.message, p.postSnippet)
     return `
     <div class="post-card ${type}">
-      <div class="post-header">互動率 ${p.engRate}%&nbsp;·&nbsp;「${p.postSnippet}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看貼文 ↗</a>` : ''}</div>
+      <div class="post-header">互動率 ${p.engRate}%&nbsp;·&nbsp;「${title}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看貼文 ↗</a>` : ''}</div>
       ${type === 'top'
         ? `<div>💡 ${p.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${p.replicablePattern}</div>`
         : `<div>⚠️ 問題：${p.issue}</div><div class="post-pattern">🔧 建議：${p.improvement}</div>`}
@@ -230,8 +235,8 @@ ${report.topPostAnalysis.map((p, i) => postCard(p, 'top', i)).join('')}
 <h2>📉 需改善貼文分析</h2>
 ${report.underPerformerAnalysis.map((p, i) => postCard(p, 'under', i)).join('')}
 ${report.abTestInsight ? `<h2>🧪 A/B 測試洞察</h2><div class="benchmark-insight">${report.abTestInsight}</div>` : ''}
-${(report.topAdAnalysis && report.topAdAnalysis.length > 0) ? `<h2>${report.topAdAnalysis.length === 1 && (!report.underAdAnalysis || report.underAdAnalysis.length === 0) ? '📊 廣告分析' : '🏆 表現最佳廣告分析'}</h2>${report.topAdAnalysis.map((a, i) => { const link = matchAdLink(summary.topAds, a.ctr, i); return `<div class="post-card top"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看廣告 ↗</a>` : ''}</div><div>💡 ${a.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${a.replicablePattern}</div></div>` }).join('')}` : ''}
-${(report.underAdAnalysis && report.underAdAnalysis.length > 0) ? `<h2>📉 需改善廣告分析</h2>${report.underAdAnalysis.map((a, i) => { const link = matchAdLink(summary.underAds, a.ctr, i); return `<div class="post-card under"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看廣告 ↗</a>` : ''}</div><div>⚠️ 問題：${a.issue}</div><div class="post-pattern">🔧 建議：${a.improvement}</div></div>` }).join('')}` : ''}
+${(report.topAdAnalysis && report.topAdAnalysis.length > 0) ? `<h2>${report.topAdAnalysis.length === 1 && (!report.underAdAnalysis || report.underAdAnalysis.length === 0) ? '📊 廣告分析' : '🏆 表現最佳廣告分析'}</h2>${report.topAdAnalysis.map((a, i) => { const ad = matchAd(summary.topAds, a.ctr, i); const link = ad?.storyId ? `https://www.facebook.com/${ad.storyId}` : ''; return `<div class="post-card top"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${titleOf(ad?.name, a.adSnippet)}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看廣告 ↗</a>` : ''}</div><div>💡 ${a.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${a.replicablePattern}</div></div>` }).join('')}` : ''}
+${(report.underAdAnalysis && report.underAdAnalysis.length > 0) ? `<h2>📉 需改善廣告分析</h2>${report.underAdAnalysis.map((a, i) => { const ad = matchAd(summary.underAds, a.ctr, i); const link = ad?.storyId ? `https://www.facebook.com/${ad.storyId}` : ''; return `<div class="post-card under"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${titleOf(ad?.name, a.adSnippet)}⋯」${link ? ` &nbsp;<a href="${link}" style="color:inherit">查看廣告 ↗</a>` : ''}</div><div>⚠️ 問題：${a.issue}</div><div class="post-pattern">🔧 建議：${a.improvement}</div></div>` }).join('')}` : ''}
 
 <h2>🎯 Top 3 行動建議</h2>
 <ol>${report.topRecommendations.map(r => `<li>${r}</li>`).join('')}</ol>
@@ -608,11 +613,12 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🌟 表現最佳貼文分析</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {report.topPostAnalysis.map((p, i) => {
-                const link = matchPostLink(summary.topPosts, p.engRate, i, p.postSnippet)
+                const post = matchPost(summary.topPosts, p.engRate, i, p.postSnippet)
+                const link = post?.permalink || ''
                 return (
                 <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #86efac' }}>
                   <div style={{ fontSize: 12, color: '#15803d', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span>互動率 {p.engRate}% &nbsp;·&nbsp; 「{p.postSnippet}⋯」</span>
+                    <span>互動率 {p.engRate}% &nbsp;·&nbsp; 「{titleOf(post?.message, p.postSnippet)}⋯」</span>
                     {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: 700, textDecoration: 'none' }}>查看貼文 ↗</a>}
                   </div>
                   <div style={{ fontSize: 12, color: '#166534', marginBottom: 4 }}>💡 {p.whyItWorked}</div>
@@ -627,11 +633,12 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📉 需改善貼文分析</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {report.underPerformerAnalysis.map((p, i) => {
-                const link = matchPostLink(summary.underPosts, p.engRate, i, p.postSnippet)
+                const post = matchPost(summary.underPosts, p.engRate, i, p.postSnippet)
+                const link = post?.permalink || ''
                 return (
                 <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fdba74' }}>
                   <div style={{ fontSize: 12, color: '#c2410c', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span>互動率 {p.engRate}% &nbsp;·&nbsp; 「{p.postSnippet}⋯」</span>
+                    <span>互動率 {p.engRate}% &nbsp;·&nbsp; 「{titleOf(post?.message, p.postSnippet)}⋯」</span>
                     {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#ea580c', fontWeight: 700, textDecoration: 'none' }}>查看貼文 ↗</a>}
                   </div>
                   <div style={{ fontSize: 12, color: '#9a3412', marginBottom: 4 }}>⚠️ 問題：{p.issue}</div>
@@ -658,11 +665,12 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {report.topAdAnalysis.map((a, i) => {
-                  const link = matchAdLink(summary.topAds, a.ctr, i)
+                  const ad = matchAd(summary.topAds, a.ctr, i)
+                  const link = ad?.storyId ? `https://www.facebook.com/${ad.storyId}` : ''
                   return (
                   <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#eff6ff', border: '1px solid #93c5fd' }}>
                     <div style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span>CTR {a.ctr}% &nbsp;·&nbsp; 「{a.adSnippet}⋯」</span>
+                      <span>CTR {a.ctr}% &nbsp;·&nbsp; 「{titleOf(ad?.name, a.adSnippet)}⋯」</span>
                       {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>查看廣告 ↗</a>}
                     </div>
                     <div style={{ fontSize: 12, color: '#1e40af', marginBottom: 4 }}>💡 {a.whyItWorked}</div>
@@ -680,11 +688,12 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📉 需改善廣告分析</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {report.underAdAnalysis.map((a, i) => {
-                  const link = matchAdLink(summary.underAds, a.ctr, i)
+                  const ad = matchAd(summary.underAds, a.ctr, i)
+                  const link = ad?.storyId ? `https://www.facebook.com/${ad.storyId}` : ''
                   return (
                   <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fca5a5' }}>
                     <div style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span>CTR {a.ctr}% &nbsp;·&nbsp; 「{a.adSnippet}⋯」</span>
+                      <span>CTR {a.ctr}% &nbsp;·&nbsp; 「{titleOf(ad?.name, a.adSnippet)}⋯」</span>
                       {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#dc2626', fontWeight: 700, textDecoration: 'none' }}>查看廣告 ↗</a>}
                     </div>
                     <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 4 }}>⚠️ 問題：{a.issue}</div>
