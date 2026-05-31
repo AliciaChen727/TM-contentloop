@@ -312,15 +312,15 @@ export async function GET(req: NextRequest) {
   const variantLabels = labelsColSnap.docs.map(d => ({ adId: d.id, variant: d.data().variant ?? '', experimentId: d.data().experimentId ?? '' }))
 
   // Per-ad metrics by ad_id, to compute concrete per-variant (A vs control) stats.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adById = new Map<string, { ctr: number; spend: number; impressions: number; linkClicks: number }>()
-  for (const c of (Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives as any[] : [])) {
+  const adCreativesList = Array.isArray(adsRaw.adCreatives) ? (adsRaw.adCreatives as Record<string, unknown>[]) : []
+  for (const c of adCreativesList) {
     if (!c.ad_id) continue
     adById.set(c.ad_id as string, {
-      ctr: parseFloat(c.ctr ?? '0'),
-      spend: parseFloat(c.spend ?? '0'),
-      impressions: parseInt(c.impressions ?? '0'),
-      linkClicks: parseAction(c.actions, 'link_click'),
+      ctr: parseFloat((c.ctr as string) ?? '0'),
+      spend: parseFloat((c.spend as string) ?? '0'),
+      impressions: parseInt((c.impressions as string) ?? '0'),
+      linkClicks: parseAction(c.actions as unknown[], 'link_click'),
     })
   }
   // Aggregate per (experimentId, variant): impression-weighted CTR, total spend/clicks.
