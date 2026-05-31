@@ -57,7 +57,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   // cost-per-action/registration (with target). Label it CPA to avoid a duplicate CPC.
   const cpaLabel = isVideoBased ? 'CPV' : 'CPA'
   const cpaQ = isVideoBased ? 'CPV 如何進一步降低？' : 'CPA 如何進一步降低？'
-  const convLabel = isVideoBased ? '影片觀看' : isClickBased ? '點擊數' : '轉換數'
+  const convLabel = isVideoBased ? '影片觀看' : '轉換數'
   const convMeta = isVideoBased ? '影片觀看次數' : isClickBased ? '連結點擊次數' : `營收 ${fmtK(s.revenue ?? 0)}`
   const roas = s.roas ?? 0
   const frequency = s.frequency ?? 0
@@ -81,7 +81,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     cpm: { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
     reach: { label: '觸及人數', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)} 次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
     impressions: { label: '曝光次數', value: fmtCount(impressions), meta: `觸及 ${fmtCount(reach)} 人`, color: 'blue', delta: '', dir: 'neutral', q: '曝光與觸及的差距代表什麼？' },
-    conversions: { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？' },
+    conversions: { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？', tip: isVideoBased ? '此活動為影片觀看目標，顯示影片觀看次數（非轉換率）。' : isClickBased ? '此活動為連結點擊目標，「轉換」即連結點擊，故顯示點擊次數（非轉換率）。真正的購買轉換需設定轉換追蹤。' : '購買轉換次數（非轉換率）。' },
     link_clicks: { label: '連結點擊數', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '已點擊連結次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '怎麼提升連結點擊？' },
     cpl: { label: 'CPL', value: cpl > 0 ? `$${fmt(cpl, 2)}` : '–', meta: '每次報名點擊成本', color: 'orange', delta: '', dir: 'neutral', q: 'CPL 如何降低？' },
     link_page_views: { label: '連結頁面瀏覽', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '連結頁面瀏覽次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '連結頁面瀏覽如何提升？' },
