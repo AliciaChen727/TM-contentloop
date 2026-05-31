@@ -322,9 +322,9 @@ function buildAbDiagnosis(
     return {
       pattern: '好奇點擊',
       roiWinner: hasControl ? 'control' : 'inconclusive',
-      interpretation: `${v} 版 CTR 大幅提升，代表創意 hook 有效、成功引發受眾注意力。但 ROAS 大幅下滑是更關鍵的訊號：點進來的用戶沒有轉換行為，吸引的可能是「好奇點擊」而非真正有意願的族群。CPC 偏高也顯示 Meta 演算法對 ${v} 版的「品質分」較低。`,
+      interpretation: `${v} 版 CTR 大幅提升，代表創意 hook 有效、成功引發受眾注意力。但點擊效益大幅下滑是更關鍵的訊號：點進來的用戶沒有後續行動，吸引的可能是「好奇點擊」而非真正有意願的族群。CPC 偏高也顯示 Meta 演算法對 ${v} 版的「品質分」較低。`,
       actions: [
-        `暫緩停止${baseLabel}——ROAS ${baseStats.roas.toFixed(1)}x 是目前 ROI 最佳表現，先保留`,
+        `暫緩停止${baseLabel}——點擊效益 ${baseStats.roas.toFixed(1)} 次/百元 是目前最佳表現，先保留`,
         `調查 ${v} 版的流量質量：確認點進來的用戶是否完成目標行動`,
         `${v} 版 hook 有效，試著優化 CTA 或 landing page，讓後段轉換跟上`,
       ],
@@ -335,7 +335,7 @@ function buildAbDiagnosis(
     return {
       pattern: '全面領先',
       roiWinner: v,
-      interpretation: `${v} 版在點擊率與投資報酬率雙雙優於${baseLabel}，是真正有效的素材升級。受眾不只更願意點擊，點進來後的轉換行為也更好。`,
+      interpretation: `${v} 版在點擊率與點擊效益雙雙優於${baseLabel}，是真正有效的素材升級。受眾不只更願意點擊，點進來後的後續行動也更好。`,
       actions: [
         `可以逐步增加 ${v} 版預算比例，縮減${baseLabel}份額`,
         `記錄 ${v} 版與${baseLabel}的差異（文案、視覺、CTA），作為下次素材的設計原則`,
@@ -347,7 +347,7 @@ function buildAbDiagnosis(
     return {
       pattern: '精準轉換',
       roiWinner: v,
-      interpretation: `${v} 版 CTR 雖未大幅增加，但轉換效率更高——吸引的是更有意願的受眾，而非廣泛的好奇點擊。這是高品質流量的訊號。`,
+      interpretation: `${v} 版 CTR 雖未大幅增加，但點擊效益更高——吸引的是更有意願的受眾，而非廣泛的好奇點擊。這是高品質流量的訊號。`,
       actions: [
         `考慮以 ${v} 版取代${baseLabel}作為主力素材`,
         `這類素材適合搭配再行銷受眾，放大精準轉換優勢`,
@@ -370,7 +370,7 @@ function buildAbDiagnosis(
   return {
     pattern: null,
     roiWinner: 'inconclusive',
-    interpretation: `目前數據尚未顯示明確的 ROI 差異，建議繼續跑取得更多數據再判斷。`,
+    interpretation: `目前數據尚未顯示明確的點擊效益差異，建議繼續跑取得更多數據再判斷。`,
     actions: [
       `維持現狀，等待曝光量增加後再評估`,
       `確認兩版本的預算分配是否對等`,
