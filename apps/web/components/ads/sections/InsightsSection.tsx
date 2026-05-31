@@ -230,7 +230,7 @@ function fingerprintOf(s: Summary): string {
 }
 
 export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?: (q: string) => void }) {
-  const [periodType, setPeriodType] = useState<'month' | 'quarter'>('month')
+  const [periodType, setPeriodType] = useState<'month' | 'quarter' | 'year'>('month')
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
   const [quarter, setQuarter] = useState(CURRENT_QUARTER)
@@ -244,7 +244,9 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
   const [error, setError] = useState('')
 
   // Derived period key for cache lookup
-  const periodKey = periodType === 'month'
+  const periodKey = periodType === 'year'
+    ? `${year}`
+    : periodType === 'month'
     ? `${year}-${String(month).padStart(2, '0')}`
     : `${year}-Q${quarter}`
 
@@ -268,7 +270,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
         // Always fetch FRESH summary (cheap, no Claude) so numbers are never stale.
         const params = new URLSearchParams({ pageId, periodType, year: String(year) })
         if (periodType === 'month') params.set('month', String(month))
-        else params.set('quarter', String(quarter))
+        else if (periodType === 'quarter') params.set('quarter', String(quarter))
         const [sumRes, cacheRes] = await Promise.all([
           fetch(`/api/insights/summary?${params}`, { headers }),
           fetch(`/api/insights/cache?pageId=${pageId}&periodKey=${periodKey}`, { headers }),
@@ -319,7 +321,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       // Build query params
       const params = new URLSearchParams({ pageId, periodType, year: String(year) })
       if (periodType === 'month') params.set('month', String(month))
-      else params.set('quarter', String(quarter))
+      else if (periodType === 'quarter') params.set('quarter', String(quarter))
 
       // Step 1: fetch summary
       const sumRes = await fetch(`/api/insights/summary?${params}`, { headers })
@@ -378,10 +380,10 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {/* Type toggle */}
         <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--ad-border)' }}>
-          {(['month', 'quarter'] as const).map(p => (
+          {(['month', 'quarter', 'year'] as const).map(p => (
             <button key={p} onClick={() => setPeriodType(p)}
               style={{ padding: '6px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: periodType === p ? 'var(--ad-blue)' : 'white', color: periodType === p ? 'white' : 'var(--ad-text2)', transition: 'all 0.15s' }}>
-              {p === 'month' ? '月' : '季'}
+              {p === 'month' ? '月' : p === 'quarter' ? '季' : '年'}
             </button>
           ))}
         </div>
@@ -391,14 +393,15 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
           {YEARS.map(y => <option key={y} value={y}>{y}年</option>)}
         </select>
 
-        {/* Month or Quarter */}
-        {periodType === 'month' ? (
+        {/* Month / Quarter (hidden for year) */}
+        {periodType === 'month' && (
           <select value={month} onChange={e => setMonth(Number(e.target.value))} style={selectStyle}>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
               <option key={m} value={m}>{m}月</option>
             ))}
           </select>
-        ) : (
+        )}
+        {periodType === 'quarter' && (
           <select value={quarter} onChange={e => setQuarter(Number(e.target.value))} style={selectStyle}>
             <option value={1}>Q1（1-3月）</option>
             <option value={2}>Q2（4-6月）</option>

@@ -5,12 +5,18 @@ import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { BENCHMARKS, getBenchmarkByGoal } from '@/lib/benchmarks'
 
 // Period helpers
-function getPeriodRange(year: number, periodType: 'month' | 'quarter', value: number): {
+function getPeriodRange(year: number, periodType: 'month' | 'quarter' | 'year', value: number): {
   start: Date; end: Date; label: string; isPartial: boolean; periodKey: string
 } {
   // Use Taiwan time (UTC+8) so "today" / month boundaries match the user's calendar.
   // A Date shifted +8h reads its Taiwan wall-clock date via toISOString().
   const now = new Date(Date.now() + 8 * 3600 * 1000)
+  if (periodType === 'year') {
+    const start = new Date(year, 0, 1)
+    const fullEnd = new Date(year, 11, 31, 23, 59, 59)
+    const isPartial = now < fullEnd
+    return { start, end: isPartial ? now : fullEnd, label: `${year}年 全年`, isPartial, periodKey: `${year}` }
+  }
   if (periodType === 'month') {
     const start = new Date(year, value - 1, 1)
     const fullEnd = new Date(year, value, 0, 23, 59, 59)
@@ -57,7 +63,7 @@ export async function GET(req: NextRequest) {
 
   const pageId = req.nextUrl.searchParams.get('pageId') ?? ''
   const now = new Date()
-  const periodType = (req.nextUrl.searchParams.get('periodType') ?? 'month') as 'month' | 'quarter'
+  const periodType = (req.nextUrl.searchParams.get('periodType') ?? 'month') as 'month' | 'quarter' | 'year'
   const year = parseInt(req.nextUrl.searchParams.get('year') ?? String(now.getFullYear()))
   const month = parseInt(req.nextUrl.searchParams.get('month') ?? String(now.getMonth() + 1))
   const quarter = parseInt(req.nextUrl.searchParams.get('quarter') ?? String(Math.ceil((now.getMonth() + 1) / 3)))
@@ -77,7 +83,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const { start, end, label, isPartial, periodKey } = getPeriodRange(year, periodType, periodType === 'month' ? month : quarter)
+  const { start, end, label, isPartial, periodKey } = getPeriodRange(year, periodType, periodType === 'month' ? month : periodType === 'quarter' ? quarter : 0)
   const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
   // --- Read page profile (optimizationGoal, industry) ---
