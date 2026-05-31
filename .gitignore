@@ -16,3 +16,4 @@ firestore-debug.log
 cors.json
 onboarding-step1.png
 test-send-alert.mjs
+apps/web/scripts/test-notification.mjs
