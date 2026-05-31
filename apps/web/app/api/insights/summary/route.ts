@@ -270,6 +270,53 @@ export async function GET(req: NextRequest) {
   const adCreativesCount = Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives.length : 0
   const adCount = advertisedPostCount > 0 ? advertisedPostCount : adCreativesCount
 
+  // --- Best / worst ad creatives (for the ad-level analysis section) ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parseAction = (actions: any[], type: string): number =>
+    Array.isArray(actions) ? (actions.find(a => a?.action_type === type)?.value ? parseFloat(actions.find(a => a?.action_type === type).value) : 0) : 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawCreatives = (Array.isArray(adsRaw.adCreatives) ? adsRaw.adCreatives as any[] : [])
+    .map(c => {
+      const spend = parseFloat(c.spend ?? '0')
+      const ctr = parseFloat(c.ctr ?? '0')
+      const impressions = parseInt(c.impressions ?? '0')
+      const linkClicks = parseAction(c.actions, 'link_click')
+      const cpa = linkClicks > 0 ? Number((spend / linkClicks).toFixed(2)) : 0
+      return {
+        name: (c.post_title ?? c.ad_name ?? '廣告').slice(0, 60),
+        ctr: Number(ctr.toFixed(2)),
+        cpa,
+        spend: Number(spend.toFixed(2)),
+        linkClicks,
+        impressions,
+        thumbnailUrl: c.thumbnail_url ?? null,
+        storyId: c.effective_object_story_id ?? null,
+      }
+    })
+    .filter(c => c.spend > 0 || c.impressions > 0)
+  const topAds = [...rawCreatives].sort((a, b) => b.ctr - a.ctr).slice(0, 3)
+  const underAds = [...rawCreatives].filter(c => c.spend > 0).sort((a, b) => a.ctr - b.ctr).slice(0, 3)
+
+  // --- A/B test context (experiments + creative variant labels) ---
+  const [abSnap, expColSnap, labelsColSnap] = await Promise.all([
+    adminDb.collection('pages').doc(pageId).collection('abTests').doc('current').get(),
+    adminDb.collection('pages').doc(pageId).collection('experiments').get(),
+    adminDb.collection('pages').doc(pageId).collection('creativeLabels').get(),
+  ])
+  const abData = abSnap.data() ?? {}
+  const experiments = expColSnap.docs.map(d => ({
+    name: d.data().name ?? '', winner: d.data().winner ?? 'pending', aiDiagnosis: (d.data().aiDiagnosis ?? '').slice(0, 500),
+  })).filter(e => e.name || e.aiDiagnosis)
+  const variantLabels = labelsColSnap.docs.map(d => ({ adId: d.id, variant: d.data().variant ?? '', experimentId: d.data().experimentId ?? '' }))
+  const abTest = {
+    aiDiagnosis: (abData.aiDiagnosis ?? '').slice(0, 800),
+    winner: abData.winner ?? 'pending',
+    experimentName: abData.experimentName ?? '',
+    experiments,
+    variantCount: variantLabels.length,
+  }
+  const hasAbTest = !!(abTest.aiDiagnosis || abTest.experimentName || experiments.length > 0 || variantLabels.length > 0)
+
   // --- Post aggregates (FB + IG combined) ---
   const totalPosts = allPosts.length
   // Engagement rate is only meaningful for posts that actually have insights synced
@@ -307,6 +354,8 @@ export async function GET(req: NextRequest) {
     optimizationGoal, industry,
     overview: { totalPosts, fbCount, igCount, avgEngRate, avgReach, followerGrowth, followerGrowthRate, latestFollowers },
     topPosts, underPosts,
+    topAds, underAds,
+    abTest, hasAbTest,
     benchmarkCompare,
     benchmarkIndustry: BENCHMARKS.industry,
     adsSummary: {

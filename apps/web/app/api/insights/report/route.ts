@@ -16,7 +16,12 @@ const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，專門為非營
 5. 每個字串值寫在同一行，不要換行
 
 輸出結構：
-{"executiveSummary":"3-4句摘要","topPostAnalysis":[{"postSnippet":"15字摘要","engRate":數字,"whyItWorked":"原因","replicablePattern":"模式"}],"underPerformerAnalysis":[{"postSnippet":"15字摘要","engRate":數字,"issue":"問題","improvement":"建議"}],"benchmarkInsight":"2-3句同業比較","topRecommendations":["建議1","建議2","建議3"]}`
+{"executiveSummary":"3-4句摘要","topPostAnalysis":[{"postSnippet":"15字摘要","engRate":數字,"whyItWorked":"原因","replicablePattern":"模式"}],"underPerformerAnalysis":[{"postSnippet":"15字摘要","engRate":數字,"issue":"問題","improvement":"建議"}],"topAdAnalysis":[{"adSnippet":"15字摘要","ctr":數字,"whyItWorked":"成效好的原因","replicablePattern":"可複製模式"}],"underAdAnalysis":[{"adSnippet":"15字摘要","ctr":數字,"issue":"問題","improvement":"建議"}],"abTestInsight":"2-3句A/B測試洞察（若有A/B數據則結合，無則寫空字串）","benchmarkInsight":"2-3句同業比較","topRecommendations":["建議1","建議2","建議3"]}
+
+【廣告分析規則】
+- topAdAnalysis/underAdAnalysis 針對「廣告素材」（不是有機貼文），用 CTR 衡量
+- 若提供了 A/B 測試數據，abTestInsight 要結合測試結果（哪個版本勝出、為什麼），否則 abTestInsight 寫 ""
+- 若無廣告數據，topAdAnalysis/underAdAnalysis 回傳空陣列 []`
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -47,6 +52,19 @@ export async function POST(req: NextRequest) {
   const ov = summary.overview as Record<string, unknown>
   const ads = summary.adsSummary as Record<string, unknown>
 
+  // Sanitize ad records (strip newlines/quotes from names) before sending
+  function sanitizeAd(a: Record<string, unknown>) {
+    return { ...a, name: String(a.name ?? '').replace(/[\r\n"]/g, ' ').slice(0, 60) }
+  }
+  const topAds = (Array.isArray(summary.topAds) ? summary.topAds as Record<string, unknown>[] : []).map(sanitizeAd)
+  const underAds = (Array.isArray(summary.underAds) ? summary.underAds as Record<string, unknown>[] : []).map(sanitizeAd)
+  const abTest = (summary.abTest ?? {}) as Record<string, unknown>
+  const hasAbTest = !!summary.hasAbTest
+
+  const abSection = hasAbTest
+    ? `\n\n【A/B 測試數據】\n- 實驗名稱：${abTest.experimentName || '（未命名）'}\n- 勝出版本：${abTest.winner}\n- AI 診斷：${String(abTest.aiDiagnosis ?? '').replace(/[\r\n"]/g, ' ')}\n- 實驗清單：${JSON.stringify(abTest.experiments ?? [])}`
+    : '\n\n（本期無 A/B 測試數據）'
+
   const userContent = `以下是本期社群數據摘要，請生成洞察報告：
 
 期間：${summary.period}
@@ -69,12 +87,18 @@ export async function POST(req: NextRequest) {
 ${JSON.stringify(topPosts, null, 2)}
 
 【表現最差的貼文（後3）】
-${JSON.stringify(underPosts, null, 2)}`
+${JSON.stringify(underPosts, null, 2)}
+
+【表現最好的廣告（前3，ctr=點擊率%）】
+${JSON.stringify(topAds, null, 2)}
+
+【表現最差的廣告（後3）】
+${JSON.stringify(underAds, null, 2)}${abSection}`
 
   try {
     const res = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
     })

@@ -11,12 +11,33 @@ interface PostSummary {
   improvement?: string
 }
 
+interface AdSummary {
+  adSnippet: string
+  ctr: number
+  whyItWorked?: string
+  replicablePattern?: string
+  issue?: string
+  improvement?: string
+}
+
 interface InsightReport {
   executiveSummary: string
   topPostAnalysis: PostSummary[]
   underPerformerAnalysis: PostSummary[]
+  topAdAnalysis?: AdSummary[]
+  underAdAnalysis?: AdSummary[]
+  abTestInsight?: string
   benchmarkInsight: string
   topRecommendations: string[]
+}
+
+interface RawAd {
+  name: string
+  ctr: number
+  cpa: number
+  spend: number
+  thumbnailUrl?: string | null
+  storyId?: string | null
 }
 
 interface OverviewData {
@@ -51,6 +72,9 @@ interface Summary {
   overview: OverviewData
   topPosts?: RawPost[]
   underPosts?: RawPost[]
+  topAds?: RawAd[]
+  underAds?: RawAd[]
+  hasAbTest?: boolean
   benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus; adCpc: BenchmarkStatus; adCpm: BenchmarkStatus } }
   benchmarkIndustry: string
   adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
@@ -86,6 +110,14 @@ function matchPostLink(items: RawPost[] | undefined, engRate: number, index: num
     if (byName?.permalink) return byName.permalink
   }
   return items[index]?.permalink ?? ''
+}
+
+// Match an AI ad-analysis item to the original ad (by CTR, fallback index) → FB/IG link.
+function matchAdLink(items: RawAd[] | undefined, ctr: number, index: number): string {
+  if (!items || items.length === 0) return ''
+  const ad = items.find(a => Math.abs(a.ctr - ctr) < 0.01) ?? items[index] ?? null
+  if (!ad?.storyId) return ''
+  return `https://www.facebook.com/${ad.storyId}`
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -197,6 +229,9 @@ ${report.topPostAnalysis.map((p, i) => postCard(p, 'top', i)).join('')}
 
 <h2>📉 需改善貼文分析</h2>
 ${report.underPerformerAnalysis.map((p, i) => postCard(p, 'under', i)).join('')}
+${report.abTestInsight ? `<h2>🧪 A/B 測試洞察</h2><div class="benchmark-insight">${report.abTestInsight}</div>` : ''}
+${(report.topAdAnalysis && report.topAdAnalysis.length > 0) ? `<h2>🏆 表現最佳廣告分析</h2>${report.topAdAnalysis.map(a => `<div class="post-card top"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」</div><div>💡 ${a.whyItWorked}</div><div class="post-pattern">📌 可複製模式：${a.replicablePattern}</div></div>`).join('')}` : ''}
+${(report.underAdAnalysis && report.underAdAnalysis.length > 0) ? `<h2>📉 需改善廣告分析</h2>${report.underAdAnalysis.map(a => `<div class="post-card under"><div class="post-header">CTR ${a.ctr}%&nbsp;·&nbsp;「${a.adSnippet}⋯」</div><div>⚠️ 問題：${a.issue}</div><div class="post-pattern">🔧 建議：${a.improvement}</div></div>`).join('')}` : ''}
 
 <h2>🎯 Top 3 行動建議</h2>
 <ol>${report.topRecommendations.map(r => `<li>${r}</li>`).join('')}</ol>
@@ -229,7 +264,8 @@ const selectStyle: React.CSSProperties = {
 // is stale and should be regenerated. Built from the metrics that drive the report.
 function fingerprintOf(s: Summary): string {
   const a = s.adsSummary, o = s.overview
-  return [a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
+  // v2: report now includes ad analysis + A/B test, so old caches should regenerate.
+  return ['v2', a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
 }
 
 export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?: (q: string) => void }) {
@@ -605,6 +641,58 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
               })}
             </div>
           </div>
+
+          {/* A/B test insight */}
+          {report.abTestInsight && (
+            <div style={{ background: '#faf5ff', borderRadius: 10, border: '1px solid #d8b4fe', padding: '14px 18px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#7c3aed' }}>🧪 A/B 測試洞察</div>
+              <p style={{ fontSize: 13, color: '#6b21a8', lineHeight: 1.7, margin: 0 }}>{report.abTestInsight}</p>
+            </div>
+          )}
+
+          {/* Best ads */}
+          {report.topAdAnalysis && report.topAdAnalysis.length > 0 && (
+            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 18px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🏆 表現最佳廣告分析</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {report.topAdAnalysis.map((a, i) => {
+                  const link = matchAdLink(summary.topAds, a.ctr, i)
+                  return (
+                  <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#eff6ff', border: '1px solid #93c5fd' }}>
+                    <div style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>CTR {a.ctr}% &nbsp;·&nbsp; 「{a.adSnippet}⋯」</span>
+                      {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>查看廣告 ↗</a>}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#1e40af', marginBottom: 4 }}>💡 {a.whyItWorked}</div>
+                    <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 500 }}>📌 可複製模式：{a.replicablePattern}</div>
+                  </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Worst ads */}
+          {report.underAdAnalysis && report.underAdAnalysis.length > 0 && (
+            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 18px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📉 需改善廣告分析</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {report.underAdAnalysis.map((a, i) => {
+                  const link = matchAdLink(summary.underAds, a.ctr, i)
+                  return (
+                  <div key={i} style={{ padding: '10px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fca5a5' }}>
+                    <div style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>CTR {a.ctr}% &nbsp;·&nbsp; 「{a.adSnippet}⋯」</span>
+                      {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#dc2626', fontWeight: 700, textDecoration: 'none' }}>查看廣告 ↗</a>}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 4 }}>⚠️ 問題：{a.issue}</div>
+                    <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 500 }}>🔧 建議：{a.improvement}</div>
+                  </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--ad-border)', padding: '14px 18px' }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>🎯 本期 Top 3 行動建議</div>
