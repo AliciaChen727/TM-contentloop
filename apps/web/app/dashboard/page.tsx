@@ -146,11 +146,14 @@ export default function DashboardPage() {
       setUserName(u.displayName ?? u.email ?? '')
       setIdToken(idToken)
 
-      if (adminFlag) {
-        const onbRes = await fetch('/api/user/onboarding', { headers })
-        if (onbRes.ok) {
-          const j = await onbRes.json()
-          if (!j.completed) setShowOnboarding(true)
+      if (adminFlag && activePageId) {
+        const skipped = sessionStorage.getItem(`onboardingSkipped_${activePageId}`)
+        if (!skipped) {
+          const onbRes = await fetch(`/api/user/onboarding?pageId=${activePageId}`, { headers })
+          if (onbRes.ok) {
+            const j = await onbRes.json()
+            if (!j.data?.optimizationGoal) setShowOnboarding(true)
+          }
         }
       }
 
@@ -522,7 +525,7 @@ export default function DashboardPage() {
         <a href="/privacy" className="text-xs text-gray-400 hover:text-gray-600">Privacy Policy</a>
       </footer>
       {showOnboarding && isAdmin && idToken && (
-        <OnboardingModal idToken={idToken} onDone={() => setShowOnboarding(false)} />
+        <OnboardingModal idToken={idToken} pageId={selectedPageId} onDone={() => setShowOnboarding(false)} />
       )}
     </main>
   )

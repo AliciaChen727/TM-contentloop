@@ -7,6 +7,7 @@ export type Industry = 'ecommerce' | 'education' | 'event' | 'personal_brand' | 
 
 interface Props {
   idToken: string
+  pageId: string
   onDone: () => void
 }
 
@@ -29,7 +30,7 @@ const INDUSTRY_OPTIONS: { value: Industry; title: string }[] = [
   { value: 'other', title: '其他' },
 ]
 
-export function OnboardingModal({ idToken, onDone }: Props) {
+export function OnboardingModal({ idToken, pageId, onDone }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
   const [goal, setGoal] = useState<OptimizationGoal | null>(null)
   const [industry, setIndustry] = useState<Industry | null>(null)
@@ -40,14 +41,19 @@ export function OnboardingModal({ idToken, onDone }: Props) {
   const step2Ready = !!industry && (!needsOtherText || industryOther.trim().length > 0)
 
   async function save(payload: Submission) {
+    if (payload.skip) {
+      // Remember skip for this session so modal doesn't re-appear until next login
+      sessionStorage.setItem(`onboardingSkipped_${pageId}`, '1')
+      onDone()
+      return
+    }
     setSaving(true)
-    const body = payload.skip
-      ? { skip: true }
-      : {
-          optimizationGoal: payload.optimizationGoal,
-          industry: payload.industry,
-          ...(payload.industryOther ? { industryOther: payload.industryOther } : {}),
-        }
+    const body = {
+      pageId,
+      optimizationGoal: payload.optimizationGoal,
+      industry: payload.industry,
+      ...(payload.industryOther ? { industryOther: payload.industryOther } : {}),
+    }
     const res = await fetch('/api/user/onboarding', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
