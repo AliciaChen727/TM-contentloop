@@ -264,8 +264,8 @@ const selectStyle: React.CSSProperties = {
 // is stale and should be regenerated. Built from the metrics that drive the report.
 function fingerprintOf(s: Summary): string {
   const a = s.adsSummary, o = s.overview
-  // v3: A/B insight now uses concrete per-variant data, so regenerate old caches.
-  return ['v3', a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
+  // v4: ad analysis now includes finished ads (metrics fallback), regenerate caches.
+  return ['v4', a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
 }
 
 export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?: (q: string) => void }) {

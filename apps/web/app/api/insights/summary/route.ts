@@ -294,9 +294,47 @@ export async function GET(req: NextRequest) {
       }
     })
     .filter(c => c.spend > 0 || c.impressions > 0)
+
+  // Fallback for FINISHED ads: adCreatives only keeps ACTIVE creatives, so a page
+  // whose ads have all ended (e.g. Legacy) shows no ad analysis. Rebuild from
+  // adPostMetrics/igPostMetrics (which include finished ads) joined to posts.
+  type AdMetric = { spend?: number; ctr?: number; cpa?: number; reach?: number }
+  const fbPostMetrics = (adsRaw.adPostMetrics ?? {}) as Record<string, AdMetric>
+  const igPostMetrics = (adsRaw.igPostMetrics ?? {}) as Record<string, AdMetric>
+  const metricsAds = [
+    ...Object.entries(fbPostMetrics).map(([postId, m]) => {
+      const post = fbPosts.find(p => p.id === postId || p.id.endsWith(`_${postId}`))
+      return {
+        name: (post?.message || '廣告貼文').slice(0, 60),
+        ctr: Number((m.ctr ?? 0).toFixed(2)),
+        cpa: Number((m.cpa ?? 0).toFixed(2)),
+        spend: Number((m.spend ?? 0).toFixed(2)),
+        linkClicks: 0,
+        impressions: 0,
+        thumbnailUrl: null as string | null,
+        storyId: post?.id ?? `${pageId}_${postId}`,
+      }
+    }),
+    ...Object.entries(igPostMetrics).map(([postId, m]) => {
+      const post = igPosts.find(p => p.id === postId)
+      return {
+        name: (post?.message || '廣告貼文').slice(0, 60),
+        ctr: Number((m.ctr ?? 0).toFixed(2)),
+        cpa: Number((m.cpa ?? 0).toFixed(2)),
+        spend: Number((m.spend ?? 0).toFixed(2)),
+        linkClicks: 0,
+        impressions: 0,
+        thumbnailUrl: null as string | null,
+        storyId: null as string | null,
+      }
+    }),
+  ].filter(a => a.spend > 0 || a.ctr > 0)
+
+  // Prefer adCreatives (richer: thumbnail/storyId) but use metrics fallback when empty.
+  const adListSource = rawCreatives.length > 0 ? rawCreatives : metricsAds
   // Split into best/worst WITHOUT overlap. With only 1 ad → analyze just that one
   // (topAds=[ad], underAds=[]); with 2+ ads → top half vs the rest.
-  const sortedAds = [...rawCreatives].sort((a, b) => b.ctr - a.ctr) // high → low CTR
+  const sortedAds = [...adListSource].sort((a, b) => b.ctr - a.ctr) // high → low CTR
   const n = sortedAds.length
   const topCount = n <= 1 ? n : Math.min(3, Math.ceil(n / 2))
   const topAds = sortedAds.slice(0, topCount)
