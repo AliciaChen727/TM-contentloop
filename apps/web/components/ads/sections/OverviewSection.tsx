@@ -67,8 +67,13 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   // to closest available signal. conversionType=link_click means s.conversions == link clicks.
   const linkClicks = isClickBased ? (s.conversions ?? 0) : 0
   const cpl = linkClicks > 0 ? (s.spend ?? 0) / linkClicks : 0
-  const cards: Record<string, { label: string; value: string; meta: string; color: string; delta: string; dir: string; q: string }> = {
-    roas: { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPA 如何降低？' },
+  const roasTip = isVideoBased
+    ? '觀看效益＝每花 NT$100 取得的影片觀看次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。'
+    : isClickBased
+      ? '點擊效益＝每花 NT$100 取得的連結點擊次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。'
+      : 'ROAS＝廣告營收 ÷ 廣告花費，需有購買轉換追蹤的營收資料。'
+  const cards: Record<string, { label: string; value: string; meta: string; color: string; delta: string; dir: string; q: string; tip?: string }> = {
+    roas: { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPA 如何降低？', tip: roasTip },
     spend: { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
     cpa: { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
     ctr: { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
@@ -125,9 +130,9 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
 
       <div className="ads-kpi-grid">
         {kpis.map(k => (
-          <div key={k.label} className={`ads-kpi-card ${k.color}`}>
+          <div key={k.label} className={`ads-kpi-card ${k.color}`} title={k.tip}>
             {onAskAI && <button className="ads-kpi-ask-btn" onClick={() => onAskAI(k.q)}>?</button>}
-            <div className="ads-kpi-label">{k.label}</div>
+            <div className="ads-kpi-label">{k.label}{k.tip && <span style={{ marginLeft: 4, color: 'var(--ad-text3)', cursor: 'help' }} title={k.tip}>ⓘ</span>}</div>
             <div className="ads-kpi-value">{k.value}</div>
             <div className="ads-kpi-meta">
               <span>{k.meta}</span>
