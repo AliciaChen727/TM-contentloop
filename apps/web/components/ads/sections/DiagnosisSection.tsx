@@ -1,7 +1,7 @@
 'use client'
 
 import { Icon } from '../Icon'
-import type { AdData, Post } from '../types'
+import type { AdData, Post, AiDiagCard } from '../types'
 
 // Normalize a title/name for fuzzy matching (strip punctuation/brackets/spaces).
 function normalizeName(s: string): string {
@@ -40,8 +40,9 @@ function resolvePostLink(storyId: string | null | undefined, name: string | null
   return null
 }
 
-export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts?: Post[] | null; onAskAI?: (q: string) => void }) {
+export function DiagnosisSection({ data, posts, aiCards, onAskAI }: { data: AdData; posts?: Post[] | null; aiCards?: AiDiagCard[] | null; onAskAI?: (q: string) => void }) {
   const postList = posts ?? []
+  const cardMap = new Map((aiCards ?? []).map(c => [c.refId, c]))
   const icons: Record<string, string> = { critical: '🚨', warning: '⚠️', good: '✅' }
   const labels: Record<string, string> = { critical: '嚴重', warning: '警告', good: '優化機會' }
   const lc: Record<string, [string, string]> = {
@@ -71,6 +72,12 @@ export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts
       : '帳戶整體運作正常，暫無需緊急處理的問題，請持續監控每日成效。'
   })()
 
+  // Prefer the Agent's narrative (first `why` of each card) when available;
+  // otherwise fall back to the rule-template summary above.
+  const summaryText = (aiCards && aiCards.length > 0)
+    ? aiCards.map(c => c.why[0]).filter(Boolean).join(' ')
+    : aiSummary
+
   return (
     <div>
       <div className="ads-section-header">
@@ -84,7 +91,7 @@ export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts
         <div style={{ fontSize: 20, flexShrink: 0 }}>✨</div>
         <div style={{ flex: 1 }}>
           <div className="ads-ai-label">AI 投手建議</div>
-          <div className="ads-ai-text">{aiSummary}</div>
+          <div className="ads-ai-text">{summaryText}</div>
         </div>
         {onAskAI && <button className="ads-diag-ask-btn" style={{ alignSelf: 'flex-start', flexShrink: 0 }} onClick={() => onAskAI('建議我本週的操作清單')}>
           問 AI ›
@@ -95,12 +102,13 @@ export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts
         {data.diagnosis.map(d => {
           const postUrl = resolvePostLink(d.storyId, d.adset, postList)
           const hasPreview = !!(d.thumbnailUrl || postUrl)
+          const card = cardMap.get(d.id)            // Agent rewrite (may be undefined → rule fallback)
           return (
           <div key={d.id} className={`ads-diag-item ${d.severity}`}>
             <div className={`ads-diag-icon ${d.severity}`}>{icons[d.severity]}</div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="ads-diag-title">{d.title}</div>
+                <div className="ads-diag-title">{card?.title ?? d.title}</div>
                 <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: lc[d.severity][0], color: lc[d.severity][1] }}>
                   {labels[d.severity]}
                 </span>
@@ -129,12 +137,21 @@ export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts
                 </div>
               )}
 
-              <div className="ads-diag-desc">{d.desc}</div>
+              {/* Agent narrative (Madgicx-style: why → impact → benchmark) or rule desc */}
+              {card ? (
+                <>
+                  <div className="ads-diag-desc">{card.why.join(' ')}</div>
+                  {card.impact && <div className="ads-diag-desc" style={{ fontWeight: 600, color: lc[d.severity][1], marginTop: 4 }}>{card.impact}</div>}
+                  {card.benchmark && <div className="ads-diag-desc" style={{ color: 'var(--ad-text3)', marginTop: 4 }}>📊 {card.benchmark}</div>}
+                </>
+              ) : (
+                <div className="ads-diag-desc">{d.desc}</div>
+              )}
               <div className="ads-diag-footer">
                 <span className="ads-diag-chip metric">{d.metric}</span>
                 <span className="ads-diag-chip metric">門檻 {d.threshold}</span>
-                <span className="ads-diag-chip action">建議：{d.action}</span>
-                {onAskAI && <button className="ads-diag-ask-btn" onClick={() => onAskAI(askQ[d.id] ?? '建議我本週的操作清單')}>
+                <span className="ads-diag-chip action">建議：{card?.cta.label ?? d.action}</span>
+                {onAskAI && <button className="ads-diag-ask-btn" onClick={() => onAskAI(card?.cta.askAi ?? askQ[d.id] ?? '建議我本週的操作清單')}>
                   ✨ 問 AI
                 </button>}
               </div>

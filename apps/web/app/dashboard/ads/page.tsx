@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
@@ -18,7 +18,7 @@ import { PostsSection } from '@/components/ads/sections/PostsSection'
 import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
 import { InsightsSection } from '@/components/ads/sections/InsightsSection'
-import type { NavId, Post, AdData, LabelEntry, Experiment } from '@/components/ads/types'
+import type { NavId, Post, AdData, LabelEntry, Experiment, DiagItem, AiDiagCard } from '@/components/ads/types'
 
 const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
@@ -243,6 +243,44 @@ export default function AdsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [idTokenRef, setIdTokenRef] = useState('')
   const [optimizationGoal, setOptimizationGoal] = useState<'clicks' | 'conversion' | 'reach' | 'event' | null>(null)
+  const [aiDiagCards, setAiDiagCards] = useState<AiDiagCard[] | null>(null)
+  const aiDiagSig = useRef('')
+
+  // Ad + content diagnosis (Layer 1) for the current date range. Memoized so the
+  // Agent fetch effect and the render share one stable array.
+  const diagnosisItems = useMemo<DiagItem[]>(() => {
+    const filteredPosts = (realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo)
+    const contentDiag = buildContentDiagnosis(filteredPosts)
+    const adDiag = contentDiag.length > 0 ? adData.diagnosis.filter(d => d.id !== 'd0') : adData.diagnosis
+    return [...adDiag, ...contentDiag]
+  }, [adData, realPosts, dateFrom, dateTo])
+
+  // Layer 2: ask the Agent to rewrite the findings into Madgicx-style cards. Only
+  // fires on the diagnosis tab, deduped by a content signature, cleared on change
+  // so cards never leak across pages/date-ranges. Server caches by fingerprint.
+  useEffect(() => {
+    if (active !== 'diagnosis' || !selectedPageId || diagnosisItems.length === 0) return
+    const sig = diagnosisItems.map(d => `${d.id}|${d.severity}|${d.metric}|${d.desc}`).join('||')
+    if (sig === aiDiagSig.current) return
+    aiDiagSig.current = sig
+    setAiDiagCards(null)
+    let cancelled = false
+    ;(async () => {
+      const u = auth.currentUser
+      if (!u) return
+      const idToken = await u.getIdToken()
+      try {
+        const res = await fetch('/api/ai/diagnosis', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: selectedPageId, items: diagnosisItems, summary: adData.overview.summary }),
+        })
+        const json = await res.json()
+        if (!cancelled && Array.isArray(json.cards)) setAiDiagCards(json.cards)
+      } catch { /* keep rule-template fallback */ }
+    })()
+    return () => { cancelled = true }
+  }, [active, selectedPageId, diagnosisItems, adData])
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: AdMetricsMap; igPostIds: Set<string>; igPostMetrics: AdMetricsMap }> {
@@ -832,17 +870,12 @@ export default function AdsPage() {
             <>
               {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} optimizationGoal={optimizationGoal} />}
               {active === 'insights' && <InsightsSection pageId={selectedPageId} onAskAI={canSidekick ? openSidekick : undefined} />}
-              {active === 'diagnosis' && (() => {
-                // Merge content (post) diagnosis into the ad diagnosis for display.
-                // Rules live in contentDiagnosis.ts (Layer 1); posts are page-scoped
-                // and date-filtered to match the rest of the dashboard.
-                const filteredPosts = (realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo)
-                const contentDiag = buildContentDiagnosis(filteredPosts)
-                // Drop the ad-only "帳戶表現良好" placeholder when we have content items.
-                const adDiag = contentDiag.length > 0 ? adData.diagnosis.filter(d => d.id !== 'd0') : adData.diagnosis
-                const mergedData = { ...adData, diagnosis: [...adDiag, ...contentDiag] }
-                return <DiagnosisSection data={mergedData} posts={realPosts} onAskAI={canSidekick ? openSidekick : undefined} />
-              })()}
+              {active === 'diagnosis' && <DiagnosisSection
+                data={{ ...adData, diagnosis: diagnosisItems }}
+                posts={realPosts}
+                aiCards={aiDiagCards}
+                onAskAI={canSidekick ? openSidekick : undefined}
+              />}
               {active === 'creative' && <CreativeSection
                 data={adData}
                 onAskAI={canSidekick ? openSidekick : undefined}

@@ -169,8 +169,15 @@ export const ORGANIC_ENGAGEMENT_BENCHMARKS = {
 
 ## 11. 待使用者拍板的細項
 - [x] 「最佳貼文加碼」門檻 → **混合**：ER ≥ P75 且 ≥ 1.5× 中位數 且未投廣告（已實作於 `contentDiagnosis.ts` C1）。
-- [ ] Agent 每日 cron 全頁跑 vs 只在 fingerprint 變動時跑（建議後者省錢）。
-- [ ] 卡片數量上限（避免 email 太長，建議 critical/warning 全列 + good 取 top 2）。
+- [x] Agent 觸發 → **只在 fingerprint 變動時跑**（`diagnosisAgent.computeDiagFingerprint`，快取存 `pages/{pageId}/adInsights/latest.aiDiagnosis`）。
+- [x] 卡片上限 → **critical/warning 全列 + good 取 top 2**（`selectItemsForAgent`）。
+
+## 12. 實作進度
+- [x] Slice 1 — `lib/ads/benchmarks.ts`
+- [x] Slice 2 — `lib/ads/contentDiagnosis.ts` + 診斷頁顯示
+- [x] Slice 3 — `lib/ads/diagnosisAgent.ts`（Haiku 改寫 + fingerprint 快取）+ `app/api/ai/diagnosis/route.ts` + 診斷頁紫框/卡片接 Agent 文案（fallback 回規則模板）。`AiDiagCard` 型別加在 `components/ads/types.ts`。
+- [ ] Slice 4 — 鈴鐺 + Email 接 Agent 文案 + Email 主旨改「成效診斷優化建議」+ 設定頁更名。
+- [ ] Phase 3 後續 — Quality evaluator / feedback memory。
 
 ---
 ### Benchmark 數據來源

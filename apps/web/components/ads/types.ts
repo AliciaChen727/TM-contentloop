@@ -64,6 +64,21 @@ export interface DiagItem {
   storyId?: string | null
 }
 
+// Agent-rewritten diagnosis card (Phase 3, Layer 2). Enriches a DiagItem into
+// Madgicx-style copy. severity/refId are copied from the source DiagItem and must
+// never be changed by the LLM (enforced server-side). See docs/phase-3-diagnosis-agent.md.
+export interface AiDiagCard {
+  refId: string                                // source DiagItem.id
+  severity: 'critical' | 'warning' | 'good'
+  domain: 'ad' | 'content'
+  emoji: string
+  title: string                                // outcome-oriented headline
+  why: string[]                                // 1–3 narrative sentences
+  impact: string                               // quantified-impact line (may be '')
+  benchmark: string                            // industry comparison line (may be '')
+  cta: { label: string; askAi: string }        // button label + AiSidekick prompt
+}
+
 export interface Adset {
   id?: string
   name: string
