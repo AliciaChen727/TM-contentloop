@@ -10,7 +10,7 @@ import { buildContentDiagnosis } from '@/lib/ads/contentDiagnosis'
 import { Icon } from '@/components/ads/Icon'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import { OverviewSection } from '@/components/ads/sections/OverviewSection'
-import { DiagnosisSection } from '@/components/ads/sections/DiagnosisSection'
+import { DiagnosisSection, type CardStatus } from '@/components/ads/sections/DiagnosisSection'
 import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { CreativeTrendsSection } from '@/components/ads/sections/CreativeTrendsSection'
 import { AudienceSection } from '@/components/ads/sections/AudienceSection'
@@ -245,6 +245,28 @@ export default function AdsPage() {
   const [optimizationGoal, setOptimizationGoal] = useState<'clicks' | 'conversion' | 'reach' | 'event' | null>(null)
   const [aiDiagCards, setAiDiagCards] = useState<AiDiagCard[] | null>(null)
   const aiDiagSig = useRef('')
+  const [cardStatuses, setCardStatuses] = useState<Record<string, CardStatus>>({})
+
+  // Mark / skip / reopen a diagnosis card. Optimistic update + persist (page-level,
+  // admin only — viewers don't get the buttons).
+  const handleCardAction = useCallback(async (cardKey: string, status: CardStatus | 'open') => {
+    setCardStatuses(prev => {
+      const next = { ...prev }
+      if (status === 'open') delete next[cardKey]
+      else next[cardKey] = status
+      return next
+    })
+    const u = auth.currentUser
+    if (!u || !selectedPageId) return
+    const idToken = await u.getIdToken()
+    try {
+      await fetch('/api/ads/diagnosis-status', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: selectedPageId, cardKey, status }),
+      })
+    } catch { /* optimistic state already applied */ }
+  }, [selectedPageId])
 
   // Ad + content diagnosis (Layer 1) for the current date range. Memoized so the
   // Agent fetch effect and the render share one stable array.
@@ -281,6 +303,25 @@ export default function AdsPage() {
     })()
     return () => { cancelled = true }
   }, [active, selectedPageId, diagnosisItems, adData])
+
+  // Load per-card Open/Completed/Dismissed statuses (page-level shared). Cleared on
+  // page switch so statuses never leak across pages.
+  useEffect(() => {
+    if (active !== 'diagnosis' || !selectedPageId) return
+    setCardStatuses({})
+    let cancelled = false
+    ;(async () => {
+      const u = auth.currentUser
+      if (!u) return
+      const idToken = await u.getIdToken()
+      try {
+        const res = await fetch(`/api/ads/diagnosis-status?pageId=${selectedPageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
+        const json = await res.json()
+        if (!cancelled && json.statuses) setCardStatuses(json.statuses)
+      } catch { /* no statuses → all open */ }
+    })()
+    return () => { cancelled = true }
+  }, [active, selectedPageId])
 
   type AdMetricsMap = Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }>
   async function fetchAdData(idToken: string, pageId?: string): Promise<{ adPostIds: Set<string>; adPostMetrics: AdMetricsMap; igPostIds: Set<string>; igPostMetrics: AdMetricsMap }> {
@@ -874,6 +915,9 @@ export default function AdsPage() {
                 data={{ ...adData, diagnosis: diagnosisItems }}
                 posts={realPosts}
                 aiCards={aiDiagCards}
+                cardStatuses={cardStatuses}
+                canManage={canSync}
+                onCardAction={handleCardAction}
                 onAskAI={canSidekick ? openSidekick : undefined}
               />}
               {active === 'creative' && <CreativeSection

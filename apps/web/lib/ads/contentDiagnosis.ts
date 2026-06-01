@@ -58,7 +58,7 @@ export function computeBoostProjection(reach: number, er: number, cpm: number): 
   return `建議用約 ${nt(budget)}（每日約 ${nt(daily)}、投 7 天）。以你目前 CPM 推估，預期可多觸及約 ${extraReach.toLocaleString('zh-TW')} 人${engagePart}。`
 }
 
-const TEST_RANGE_HINT = '建議先用每日約 NT$100–150、投 5–7 天小額測試（帳戶尚無足夠 CPM 資料可精算）。'
+const TEST_RANGE_HINT = '建議先用每日約 NT$100–150、投 5–7 天小額測試。'
 
 // Build content diagnosis items from a page-scoped, date-filtered post list.
 // `summary` carries account-level metrics (e.g. cpm) used for the boost projection.

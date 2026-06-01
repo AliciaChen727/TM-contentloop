@@ -1,7 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { Icon } from '../Icon'
 import type { AdData, Post, AiDiagCard } from '../types'
+import { diagnosisCardKey } from '@/lib/ads/diagnosisCardKey'
+
+export type CardStatus = 'completed' | 'dismissed'
 
 // Normalize a title/name for fuzzy matching (strip punctuation/brackets/spaces).
 function normalizeName(s: string): string {
@@ -40,9 +44,21 @@ function resolvePostLink(storyId: string | null | undefined, name: string | null
   return null
 }
 
-export function DiagnosisSection({ data, posts, aiCards, onAskAI }: { data: AdData; posts?: Post[] | null; aiCards?: AiDiagCard[] | null; onAskAI?: (q: string) => void }) {
+export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage, onCardAction, onAskAI }: {
+  data: AdData
+  posts?: Post[] | null
+  aiCards?: AiDiagCard[] | null
+  cardStatuses?: Record<string, CardStatus>
+  canManage?: boolean
+  onCardAction?: (cardKey: string, status: CardStatus | 'open') => void
+  onAskAI?: (q: string) => void
+}) {
   const postList = posts ?? []
   const cardMap = new Map((aiCards ?? []).map(c => [c.refId, c]))
+  const statuses = cardStatuses ?? {}
+  const statusOf = (d: { type: string; storyId?: string | null; adset?: string }): CardStatus | 'open' =>
+    statuses[diagnosisCardKey(d)] ?? 'open'
+  const [tab, setTab] = useState<'open' | 'completed' | 'dismissed'>('open')
   const icons: Record<string, string> = { critical: '🚨', warning: '⚠️', good: '✅' }
   const labels: Record<string, string> = { critical: '嚴重', warning: '警告', good: '優化機會' }
   const lc: Record<string, [string, string]> = {
@@ -78,6 +94,14 @@ export function DiagnosisSection({ data, posts, aiCards, onAskAI }: { data: AdDa
     ? aiCards.map(c => c.why[0]).filter(Boolean).join(' ')
     : aiSummary
 
+  // Open / Completed / Dismissed buckets (Madgicx-style).
+  const counts = { open: 0, completed: 0, dismissed: 0 }
+  for (const d of data.diagnosis) counts[statusOf(d)]++
+  const visibleItems = data.diagnosis.filter(d => statusOf(d) === tab)
+  const tabs: { id: 'open' | 'completed' | 'dismissed'; label: string }[] = [
+    { id: 'open', label: '待處理' }, { id: 'completed', label: '已完成' }, { id: 'dismissed', label: '已略過' },
+  ]
+
   return (
     <div>
       <div className="ads-section-header">
@@ -98,11 +122,30 @@ export function DiagnosisSection({ data, posts, aiCards, onAskAI }: { data: AdDa
         </button>}
       </div>
 
+      {/* Open / Completed / Dismissed tabs */}
+      <div style={{ display: 'flex', gap: 18, borderBottom: '1px solid var(--ad-border)', margin: '4px 0 14px' }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 13,
+              fontWeight: tab === t.id ? 700 : 500, color: tab === t.id ? 'var(--ad-blue)' : 'var(--ad-text3)',
+              borderBottom: tab === t.id ? '2px solid var(--ad-blue)' : '2px solid transparent', marginBottom: -1 }}>
+            {t.label} ({counts[t.id]})
+          </button>
+        ))}
+      </div>
+
       <div className="ads-diag-list">
-        {data.diagnosis.map(d => {
+        {visibleItems.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--ad-text3)', padding: '20px 4px' }}>
+            {tab === 'open' ? '目前沒有待處理的建議 🎉' : tab === 'completed' ? '尚無已完成的建議。' : '尚無已略過的建議。'}
+          </div>
+        )}
+        {visibleItems.map(d => {
           const postUrl = resolvePostLink(d.storyId, d.adset, postList)
           const hasPreview = !!(d.thumbnailUrl || postUrl)
           const card = cardMap.get(d.id)            // Agent rewrite (may be undefined → rule fallback)
+          const cardKey = diagnosisCardKey(d)
+          const st = statusOf(d)
           return (
           <div key={d.id} className={`ads-diag-item ${d.severity}`}>
             <div className={`ads-diag-icon ${d.severity}`}>{icons[d.severity]}</div>
@@ -155,6 +198,32 @@ export function DiagnosisSection({ data, posts, aiCards, onAskAI }: { data: AdDa
                   ✨ 問 AI
                 </button>}
               </div>
+
+              {/* Action buttons (Madgicx-style: mark complete / skip / reopen). Admin only. */}
+              {canManage && onCardAction && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  {st === 'open' ? (
+                    <>
+                      <button onClick={() => onCardAction(cardKey, 'completed')}
+                        style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
+                          border: '1px solid var(--ad-green, #22a06b)', background: 'var(--ad-green, #22a06b)', color: '#fff' }}>
+                        ✓ 標記完成
+                      </button>
+                      <button onClick={() => onCardAction(cardKey, 'dismissed')}
+                        style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
+                          border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)' }}>
+                        略過
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => onCardAction(cardKey, 'open')}
+                      style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
+                        border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)' }}>
+                      ↩ 重新開啟
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           )

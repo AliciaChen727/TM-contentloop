@@ -185,6 +185,12 @@ export const ORGANIC_ENGAGEMENT_BENCHMARKS = {
   - 算法：以帳戶 CPM 反推「再多觸及 ≈ 這篇自然觸及人數」所需預算（綁這篇貼文），拆每日 × 7 天。
   - 預期：觸及為主（CPM 推算）；互動數用 0.5× 自然 ER 保守粗估並標註「付費受眾互動通常較低」。無 CPM → 顯示測試型範圍（NT$100–150/天 × 5–7 天），不硬掰。
   - 數字一律規則算，存入 `DiagItem.projection`；Agent 的 `card.impact` 強制用它（不信任 LLM 算數），prompt 也禁止自行編造數字。
+- [x] Slice 6 — Madgicx 風格卡片狀態：待處理 / 已完成 / 已略過 分頁 + 行動按鈕。
+  - 狀態**粉專層級共享**，存 `pages/{pageId}/diagnosisCardStatus/{cardKey}`；`cardKey = type__target`（target = storyId/adset/account，不含指標值，見 `lib/ads/diagnosisCardKey.ts`）。
+  - API `app/api/ads/diagnosis-status`：GET（owner/admin/viewer 可讀）、POST `{cardKey,status: completed|dismissed|open}`（**僅 admin/owner/superadmin** 可寫，viewer 不可）。
+  - UI：DiagnosisSection 加分頁 + 「✓ 標記完成 / 略過 / ↩ 重新開啟」按鈕（`canManage=canSync` 才顯示）；page.tsx 樂觀更新 + 持久化、切頁清空防跨頁殘留。
+  - 隱藏「帳戶尚無足夠 CPM 資料可精算」警語（`TEST_RANGE_HINT`）。
+  - **未來**：「標記完成」可串 Meta Marketing API 自動判斷是否真的有投放/採取 action（目前為手動狀態）。
 - [ ] Phase 3 後續 — Quality evaluator / feedback memory。
 
 > 注意：診斷頁（日期區間）與 cron（最新快照、全期）item 集合不同 → fingerprint 可能不同 → 兩端可能各自重生 cards（與既有「規則同源、日期範圍可能不同」一致）。快取仍在同源同資料時命中。
