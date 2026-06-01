@@ -44,8 +44,9 @@ export async function POST(req: NextRequest) {
 
   const anthropicKey = (await getUserApiKey(uid, 'anthropic')) ?? process.env.ANTHROPIC_API_KEY ?? null
   if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
+  const geminiKey = process.env.GEMINI_API_KEY ?? (await getUserApiKey(uid, 'gemini')) ?? null
 
-  const cards = await getOrGenerateDiagnosisCards(pageId, allItems, summary ?? {}, anthropicKey)
+  const cards = await getOrGenerateDiagnosisCards(pageId, allItems, summary ?? {}, anthropicKey, { geminiKey, anthropicKey })
   if (!cards) return NextResponse.json({ error: 'AI 回應格式異常', fallback: true }, { status: 200 })
 
   return NextResponse.json({ cards, fingerprint: computeDiagFingerprint(allItems) })

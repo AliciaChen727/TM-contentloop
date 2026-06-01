@@ -133,7 +133,9 @@ export async function processPageAlerts(pageId: string): Promise<{
     if (!apiKey && ownerUid) apiKey = await getUserApiKey(ownerUid, 'anthropic')
     if (apiKey) {
       const summary = (snap.summary ?? {}) as Record<string, number>
-      cards = await getOrGenerateDiagnosisCards(pageId, items, summary, apiKey)
+      let geminiKey = process.env.GEMINI_API_KEY ?? null
+      if (!geminiKey && ownerUid) geminiKey = await getUserApiKey(ownerUid, 'gemini')
+      cards = await getOrGenerateDiagnosisCards(pageId, items, summary, apiKey, { geminiKey, anthropicKey: apiKey })
     }
   } catch (e) {
     console.error('[processPageAlerts] diagnosis agent failed', e)

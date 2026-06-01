@@ -179,11 +179,17 @@ pages/{pageId}/sidekickFeedback/{id}
 | 診斷卡 / Sidekick UI（改） | 把「標記完成/略過」→ `adopted`/`rejected` 寫進 memory；Sidekick 加「採用此建議」動作存 `adoptedText`。|
 
 ### 9.5 Vertical Slices（一次一片，三關全綠才 commit）
-- **Slice 8** — `geminiText.ts` + Gemini 文字 key 驗證 + `evaluator.ts`（rubric、Gemini 主/Claude fallback）。先可獨立測試，不接線。
-- **Slice 9** — 粉專層級 feedback memory（`feedbackStore.ts`）+ 改 `api/ai/feedback`（pageId/humanAction/adoptedText，相容舊）+ 診斷卡完成/略過→adopted/rejected。
-- **Slice 10** — `feedbackRetrieval.ts`（採用>高分排序 + 冷啟動種子）→ 注入 Sidekick + 診斷 Agent prompt。
-- **Slice 11** — 評估器接線：批次 Agent 同步評分+重試；Sidekick 背景評分；evalScore 進 memory。
+- [x] **Slice 8** — `geminiText.ts`（thinkingBudget 0）+ Gemini 文字 key 實測可用 + `evaluator.ts`（rubric、Gemini 主/Claude fallback）。
+- [x] **Slice 9** — 粉專層級 feedback memory（`feedbackStore.ts`）+ 改 `api/ai/feedback` + 診斷卡完成/略過→adopted/rejected。
+- [x] **Slice 10** — `feedbackRetrieval.ts`（採用>高分排序 + 冷啟動種子）→ 注入 Sidekick + 診斷 Agent prompt。
+- [x] **Slice 11** — 評估器接線（診斷批次 Agent）：`getOrGenerateDiagnosisCards` 產出→評分→低分同步重試 1 次（理由回灌）→ 每卡 evalScore 寫進 `diag__{cardKey}`（與人類動作同 doc，merge）。route 與 cron 都帶 `evalKeys`（Gemini 主、Claude fallback）。
 - （略）LangSmith 觀測：依 §5 ADR 暫不導入。
+
+### 9.7 Sidekick 自動評分的取捨（為何不做同步/背景 eval）
+- **Serverless 限制**：回應後的「背景」工作在 Vercel function 不保證跑完（response 結束即可能凍結），fire-and-forget 不可靠。
+- **同步 eval 會拖慢互動**：每則回覆多等 1–2s 評分，UX 變差。
+- **Sidekick 已有學習訊號**：使用者的 👍/👎（→ adopted/rejected，Slice 9）已寫進粉專記憶，且 Slice 10 已把這些範例回填 prompt。
+- **結論**：Sidekick 走「人類訊號驅動」自我學習（已完成）；自動 LLM 評分**只用在非互動的診斷批次 Agent**（可同步、可重試、無人等待）。若日後要 Sidekick 自動評分，建議改用真正的 queue/背景 worker，而非 serverless fire-and-forget。
 
 ### 9.6 驗收
 - [ ] Gemini 文字 key 可用（否則 fallback Claude Haiku，log 標示走哪個）。

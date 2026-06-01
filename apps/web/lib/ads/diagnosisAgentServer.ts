@@ -11,6 +11,50 @@ import {
   computeDiagFingerprint, selectItemsForAgent, agentSystemPrompt, agentUserMessage, parseAndEnforceCards,
 } from '@/lib/ads/diagnosisAgent'
 import { getFewShotExamples, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
+import { evaluateOutput } from '@/lib/sidekick/evaluator'
+import { writeFeedback } from '@/lib/sidekick/feedbackStore'
+import { diagnosisCardKey } from '@/lib/ads/diagnosisCardKey'
+
+export interface EvalKeys { geminiKey?: string | null; anthropicKey?: string | null }
+
+// Quality-evaluate a card set (LLM-as-judge), retry generation once when below
+// threshold (reasons fed back), then persist evalScore per card into feedback
+// memory (docId diag__cardKey — same doc the human action later merges into).
+async function evaluateAndStore(
+  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string,
+  fewShot: string, cards: AiDiagCard[], evalKeys: EvalKeys,
+): Promise<AiDiagCard[]> {
+  const combine = (cs: AiDiagCard[]) => cs.map(c => `【${c.title}】${c.why.join(' ')} ${c.impact}`.trim()).join('\n')
+  const context = items.map(d => `${d.title}：${d.metric}（門檻 ${d.threshold}）`).join('；').slice(0, 1500)
+  const goal = typeof summary.goal === 'string' ? summary.goal : null
+
+  let finalCards = cards
+  let result = await evaluateOutput({ output: combine(cards), context, goal, kind: 'diagnosis' }, evalKeys)
+
+  if (!result.pass && result.judge !== 'none') {
+    const retryHint = `${fewShot}\n上一版評分偏低（${result.overall}/5），原因：${result.reasons}。請針對這些點改進後重出。`
+    const retry = await runDiagnosisAgent(items, summary, apiKey, retryHint)
+    if (retry) {
+      const retryEval = await evaluateOutput({ output: combine(retry), context, goal, kind: 'diagnosis' }, evalKeys)
+      if (retryEval.overall > result.overall) { finalCards = retry; result = retryEval }
+    }
+  }
+
+  if (result.judge !== 'none') {
+    const byId = new Map(items.map(d => [d.id, d]))
+    await Promise.all(finalCards.map(async (c) => {
+      const item = byId.get(c.refId)
+      if (!item) return
+      await writeFeedback(pageId, {
+        source: 'diagnosis', goal, alertType: item.type,
+        context: `${item.metric}｜${item.desc}`,
+        output: `${c.title}：${c.why.join(' ')}`,
+        evalScore: result.overall, evalReasons: result.reasons,
+      }, `diag__${diagnosisCardKey(item)}`).catch(() => {})
+    }))
+  }
+  return finalCards
+}
 
 // One Haiku call → enforced cards (or null on failure / bad output).
 export async function runDiagnosisAgent(
@@ -34,7 +78,7 @@ export async function runDiagnosisAgent(
 // Read the fingerprint cache; regenerate + store on miss. Returns null when there
 // is nothing to diagnose or generation failed (callers fall back to rule text).
 export async function getOrGenerateDiagnosisCards(
-  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string,
+  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, evalKeys?: EvalKeys,
 ): Promise<AiDiagCard[] | null> {
   if (selectItemsForAgent(items).length === 0) return null
   const fingerprint = computeDiagFingerprint(items)
@@ -49,8 +93,13 @@ export async function getOrGenerateDiagnosisCards(
   const fewShot = formatFewShot(
     await getFewShotExamples(pageId, { source: 'diagnosis', goal: typeof summary.goal === 'string' ? summary.goal : null }),
   )
-  const cards = await runDiagnosisAgent(items, summary, apiKey, fewShot)
+  let cards = await runDiagnosisAgent(items, summary, apiKey, fewShot)
   if (!cards) return null
+
+  // Quality evaluator (Slice 11): score → retry-once-if-low → store evalScore.
+  if (evalKeys && (evalKeys.geminiKey || evalKeys.anthropicKey)) {
+    cards = await evaluateAndStore(pageId, items, summary, apiKey, fewShot, cards, evalKeys)
+  }
 
   await latestRef.set({
     aiDiagnosis: cards,
