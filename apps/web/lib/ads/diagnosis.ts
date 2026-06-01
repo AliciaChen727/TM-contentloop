@@ -114,10 +114,17 @@ export function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<
       desc: `素材「${lowCtr.name.slice(0, 25)}」CTR 僅 ${lowCtr.ctr.toFixed(2)}%，低於建議值 1.5%。`,
       adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材',
       thumbnailUrl: lowCtr.thumbnailUrl, storyId: lowCtr.storyId })
-  } else if ((s.ctr ?? 0) > 0 && (s.ctr) < 1.5) {
-    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低',
-      desc: `整體 CTR 僅 ${(s.ctr).toFixed(2)}%，低於建議值 1.5%。`,
-      adset: '整體帳戶', metric: `CTR ${(s.ctr).toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材' })
+  } else if ((s.impressions ?? 0) > 0 && (s.ctr ?? 0) < 1.5) {
+    // Has impressions but low/zero CTR. CTR===0 = real "no clicks at all" problem,
+    // NOT "good" — the old `ctr > 0` guard wrongly let it fall through to 帳戶表現良好.
+    const c = s.ctr ?? 0
+    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr',
+      title: c === 0 ? '廣告完全沒有點擊' : 'CTR 偏低',
+      desc: c === 0
+        ? `這段期間廣告有 ${Math.round(s.impressions).toLocaleString('zh-TW')} 次曝光，但完全沒有人點擊（CTR 0%）。建議檢查廣告文案／CTA 與連結是否正常。`
+        : `整體 CTR 僅 ${c.toFixed(2)}%，低於建議值 1.5%。`,
+      adset: '整體帳戶', metric: `CTR ${c.toFixed(2)}%`, threshold: '< 1.5%',
+      action: c === 0 ? '檢查 CTA 文案 / 連結是否有效' : '更換廣告文案或素材' })
   }
 
   const top = [...creatives].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas)[0]
@@ -129,9 +136,18 @@ export function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<
   }
 
   if (items.length === 0) {
-    items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '帳戶表現良好',
-      desc: `CTR ${(s.ctr ?? 0).toFixed(2)}%，點擊效益正常，各項指標正常。`,
-      adset: '整體帳戶', metric: `CTR ${(s.ctr ?? 0).toFixed(2)}%`, threshold: '正常', action: '持續監控，維持現況' })
+    // No rule fired. Distinguish "no ad activity at all" from "genuinely healthy" —
+    // CTR 0% with zero spend/impressions means there's just no data, not good news.
+    const noActivity = (s.spend ?? 0) <= 0 && (s.impressions ?? 0) <= 0
+    if (noActivity) {
+      items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '尚無廣告數據',
+        desc: '這個區間沒有偵測到廣告投放（花費與曝光皆為 0）。若有投放中的廣告，請確認已連結 Meta 廣告帳號，或切換到有投放的日期區間再看診斷。',
+        adset: '整體帳戶', metric: '無投放數據', threshold: '—', action: '確認廣告帳號連結 / 調整日期區間' })
+    } else {
+      items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '帳戶表現良好',
+        desc: `CTR ${(s.ctr ?? 0).toFixed(2)}%，點擊效益正常，各項指標正常。`,
+        adset: '整體帳戶', metric: `CTR ${(s.ctr ?? 0).toFixed(2)}%`, threshold: '正常', action: '持續監控，維持現況' })
+    }
   }
 
   return items
