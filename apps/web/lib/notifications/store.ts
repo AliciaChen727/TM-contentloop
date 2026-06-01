@@ -1,6 +1,7 @@
 import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { AlertItem } from '@/lib/alerts/types'
+import type { AiDiagCard } from '@/components/ads/types'
 
 // Phase 2 — in-app notification center.
 // Writes notifications to users/{uid}/notifications, fanned out to each recipient
@@ -31,14 +32,21 @@ export function buildAdAnomalyNotification(
   pageName: string,
   alerts: AlertItem[],
   dateStr: string,
+  cards?: AiDiagCard[] | null,
 ): NotificationInput {
-  const body = alerts.map((a) => `${a.emoji} ${a.title}：${a.message}`).join('\n')
-  const advice = Array.from(new Set(alerts.map((a) => a.advice).filter(Boolean))).join('\n')
+  const useCards = !!(cards && cards.length > 0)
+  const count = useCards ? cards!.length : alerts.length
+  const body = useCards
+    ? cards!.map((c) => `${c.emoji} ${c.title}：${c.why[0] ?? ''}`).join('\n')
+    : alerts.map((a) => `${a.emoji} ${a.title}：${a.message}`).join('\n')
+  const advice = useCards
+    ? Array.from(new Set(cards!.map((c) => c.cta.label).filter(Boolean))).join('\n')
+    : Array.from(new Set(alerts.map((a) => a.advice).filter(Boolean))).join('\n')
   return {
     type: 'ad_anomaly',
     pageId,
     pageName,
-    title: `${pageName}：${alerts.length} 項廣告需要注意`,
+    title: `${pageName}：${count} 項成效診斷優化建議`,
     body,
     advice,
     actionPrompt: null,

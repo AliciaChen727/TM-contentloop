@@ -478,8 +478,8 @@ export default function SettingsPage() {
         {/* Ad Alert Notifications — admin only */}
         {!!pages.find(p => p.pageId === selectedPageId)?.permissions === false &&
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">廣告警示通知</h2>
-          <p className="text-xs text-gray-400 mb-5">自動偵測廣告異常（CTR 下滑、素材疲勞、CPC 飆高），在你設定的星期與時間以 Email 通知你（台灣時間）。</p>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">成效診斷優化建議通知</h2>
+          <p className="text-xs text-gray-400 mb-5">自動診斷廣告與貼文成效（CTR、素材疲勞、貼文互動、最佳貼文加碼等），在你設定的星期與時間以 Email 通知你（台灣時間）。</p>
           <div className="mb-4">
             <div className="text-xs text-gray-500 mb-2">通知狀態</div>
             <div className="flex gap-2">

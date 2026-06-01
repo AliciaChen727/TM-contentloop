@@ -176,8 +176,14 @@ export const ORGANIC_ENGAGEMENT_BENCHMARKS = {
 - [x] Slice 1 — `lib/ads/benchmarks.ts`
 - [x] Slice 2 — `lib/ads/contentDiagnosis.ts` + 診斷頁顯示
 - [x] Slice 3 — `lib/ads/diagnosisAgent.ts`（Haiku 改寫 + fingerprint 快取）+ `app/api/ai/diagnosis/route.ts` + 診斷頁紫框/卡片接 Agent 文案（fallback 回規則模板）。`AiDiagCard` 型別加在 `components/ads/types.ts`。
-- [ ] Slice 4 — 鈴鐺 + Email 接 Agent 文案 + Email 主旨改「成效診斷優化建議」+ 設定頁更名。
+- [x] Slice 4 — 鈴鐺 + Email 接 Agent 文案；Email 主旨/標頭改「成效診斷優化建議」；設定頁更名。
+  - `lib/ads/diagnosisAgentServer.ts`：`runDiagnosisAgent` + `getOrGenerateDiagnosisCards`（fingerprint 快取），route 與 cron 共用。
+  - `lib/ads/contentDiagnosisServer.ts`：cron 端 page-scoped 載入 FB/IG 貼文（FB legacy 加 `${pageId}_` 前綴、IG 不讀 legacy、hasAd 用 snapshot adPostIds/igPostIds）→ 跑 `buildContentDiagnosis`，讓信件/鈴鐺含貼文建議。
+  - `processAlerts`：合併 ad+content items → 告警 gate（content C2 warning 也會觸發）→ 生成 Agent cards → 傳入 email/bell。
+  - `emailSender` / `store.buildAdAnomalyNotification`：有 cards 用 Madgicx 文案，否則 fallback 規則文字。
 - [ ] Phase 3 後續 — Quality evaluator / feedback memory。
+
+> 注意：診斷頁（日期區間）與 cron（最新快照、全期）item 集合不同 → fingerprint 可能不同 → 兩端可能各自重生 cards（與既有「規則同源、日期範圍可能不同」一致）。快取仍在同源同資料時命中。
 
 ---
 ### Benchmark 數據來源

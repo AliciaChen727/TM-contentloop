@@ -3,7 +3,10 @@ import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { sendAlertEmail } from './emailSender'
 import { computeDiagnosisFromSnapshot, diagnosisToAlertItems } from '@/lib/ads/diagnosis'
-import type { DiagItem } from '@/components/ads/types'
+import { getOrGenerateDiagnosisCards } from '@/lib/ads/diagnosisAgentServer'
+import { loadContentDiagnosis } from '@/lib/ads/contentDiagnosisServer'
+import { getUserApiKey } from '@/lib/userApiKeys'
+import type { DiagItem, AiDiagCard } from '@/components/ads/types'
 import type { Timestamp } from 'firebase-admin/firestore'
 import { writeInAppNotification, resolveUidsFromEmails, buildAdAnomalyNotification } from '@/lib/notifications/store'
 
@@ -72,12 +75,42 @@ export async function processPageAlerts(pageId: string): Promise<{
   const syncedMs = (snap.syncedAt as Timestamp | undefined)?.toMillis?.() ?? 0
   const diagMs = (snap.diagnosisUpdatedAt as Timestamp | undefined)?.toMillis?.() ?? 0
   const storedDiag = Array.isArray(snap.diagnosis) ? (snap.diagnosis as DiagItem[]) : null
-  const items = storedDiag && diagMs >= syncedMs
+  const adItems = storedDiag && diagMs >= syncedMs
     ? storedDiag
     : computeDiagnosisFromSnapshot(snap).items
 
+  // Merge content (post) diagnosis so the digest covers 廣告 + 貼文. Page-scoped,
+  // isolation-safe. Best-effort: [] on any failure.
+  const ownerUid = await resolvePageOwnerUid(pageId)
+  let items = adItems
+  if (ownerUid) {
+    const contentItems = await loadContentDiagnosis(
+      ownerUid, pageId,
+      Array.isArray(snap.adPostIds) ? (snap.adPostIds as string[]) : [],
+      Array.isArray(snap.igPostIds) ? (snap.igPostIds as string[]) : [],
+    )
+    if (contentItems.length > 0) {
+      items = [...adItems.filter(d => d.id !== 'd0'), ...contentItems]
+    }
+  }
+
   const alerts = diagnosisToAlertItems(items)
   if (alerts.length === 0) return { sent: false, reason: 'no alerts', alertCount: 0 }
+
+  // Agent rewrite (Layer 2). Reuses the fingerprint cache shared with the
+  // diagnosis page; only calls Haiku on a cache miss. Key: env, else page owner's
+  // stored key. Failure → cards null → email/bell fall back to rule text.
+  let cards: AiDiagCard[] | null = null
+  try {
+    let apiKey = process.env.ANTHROPIC_API_KEY ?? null
+    if (!apiKey && ownerUid) apiKey = await getUserApiKey(ownerUid, 'anthropic')
+    if (apiKey) {
+      const summary = (snap.summary ?? {}) as Record<string, number>
+      cards = await getOrGenerateDiagnosisCards(pageId, items, summary, apiKey)
+    }
+  } catch (e) {
+    console.error('[processPageAlerts] diagnosis agent failed', e)
+  }
 
   // Recipient emails. Priority:
   //   explicit alertEmails → legacy alertEmail → configuring admin's login
@@ -105,7 +138,7 @@ export async function processPageAlerts(pageId: string): Promise<{
   if (!pageName) pageName = pageId
 
   // Send full current digest to all recipients
-  const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, alerts, pageId)))
+  const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, alerts, pageId, cards)))
   const result = results.find(r => r.ok) ?? results[0]
 
   // In-app notification sink (Phase 2, option A — alongside the scheduled email).
@@ -117,7 +150,7 @@ export async function processPageAlerts(pageId: string): Promise<{
     const emailUids = await resolveUidsFromEmails(recipients)
     const configuredByUid = (profile.alertConfiguredByUid as string) ?? null
     const targetUids = Array.from(new Set([...emailUids, ...(configuredByUid ? [configuredByUid] : [])]))
-    const notif = buildAdAnomalyNotification(pageId, pageName, alerts, dateStr)
+    const notif = buildAdAnomalyNotification(pageId, pageName, alerts, dateStr, cards)
     const res = await writeInAppNotification(targetUids, notif)
     inAppWritten = res.written
   } catch (e) {
