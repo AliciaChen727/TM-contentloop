@@ -558,7 +558,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       fetch('/api/ai/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ ...payload, response: responseText, pageContext: contextPage, dataSnapshot: metricsContext ?? null }),
+        body: JSON.stringify({ ...payload, response: responseText, pageContext: contextPage, dataSnapshot: metricsContext ?? null, pageId }),
       })
       // also update the conversation record
       if (convStartedRef.current && sessionIdRef.current) {

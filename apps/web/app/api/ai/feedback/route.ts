@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { writeFeedback, type HumanAction } from '@/lib/sidekick/feedbackStore'
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -15,17 +16,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { rating, response, pageContext, dataSnapshot, improveReason, improveNote } = await req.json() as {
+  const { rating, response, pageContext, dataSnapshot, improveReason, improveNote, pageId, humanAction, adoptedText, goal } = await req.json() as {
     rating: 'helpful' | 'improve'
     response: string
     pageContext: string
     dataSnapshot?: object | null
     improveReason?: string
     improveNote?: string
+    pageId?: string
+    humanAction?: HumanAction
+    adoptedText?: string
+    goal?: string
   }
 
   if (!rating || !response) return NextResponse.json({ error: 'rating and response required' }, { status: 400 })
 
+  // Legacy per-user write — kept for backward-compat with the existing retrieval
+  // path (Sidekick prompt's helpful/improve). Slice 10 switches retrieval to the
+  // page-level store below.
   const record: Record<string, unknown> = {
     rating,
     response: response.slice(0, 2000),
@@ -35,7 +43,22 @@ export async function POST(req: NextRequest) {
   }
   if (improveReason) record.improveReason = improveReason
   if (improveNote?.trim()) record.improveNote = improveNote.trim()
-
   await adminDb.collection('users').doc(uid).collection('sidekickFeedback').add(record)
+
+  // New page-level memory (shared across the page's admins). thumbs-up ≈ adopted,
+  // thumbs-down ≈ rejected, unless an explicit humanAction is provided.
+  if (pageId) {
+    await writeFeedback(pageId, {
+      source: 'sidekick',
+      goal: goal ?? null,
+      alertType: pageContext ?? null,
+      context: typeof dataSnapshot === 'object' && dataSnapshot ? JSON.stringify(dataSnapshot).slice(0, 2000) : '',
+      output: response,
+      humanAction: humanAction ?? (rating === 'helpful' ? 'adopted' : 'rejected'),
+      adoptedText: adoptedText ?? null,
+      byUid: uid,
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }

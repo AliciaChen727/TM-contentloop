@@ -249,7 +249,7 @@ export default function AdsPage() {
 
   // Mark / skip / reopen a diagnosis card. Optimistic update + persist (page-level,
   // admin only — viewers don't get the buttons).
-  const handleCardAction = useCallback(async (cardKey: string, status: CardStatus | 'open', severityRank?: number) => {
+  const handleCardAction = useCallback(async (cardKey: string, status: CardStatus | 'open', meta?: { severityRank?: number; output?: string; context?: string; alertType?: string }) => {
     setCardStatuses(prev => {
       const next = { ...prev }
       if (status === 'open') delete next[cardKey]
@@ -263,10 +263,14 @@ export default function AdsPage() {
       await fetch('/api/ads/diagnosis-status', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: selectedPageId, cardKey, status, severityRank }),
+        body: JSON.stringify({
+          pageId: selectedPageId, cardKey, status,
+          severityRank: meta?.severityRank, output: meta?.output, context: meta?.context,
+          alertType: meta?.alertType, goal: optimizationGoal ?? undefined,
+        }),
       })
     } catch { /* optimistic state already applied */ }
-  }, [selectedPageId])
+  }, [selectedPageId, optimizationGoal])
 
   // Ad + content diagnosis (Layer 1) for the current date range. Memoized so the
   // Agent fetch effect and the render share one stable array.

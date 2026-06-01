@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { writeFeedback } from '@/lib/sidekick/feedbackStore'
 
 type CardStatus = 'completed' | 'dismissed'
 
@@ -62,8 +63,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const uid = await uidFromReq(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { pageId, cardKey, status, severityRank } = (await req.json()) as {
+  const { pageId, cardKey, status, severityRank, output, context, goal, alertType } = (await req.json()) as {
     pageId?: string; cardKey?: string; status?: string; severityRank?: number
+    output?: string; context?: string; goal?: string; alertType?: string
   }
   if (!pageId || !cardKey || !status) return NextResponse.json({ error: 'pageId, cardKey, status required' }, { status: 400 })
   if (!['completed', 'dismissed', 'open'].includes(status)) return NextResponse.json({ error: 'bad status' }, { status: 400 })
@@ -76,6 +78,21 @@ export async function POST(req: NextRequest) {
     // Record the severity at completion time so the cron can re-notify only when a
     // completed card later escalates (dismissed cards stay silent regardless).
     await ref.set({ status, byUid: uid, updatedAt: new Date().toISOString(), severityRank: severityRank ?? 0 })
+  }
+
+  // Card status doubles as a learning signal: completed ≈ adopted, dismissed ≈
+  // rejected, reopen ≈ clear. Upsert keyed by cardKey so re-marking updates in
+  // place. Best-effort — never block the status write.
+  if (output) {
+    const humanAction = status === 'completed' ? 'adopted' : status === 'dismissed' ? 'rejected' : null
+    try {
+      await writeFeedback(pageId, {
+        source: 'diagnosis', goal: goal ?? null, alertType: alertType ?? null,
+        context: context ?? null, output, humanAction, byUid: uid,
+      }, `diag__${cardKey}`)
+    } catch (e) {
+      console.error('[diagnosis-status] feedback write failed', e)
+    }
   }
   return NextResponse.json({ ok: true, cardKey, status })
 }

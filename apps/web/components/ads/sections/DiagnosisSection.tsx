@@ -50,7 +50,7 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
   aiCards?: AiDiagCard[] | null
   cardStatuses?: Record<string, CardStatus>
   canManage?: boolean
-  onCardAction?: (cardKey: string, status: CardStatus | 'open', severityRank?: number) => void
+  onCardAction?: (cardKey: string, status: CardStatus | 'open', meta?: { severityRank?: number; output?: string; context?: string; alertType?: string }) => void
   onAskAI?: (q: string) => void
 }) {
   const postList = posts ?? []
@@ -200,30 +200,38 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
               </div>
 
               {/* Action buttons (Madgicx-style: mark complete / skip / reopen). Admin only. */}
-              {canManage && onCardAction && (
+              {canManage && onCardAction && (() => {
+                // Carry the card's text into the feedback signal (adopted/rejected).
+                const fbMeta = {
+                  output: card ? [card.title, ...card.why, card.impact, card.benchmark].filter(Boolean).join(' ') : `${d.title}：${d.desc}`,
+                  context: `${d.metric}｜門檻 ${d.threshold}｜${d.desc}`,
+                  alertType: d.type,
+                }
+                return (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   {st === 'open' ? (
                     <>
-                      <button onClick={() => onCardAction(cardKey, 'completed', severityRank(d.severity))}
+                      <button onClick={() => onCardAction(cardKey, 'completed', { ...fbMeta, severityRank: severityRank(d.severity) })}
                         style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                           border: '1px solid var(--ad-green, #22a06b)', background: 'var(--ad-green, #22a06b)', color: '#fff' }}>
                         ✓ 標記完成
                       </button>
-                      <button onClick={() => onCardAction(cardKey, 'dismissed')}
+                      <button onClick={() => onCardAction(cardKey, 'dismissed', fbMeta)}
                         style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                           border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)' }}>
                         略過
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => onCardAction(cardKey, 'open')}
+                    <button onClick={() => onCardAction(cardKey, 'open', fbMeta)}
                       style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                         border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)' }}>
                       ↩ 重新開啟
                     </button>
                   )}
                 </div>
-              )}
+                )
+              })()}
             </div>
           </div>
           )
