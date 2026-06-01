@@ -187,6 +187,12 @@ pages/{pageId}/sidekickFeedback/{id}
 - [x] **Slice 13** — Sidekick 語意檢索（embedding）：`lib/ai/geminiEmbed.ts`（**gemini-embedding-001**, 3072 維；此 key 無 text-embedding-004）。Sidekick 回覆被 👍/👎 時，於 `api/ai/feedback` 算 `embedding` 存進記錄；Sidekick 取 few-shot 改用 `getSidekickFewShot`：embed 當前提問 → cosine 相似度 + 採用/評分加權 → top 3；無 key/失敗/無向量則 fallback 回 metadata。**診斷卡維持 metadata 比對**（alertType 為固定列舉，類別比對已足夠）。
 - （略）LangSmith 觀測：依 §5 ADR 暫不導入。
 
+### 9.9 主動健康監控（Slice 14）
+- `api/cron/self-learning-health`（CRON_SECRET 保護）+ `.github/workflows/self-learning-health.yml`（每月 1 號 00:00 UTC）。
+- 檢查：① `gemini-2.5-flash` / `gemini-embedding-001` 仍在 Gemini 模型清單；② 各粉專 `sidekickFeedback` 是否 > 2000 筆（該換向量 DB）。
+- **有問題才寄信**（`HEALTH_ALERT_EMAIL` ?? `GMAIL_USER`），健康時靜默。對應 §9.8 / `project_gemini_text_models` memory 的兩個 review trigger。
+- ⚠️ 需在 Vercel 設 `HEALTH_ALERT_EMAIL` 指定收件信箱（否則寄到寄件帳號）。
+
 ### 9.8 檢索策略：診斷 metadata vs Sidekick embedding（決策 2026-06-02）
 - **診斷卡（`source:'diagnosis'`）→ metadata 比對 + 啟發式排序**：情境是固定類別（`low_ctr`/`content_boost`/…），同類別比對即「最相關」，embedding 加分有限。
 - **Sidekick（`source:'sidekick'`）→ embedding 語意檢索**：使用者輸入自由文字，語意相似度才能對到「過去類似問題的好回答」。
