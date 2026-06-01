@@ -34,8 +34,35 @@ function percentile(nums: number[], p: number): number {
 
 interface ScoredPost { post: Post; er: number }
 
+const round = (n: number, step: number) => Math.round(n / step) * step
+
+// Deterministic boost projection: tie the suggested ad budget to THIS post's
+// organic reach, using the account's own CPM (NT$ per 1000 impressions). Reach is
+// the headline (CPM-driven, fairly reliable); engagement is a conservative rough
+// estimate (paid audiences engage less than organic, so we halve the organic ER).
+// Returns null when there's no CPM to reason from → caller shows a test-range hint.
+export function computeBoostProjection(reach: number, er: number, cpm: number): string | null {
+  if (!(cpm > 0) || !(reach > 0)) return null
+  const FREQ = 1.5            // assumed impressions-per-person for a short boost
+  const PAID_ER_DISCOUNT = 0.5
+  const requiredImpressions = reach * FREQ      // to roughly match organic reach again
+  const budget = round((requiredImpressions / 1000) * cpm, 50)
+  if (budget <= 0) return null
+  const daily = round(budget / 7, 10)
+  const extraReach = round(reach, 100)          // ≈ matches organic reach by design
+  const extraEngage = Math.round(extraReach * (er * PAID_ER_DISCOUNT) / 100)
+  const nt = (n: number) => `NT$${n.toLocaleString('zh-TW')}`
+  const engagePart = extraEngage > 0
+    ? `；互動數粗估約 +${extraEngage.toLocaleString('zh-TW')} 次（付費受眾互動通常低於自然，僅供參考）`
+    : ''
+  return `建議用約 ${nt(budget)}（每日約 ${nt(daily)}、投 7 天）。以你目前 CPM 推估，預期可多觸及約 ${extraReach.toLocaleString('zh-TW')} 人${engagePart}。`
+}
+
+const TEST_RANGE_HINT = '建議先用每日約 NT$100–150、投 5–7 天小額測試（帳戶尚無足夠 CPM 資料可精算）。'
+
 // Build content diagnosis items from a page-scoped, date-filtered post list.
-export function buildContentDiagnosis(posts: Post[]): DiagItem[] {
+// `summary` carries account-level metrics (e.g. cpm) used for the boost projection.
+export function buildContentDiagnosis(posts: Post[], summary?: { cpm?: number }): DiagItem[] {
   const items: DiagItem[] = []
   const scored: ScoredPost[] = posts
     .map((post) => ({ post, er: postEngagementRate(post) }))
@@ -56,12 +83,13 @@ export function buildContentDiagnosis(posts: Post[]): DiagItem[] {
   if (boostCandidates.length > 0) {
     const { post, er } = boostCandidates[0]
     const beats = Math.round((ers.filter((e) => e <= er).length / ers.length) * 100)
+    const projection = computeBoostProjection(post.reach ?? 0, er, summary?.cpm ?? 0) ?? TEST_RANGE_HINT
     items.push({
       id: 'c1', severity: 'good', type: 'content_boost', title: '最佳貼文值得加碼推廣',
-      desc: `「${post.title.slice(0, 25)}」自然互動率 ${er.toFixed(2)}%，是你近期最佳（贏過 ${beats}% 貼文），但還沒投過廣告。建議 boost 這篇，把已驗證的好內容推給更多人。`,
+      desc: `「${post.title.slice(0, 25)}」自然互動率 ${er.toFixed(2)}%，是你近期最佳（贏過 ${beats}% 貼文），但還沒投過廣告。建議 boost 這篇，把已驗證的好內容推給更多人。${projection}`,
       adset: post.title.slice(0, 30), metric: `互動率 ${er.toFixed(2)}%`,
       threshold: `贏過 ${beats}% 貼文`, action: '對這篇貼文投放廣告（加碼推廣）',
-      storyId: post.id,
+      storyId: post.id, projection,
     })
   }
 

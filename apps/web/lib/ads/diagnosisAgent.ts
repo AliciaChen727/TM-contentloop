@@ -52,6 +52,7 @@ export function agentSystemPrompt(): string {
     '- 標題用「結果導向」白話，不要用指標名當標題（例：「這支素材每天燒錢卻沒人點」，不要「CTR 偏低」）。',
     '- why：1–3 句敘事，依序講「問題是什麼 → 對你的影響 → 我們建議怎麼做」。',
     '- impact：若能從數據量化影響就寫一句（例：「過去這段期間多花了 NT$X 卻沒帶來點擊」）；無法量化就留空字串。',
+    '- 重要：若某筆發現附了 note（已算好的預算/預估數字），impact 與 why 中任何金額或數字都必須原封使用 note 的數字，絕不可自行計算或編造。',
     '- benchmark：只有廣告指標（CTR/CPC）才可引用同業數字；自然貼文互動率分母不同，benchmark 一律留空字串。',
     '- cta：label 是按鈕短句（例「更換文案」「加碼推廣這篇」），askAi 是點下去帶進 AI 對話的問句。',
     '',
@@ -82,6 +83,7 @@ export function agentUserMessage(items: DiagItem[], summary: AgentSummary): stri
     metric: d.metric,
     threshold: d.threshold,
     suggestedAction: d.action,
+    ...(d.projection ? { note: d.projection } : {}),
   }))
 
   return [
@@ -127,7 +129,8 @@ export function parseAndEnforceCards(raw: string, items: DiagItem[]): AiDiagCard
       emoji: SEVERITY_EMOJI[d.severity],
       title: c.title ? String(c.title).slice(0, 60) : d.title,
       why: why.length ? why : [d.desc],
-      impact: c.impact ? String(c.impact) : '',
+      // Deterministic projection always wins for impact (accurate numbers).
+      impact: d.projection ? d.projection : (c.impact ? String(c.impact) : ''),
       benchmark: c.benchmark ? String(c.benchmark) : '',
       cta: {
         label: c?.cta?.label ? String(c.cta.label).slice(0, 16) : '問 AI',

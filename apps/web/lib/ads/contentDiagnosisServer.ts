@@ -49,6 +49,7 @@ function mapIgDoc(id: string, d: any, igPostIds: Set<string>): Post {
 // on any read failure — content diagnosis is best-effort, never blocks alerts.
 export async function loadContentDiagnosis(
   ownerUid: string, pageId: string, adPostIds: string[], igPostIds: string[],
+  summary?: { cpm?: number },
 ): Promise<DiagItem[]> {
   try {
     const userRef = adminDb.collection('users').doc(ownerUid)
@@ -75,7 +76,7 @@ export async function loadContentDiagnosis(
     const posts: Post[] = [...Array.from(fbById.values()), ...igPosts]
       .filter((p) => p.title && p.title !== '（無文字內容）')
 
-    return buildContentDiagnosis(posts)
+    return buildContentDiagnosis(posts, summary)
   } catch {
     return []
   }

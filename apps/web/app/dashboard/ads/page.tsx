@@ -250,7 +250,7 @@ export default function AdsPage() {
   // Agent fetch effect and the render share one stable array.
   const diagnosisItems = useMemo<DiagItem[]>(() => {
     const filteredPosts = (realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo)
-    const contentDiag = buildContentDiagnosis(filteredPosts)
+    const contentDiag = buildContentDiagnosis(filteredPosts, { cpm: adData.overview.summary.cpm })
     const adDiag = contentDiag.length > 0 ? adData.diagnosis.filter(d => d.id !== 'd0') : adData.diagnosis
     return [...adDiag, ...contentDiag]
   }, [adData, realPosts, dateFrom, dateTo])

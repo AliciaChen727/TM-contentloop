@@ -62,6 +62,9 @@ export interface DiagItem {
   // Optional creative preview (for top_performer / low_ctr items)
   thumbnailUrl?: string | null
   storyId?: string | null
+  // Deterministic projection text (e.g. boost budget + expected reach). Computed
+  // by the rules so the numbers are accurate; the Agent must not invent its own.
+  projection?: string | null
 }
 
 // Agent-rewritten diagnosis card (Phase 3, Layer 2). Enriches a DiagItem into

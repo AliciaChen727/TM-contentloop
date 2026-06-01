@@ -181,6 +181,10 @@ export const ORGANIC_ENGAGEMENT_BENCHMARKS = {
   - `lib/ads/contentDiagnosisServer.ts`：cron 端 page-scoped 載入 FB/IG 貼文（FB legacy 加 `${pageId}_` 前綴、IG 不讀 legacy、hasAd 用 snapshot adPostIds/igPostIds）→ 跑 `buildContentDiagnosis`，讓信件/鈴鐺含貼文建議。
   - `processAlerts`：合併 ad+content items → 告警 gate（content C2 warning 也會觸發）→ 生成 Agent cards → 傳入 email/bell。
   - `emailSender` / `store.buildAdAnomalyNotification`：有 cards 用 Madgicx 文案，否則 fallback 規則文字。
+- [x] Slice 5 — 加碼推廣卡片附「建議預算 + 預期觸及/互動」**確定性預估**（`contentDiagnosis.computeBoostProjection`）。
+  - 算法：以帳戶 CPM 反推「再多觸及 ≈ 這篇自然觸及人數」所需預算（綁這篇貼文），拆每日 × 7 天。
+  - 預期：觸及為主（CPM 推算）；互動數用 0.5× 自然 ER 保守粗估並標註「付費受眾互動通常較低」。無 CPM → 顯示測試型範圍（NT$100–150/天 × 5–7 天），不硬掰。
+  - 數字一律規則算，存入 `DiagItem.projection`；Agent 的 `card.impact` 強制用它（不信任 LLM 算數），prompt 也禁止自行編造數字。
 - [ ] Phase 3 後續 — Quality evaluator / feedback memory。
 
 > 注意：診斷頁（日期區間）與 cron（最新快照、全期）item 集合不同 → fingerprint 可能不同 → 兩端可能各自重生 cards（與既有「規則同源、日期範圍可能不同」一致）。快取仍在同源同資料時命中。

@@ -88,6 +88,7 @@ export async function processPageAlerts(pageId: string): Promise<{
       ownerUid, pageId,
       Array.isArray(snap.adPostIds) ? (snap.adPostIds as string[]) : [],
       Array.isArray(snap.igPostIds) ? (snap.igPostIds as string[]) : [],
+      (snap.summary ?? {}) as { cpm?: number },
     )
     if (contentItems.length > 0) {
       items = [...adItems.filter(d => d.id !== 'd0'), ...contentItems]
