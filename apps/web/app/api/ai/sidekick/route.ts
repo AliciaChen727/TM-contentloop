@@ -6,6 +6,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import { resolvePageProfile } from '@/lib/page-profile'
+import { getFewShotExamples, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
 
 interface MetricsContext {
   // Posts metrics
@@ -585,6 +586,17 @@ export async function POST(req: NextRequest) {
       systemPrompt = systemPrompt +
         `\n\n《使用者背景 ${sourceTag}》\n${lines.join('\n')}\n請根據此背景給出更精準的診斷建議，並依此目標決定優先建議的指標。`
     }
+  }
+
+  // Page-level retrieval-augmented few-shot (Phase 3 self-learning): proven past
+  // Sidekick replies for this page + context, ranked by adoption then eval score.
+  if (pageId) {
+    try {
+      const fewShot = formatFewShot(
+        await getFewShotExamples(pageId, { source: 'sidekick', goal: profile.optimizationGoal ?? null, alertType: contextPage }),
+      )
+      if (fewShot) systemPrompt = `${systemPrompt}\n\n${fewShot}`
+    } catch { /* retrieval is best-effort */ }
   }
 
   // Build user message content (text + optional files)

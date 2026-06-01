@@ -10,10 +10,11 @@ import type { DiagItem, AiDiagCard } from '@/components/ads/types'
 import {
   computeDiagFingerprint, selectItemsForAgent, agentSystemPrompt, agentUserMessage, parseAndEnforceCards,
 } from '@/lib/ads/diagnosisAgent'
+import { getFewShotExamples, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
 
 // One Haiku call → enforced cards (or null on failure / bad output).
 export async function runDiagnosisAgent(
-  items: DiagItem[], summary: Record<string, number>, apiKey: string,
+  items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string,
 ): Promise<AiDiagCard[] | null> {
   try {
     const anthropic = new Anthropic({ apiKey })
@@ -21,7 +22,7 @@ export async function runDiagnosisAgent(
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1600,
       system: [{ type: 'text', text: agentSystemPrompt(), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: agentUserMessage(items, summary) }],
+      messages: [{ role: 'user', content: agentUserMessage(items, summary, fewShot) }],
     })
     const raw = res.content[0]?.type === 'text' ? res.content[0].text : ''
     return parseAndEnforceCards(raw, items)
@@ -44,7 +45,11 @@ export async function getOrGenerateDiagnosisCards(
     return cached.aiDiagnosis as AiDiagCard[]
   }
 
-  const cards = await runDiagnosisAgent(items, summary, apiKey)
+  // Retrieval-augmented few-shot: proven past diagnosis outputs for this page.
+  const fewShot = formatFewShot(
+    await getFewShotExamples(pageId, { source: 'diagnosis', goal: typeof summary.goal === 'string' ? summary.goal : null }),
+  )
+  const cards = await runDiagnosisAgent(items, summary, apiKey, fewShot)
   if (!cards) return null
 
   await latestRef.set({

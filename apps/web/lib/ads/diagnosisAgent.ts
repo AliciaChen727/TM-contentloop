@@ -65,8 +65,9 @@ export function agentSystemPrompt(): string {
   ].join('\n')
 }
 
-// User message: the selected findings + a few account metrics for context.
-export function agentUserMessage(items: DiagItem[], summary: AgentSummary): string {
+// User message: the selected findings + a few account metrics for context, plus
+// optional retrieved few-shot examples (proven past outputs) for self-learning.
+export function agentUserMessage(items: DiagItem[], summary: AgentSummary, fewShot?: string): string {
   const selected = selectItemsForAgent(items)
   const ctxLines: string[] = []
   if (typeof summary.ctr === 'number' && summary.ctr > 0) ctxLines.push(ctrBenchmarkLine(summary.ctr))
@@ -88,10 +89,10 @@ export function agentUserMessage(items: DiagItem[], summary: AgentSummary): stri
 
   return [
     ctxLines.length ? `帳戶背景：${ctxLines.join('；')}。` : '帳戶背景：資料有限。',
-    '',
+    fewShot ? `\n${fewShot}\n` : '',
     '診斷發現（請逐一改寫成卡片，refId = 各 id）：',
     JSON.stringify(findings, null, 2),
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
 // Extract the first JSON array from the model output (it may wrap in prose/fences).
