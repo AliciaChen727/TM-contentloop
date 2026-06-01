@@ -13,31 +13,33 @@ interface RawFbStory {
   post_id?: string
   id?: string
   media_type?: string
+  media_id?: string
+  creation_time?: string   // unix seconds
   url?: string
   status?: string
 }
 
-async function fetchFbStoryData(postId: string, token: string): Promise<{ reach: number; views: number; createdTime: string | null; thumbUrl: string }> {
-  const result = { reach: 0, views: 0, createdTime: null as string | null, thumbUrl: '' }
-
-  // created_time for the date axis + the media image so we can show a screenshot
-  // (like IG). full_picture gives a thumbnail for both photo and video stories;
-  // attachments.media.image.src is the fallback.
+// The story's media image lives on the media_id object (NOT the post_id, which is
+// a special object without full_picture/created_time). Photo → images[0].source
+// (largest); video → picture (a JPEG thumbnail frame).
+async function fetchFbStoryThumb(mediaId: string, mediaType: string | undefined, token: string): Promise<string> {
+  if (!mediaId) return ''
+  const isVideo = (mediaType ?? '').toLowerCase().includes('video')
   try {
-    const u = new URL(`${BASE}/${postId}`)
-    u.searchParams.set('fields', 'created_time,full_picture,attachments{media{image{src}}}')
+    const u = new URL(`${BASE}/${mediaId}`)
+    u.searchParams.set('fields', isVideo ? 'picture' : 'images,picture')
     u.searchParams.set('access_token', token)
     const r = await fetch(u)
     const d = await r.json()
-    if (r.ok) {
-      if (d.created_time) result.createdTime = d.created_time
-      result.thumbUrl = d.full_picture
-        ?? d.attachments?.data?.[0]?.media?.image?.src
-        ?? ''
-    }
-  } catch { /* best-effort */ }
+    if (!r.ok || d.error) return ''
+    return d.images?.[0]?.source ?? d.picture ?? ''
+  } catch {
+    return ''
+  }
+}
 
-  // insights — graceful degradation (FB story metrics are sparse / churning)
+async function fetchFbStoryInsights(postId: string, token: string): Promise<{ reach: number; views: number }> {
+  const result = { reach: 0, views: 0 }
   const tryMetrics = async (metrics: string) => {
     const u = new URL(`${BASE}/${postId}/insights`)
     u.searchParams.set('metric', metrics)
@@ -91,8 +93,13 @@ export async function syncFbStories(
 
   const withData = await Promise.all(stories.map(async story => {
     const postId = story.post_id || story.id || ''
-    const d = postId ? await fetchFbStoryData(postId, pageToken) : { reach: 0, views: 0, createdTime: null, thumbUrl: '' }
-    return { story, postId, d }
+    const [ins, thumbUrl] = await Promise.all([
+      postId ? fetchFbStoryInsights(postId, pageToken) : Promise.resolve({ reach: 0, views: 0 }),
+      fetchFbStoryThumb(story.media_id ?? '', story.media_type, pageToken),
+    ])
+    // creation_time (unix seconds) comes straight from the /stories response.
+    const createdTime = story.creation_time ? new Date(parseInt(story.creation_time, 10) * 1000).toISOString() : null
+    return { story, postId, d: { reach: ins.reach, views: ins.views, createdTime, thumbUrl } }
   }))
 
   // page-scoped path only (cross-page isolation rule)
