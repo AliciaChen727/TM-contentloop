@@ -101,7 +101,12 @@ export async function evaluateOutput(
       const raw = await geminiGenerateText({ apiKey: keys.geminiKey, system: SYSTEM, prompt, maxOutputTokens: 400 })
       const parsed = parseEval(raw)
       if (parsed) return finalize(parsed, 'gemini')
-    } catch { /* fall through to Claude */ }
+    } catch (e) {
+      // Early-warning signal: if this fires consistently, the Gemini judge model
+      // (gemini-2.5-flash) may be retired — time to switch models (see
+      // project_gemini_text_models memory). Evaluation still works via Claude.
+      console.warn('[evaluator] Gemini judge failed, falling back to Claude:', e instanceof Error ? e.message : e)
+    }
   }
 
   if (keys.anthropicKey) {
