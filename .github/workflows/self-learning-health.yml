@@ -1,0 +1,27 @@
+name: Self-Learning Health Monitor
+
+on:
+  schedule:
+    # 每月 1 號 00:00 UTC（台灣早上 8 點）。檢查 Gemini 模型可用性 + feedback 資料量。
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger self-learning health check
+        run: |
+          body=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST https://tm-contentloop.vercel.app/api/cron/self-learning-health \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          status=$(echo "$body" | grep "HTTP_STATUS:" | cut -d: -f2)
+          response=$(echo "$body" | grep -v "HTTP_STATUS:")
+          echo "Response status: $status"
+          echo "Response body: $response"
+          if [ "$status" != "200" ]; then
+            echo "Health monitor failed with status $status"
+            exit 1
+          fi
+          echo "Health monitor completed successfully"
