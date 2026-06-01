@@ -157,9 +157,10 @@ export async function syncIgStories(
   return { synced: stories.length }
 }
 
-// Download an IG story thumbnail and store it permanently in Firebase Storage.
+// Download a story thumbnail and store it permanently in Firebase Storage.
 // Returns a stable public download URL, or null if the source URL is empty/dead.
-async function persistStoryThumbnail(
+// Shared by IG + FB story sync (path keyed by storyId, so no collision).
+export async function persistStoryThumbnail(
   uid: string, pageId: string, storyId: string, sourceUrl: string,
 ): Promise<string | null> {
   if (!sourceUrl) return null

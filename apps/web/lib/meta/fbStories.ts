@@ -1,5 +1,6 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { persistStoryThumbnail } from '@/lib/meta/igStories'
 
 const BASE = 'https://graph.facebook.com/v21.0'
 
@@ -16,17 +17,24 @@ interface RawFbStory {
   status?: string
 }
 
-async function fetchFbStoryData(postId: string, token: string): Promise<{ reach: number; views: number; createdTime: string | null }> {
-  const result = { reach: 0, views: 0, createdTime: null as string | null }
+async function fetchFbStoryData(postId: string, token: string): Promise<{ reach: number; views: number; createdTime: string | null; thumbUrl: string }> {
+  const result = { reach: 0, views: 0, createdTime: null as string | null, thumbUrl: '' }
 
-  // created_time for the dashboard date axis
+  // created_time for the date axis + the media image so we can show a screenshot
+  // (like IG). full_picture gives a thumbnail for both photo and video stories;
+  // attachments.media.image.src is the fallback.
   try {
     const u = new URL(`${BASE}/${postId}`)
-    u.searchParams.set('fields', 'created_time')
+    u.searchParams.set('fields', 'created_time,full_picture,attachments{media{image{src}}}')
     u.searchParams.set('access_token', token)
     const r = await fetch(u)
     const d = await r.json()
-    if (r.ok && d.created_time) result.createdTime = d.created_time
+    if (r.ok) {
+      if (d.created_time) result.createdTime = d.created_time
+      result.thumbUrl = d.full_picture
+        ?? d.attachments?.data?.[0]?.media?.image?.src
+        ?? ''
+    }
   } catch { /* best-effort */ }
 
   // insights — graceful degradation (FB story metrics are sparse / churning)
@@ -83,7 +91,7 @@ export async function syncFbStories(
 
   const withData = await Promise.all(stories.map(async story => {
     const postId = story.post_id || story.id || ''
-    const d = postId ? await fetchFbStoryData(postId, pageToken) : { reach: 0, views: 0, createdTime: null }
+    const d = postId ? await fetchFbStoryData(postId, pageToken) : { reach: 0, views: 0, createdTime: null, thumbUrl: '' }
     return { story, postId, d }
   }))
 
@@ -92,15 +100,35 @@ export async function syncFbStories(
     .collection('users').doc(uid)
     .collection('pages').doc(pageId)
     .collection('fbStories')
+
+  // Reuse any previously-persisted thumbnail so it isn't lost when the Meta CDN
+  // URL expires (FB story media URLs churn the same way IG's do).
+  const ids = withData.map(({ postId }) => postId).filter(Boolean)
+  const existingThumb = new Map<string, string>()
+  if (ids.length) {
+    const snaps = await adminDb.getAll(...ids.map(id => col.doc(id)))
+    for (const snap of snaps) {
+      const t = snap.data()?.thumbnailMedia
+      if (snap.exists && typeof t === 'string' && t) existingThumb.set(snap.id, t)
+    }
+  }
+
   const batch = adminDb.batch()
   let count = 0
   for (const { story, postId, d } of withData) {
     if (!postId) continue
+    // Persist once to Storage (permanent). Reuse the existing copy on later syncs.
+    const persisted = existingThumb.get(postId)
+      ?? (await persistStoryThumbnail(uid, pageId, postId, d.thumbUrl))
+      ?? ''
     batch.set(col.doc(postId), {
       id: postId,
       platform: 'FB',
       mediaType: 'STORY',
       mediaSubType: (story.media_type ?? '').toUpperCase().includes('VIDEO') ? 'VIDEO' : 'IMAGE',
+      thumbnailUrl: persisted || d.thumbUrl,        // prefer permanent Storage URL
+      thumbnailMedia: persisted || existingThumb.get(postId) || '', // permanent copy
+      thumbnailLive: d.thumbUrl,                     // raw Meta CDN URL (may expire)
       permalink: story.url ?? '',
       timestamp: d.createdTime ? Timestamp.fromDate(new Date(d.createdTime)) : Timestamp.now(),
       insights: { reach: d.reach, views: d.views, replies: 0, tapForward: 0, tapBack: 0, tapExit: 0, swipeForward: 0 },
