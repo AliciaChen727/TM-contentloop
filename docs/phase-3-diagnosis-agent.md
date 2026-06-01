@@ -191,6 +191,9 @@ export const ORGANIC_ENGAGEMENT_BENCHMARKS = {
   - UI：DiagnosisSection 加分頁 + 「✓ 標記完成 / 略過 / ↩ 重新開啟」按鈕（`canManage=canSync` 才顯示）；page.tsx 樂觀更新 + 持久化、切頁清空防跨頁殘留。
   - 隱藏「帳戶尚無足夠 CPM 資料可精算」警語（`TEST_RANGE_HINT`）。
   - **未來**：「標記完成」可串 Meta Marketing API 自動判斷是否真的有投放/採取 action（目前為手動狀態）。
+- [x] Slice 7 — 通知端尊重卡片狀態：**已略過永靜；已完成但惡化時重新通知並重新開啟**。
+  - 標記完成時記錄當下 `severityRank`（diagnosis-status POST）。
+  - `processAlerts`：讀 `diagnosisCardStatus` → dismissed 過濾掉；completed 只在 `severityRank(現況) > 記錄值` 時保留（並 delete 狀態 → 卡片回到待處理）；其餘照舊。過濾後才算 alerts/cards。
 - [ ] Phase 3 後續 — Quality evaluator / feedback memory。
 
 > 注意：診斷頁（日期區間）與 cron（最新快照、全期）item 集合不同 → fingerprint 可能不同 → 兩端可能各自重生 cards（與既有「規則同源、日期範圍可能不同」一致）。快取仍在同源同資料時命中。

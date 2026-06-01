@@ -62,8 +62,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const uid = await uidFromReq(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { pageId, cardKey, status } = (await req.json()) as {
-    pageId?: string; cardKey?: string; status?: string
+  const { pageId, cardKey, status, severityRank } = (await req.json()) as {
+    pageId?: string; cardKey?: string; status?: string; severityRank?: number
   }
   if (!pageId || !cardKey || !status) return NextResponse.json({ error: 'pageId, cardKey, status required' }, { status: 400 })
   if (!['completed', 'dismissed', 'open'].includes(status)) return NextResponse.json({ error: 'bad status' }, { status: 400 })
@@ -73,7 +73,9 @@ export async function POST(req: NextRequest) {
   if (status === 'open') {
     await ref.delete()
   } else {
-    await ref.set({ status, byUid: uid, updatedAt: new Date().toISOString() })
+    // Record the severity at completion time so the cron can re-notify only when a
+    // completed card later escalates (dismissed cards stay silent regardless).
+    await ref.set({ status, byUid: uid, updatedAt: new Date().toISOString(), severityRank: severityRank ?? 0 })
   }
   return NextResponse.json({ ok: true, cardKey, status })
 }

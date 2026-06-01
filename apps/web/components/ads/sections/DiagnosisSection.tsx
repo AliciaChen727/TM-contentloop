@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Icon } from '../Icon'
 import type { AdData, Post, AiDiagCard } from '../types'
-import { diagnosisCardKey } from '@/lib/ads/diagnosisCardKey'
+import { diagnosisCardKey, severityRank } from '@/lib/ads/diagnosisCardKey'
 
 export type CardStatus = 'completed' | 'dismissed'
 
@@ -50,7 +50,7 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
   aiCards?: AiDiagCard[] | null
   cardStatuses?: Record<string, CardStatus>
   canManage?: boolean
-  onCardAction?: (cardKey: string, status: CardStatus | 'open') => void
+  onCardAction?: (cardKey: string, status: CardStatus | 'open', severityRank?: number) => void
   onAskAI?: (q: string) => void
 }) {
   const postList = posts ?? []
@@ -204,7 +204,7 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   {st === 'open' ? (
                     <>
-                      <button onClick={() => onCardAction(cardKey, 'completed')}
+                      <button onClick={() => onCardAction(cardKey, 'completed', severityRank(d.severity))}
                         style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                           border: '1px solid var(--ad-green, #22a06b)', background: 'var(--ad-green, #22a06b)', color: '#fff' }}>
                         ✓ 標記完成

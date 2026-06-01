@@ -9,3 +9,9 @@ export function diagnosisCardKey(item: { type: string; storyId?: string | null; 
   const target = (item.storyId || item.adset || 'account').toString()
   return `${item.type}__${target}`.replace(/\s+/g, '_').slice(0, 180)
 }
+
+// Severity ordering for "escalation" checks (a completed card re-notifies only if
+// it gets WORSE than when it was marked done). good < warning < critical.
+export function severityRank(s: 'critical' | 'warning' | 'good'): number {
+  return s === 'critical' ? 2 : s === 'warning' ? 1 : 0
+}

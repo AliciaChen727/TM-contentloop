@@ -5,6 +5,7 @@ import { sendAlertEmail } from './emailSender'
 import { computeDiagnosisFromSnapshot, diagnosisToAlertItems } from '@/lib/ads/diagnosis'
 import { getOrGenerateDiagnosisCards } from '@/lib/ads/diagnosisAgentServer'
 import { loadContentDiagnosis } from '@/lib/ads/contentDiagnosisServer'
+import { diagnosisCardKey, severityRank } from '@/lib/ads/diagnosisCardKey'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import type { DiagItem, AiDiagCard } from '@/components/ads/types'
 import type { Timestamp } from 'firebase-admin/firestore'
@@ -94,6 +95,31 @@ export async function processPageAlerts(pageId: string): Promise<{
       items = [...adItems.filter(d => d.id !== 'd0'), ...contentItems]
     }
   }
+
+  // Respect the dashboard's card statuses (Slice 7):
+  //   dismissed → always silent;
+  //   completed → silent UNLESS it has escalated (current severity worse than when
+  //               marked done) — then re-notify AND reopen the card.
+  const statusSnap = await adminDb.collection('pages').doc(pageId).collection('diagnosisCardStatus').get()
+  const statusMap = new Map<string, { status: string; severityRank: number }>()
+  for (const d of statusSnap.docs) {
+    const v = d.data()
+    statusMap.set(d.id, { status: v.status, severityRank: typeof v.severityRank === 'number' ? v.severityRank : 0 })
+  }
+  const reopen: string[] = []
+  items = items.filter((d) => {
+    const st = statusMap.get(diagnosisCardKey(d))
+    if (!st) return true
+    if (st.status === 'dismissed') return false
+    if (st.status === 'completed') {
+      if (severityRank(d.severity) > st.severityRank) { reopen.push(diagnosisCardKey(d)); return true }
+      return false
+    }
+    return true
+  })
+  // Reopen escalated completed cards so the dashboard reflects they're live again.
+  await Promise.all(reopen.map((k) =>
+    adminDb.collection('pages').doc(pageId).collection('diagnosisCardStatus').doc(k).delete().catch(() => {})))
 
   const alerts = diagnosisToAlertItems(items)
   if (alerts.length === 0) return { sent: false, reason: 'no alerts', alertCount: 0 }

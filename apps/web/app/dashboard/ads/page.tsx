@@ -249,7 +249,7 @@ export default function AdsPage() {
 
   // Mark / skip / reopen a diagnosis card. Optimistic update + persist (page-level,
   // admin only — viewers don't get the buttons).
-  const handleCardAction = useCallback(async (cardKey: string, status: CardStatus | 'open') => {
+  const handleCardAction = useCallback(async (cardKey: string, status: CardStatus | 'open', severityRank?: number) => {
     setCardStatuses(prev => {
       const next = { ...prev }
       if (status === 'open') delete next[cardKey]
@@ -263,7 +263,7 @@ export default function AdsPage() {
       await fetch('/api/ads/diagnosis-status', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: selectedPageId, cardKey, status }),
+        body: JSON.stringify({ pageId: selectedPageId, cardKey, status, severityRank }),
       })
     } catch { /* optimistic state already applied */ }
   }, [selectedPageId])
