@@ -140,3 +140,54 @@ pages/{pageId}/sidekickFeedback/{id}
 - evaluator 門檻分數設多少？重試幾次？（先 ≥3.5 / 重試 1 次）
 - few-shot 撈幾筆、用什麼排序？（先「採用 > 高分」取前 3）
 - 是否需要冷啟動種子範例（還沒累積 feedback 時）？建議先放 3–5 筆人工示範。
+
+---
+
+## 9. 本階段實作計劃（2026-06，現況校準）
+
+### 9.0 現況：很多已經做完了
+- **批次審查 agent ≈ 已完成**：診斷 Agent（`diagnosisAgent.ts` + `diagnosisAgentServer.ts`，Slices 1–7）已每日掃描、產出 Madgicx 風格卡片（含 `cta.askAi` ≈ `actionPrompt`），存快照並餵進鈴鐺/email。**§2 視為已交付**（資料來源從舊 `detectAdAlerts` 改為診斷引擎）。
+- **基礎 feedback memory 已存在**：`api/ai/feedback` 存 `helpful`/`improve` 到 `users/{uid}/sidekickFeedback`；Sidekick system prompt 已會撈 `helpfulResponses`/`improveResponses` 注入。
+- **卡片狀態即人類訊號**：診斷卡的「✓ 標記完成 / 略過」(Slice 6) 天然對應 `humanAction` 的 adopted / rejected。
+
+### 9.1 還缺的（本階段做）
+1. **Quality evaluator（LLM-as-judge）— 全新**：目前完全沒有自動評分。
+2. **feedback memory 升級**：加 `evalScore` / `humanAction` / `adoptedText`，並**遷到粉專層級** `pages/{pageId}/sidekickFeedback`。
+3. **檢索回填**：依「採用 > 高分」排序撈 few-shot，注入 Sidekick + 診斷 Agent prompt。
+
+### 9.2 已確認決策（2026-06-01）
+| 決策 | 結論 |
+|------|------|
+| Evaluator 模型 | **Gemini Flash 為主 + Claude Haiku fallback**。跨模型評審避免 Claude 評 Claude 的自我偏好偏誤；Gemini Flash 便宜快。先測 Gemini 文字 key（曾在圖片/影片失敗，文字 API 是另一條），不通自動退 Claude Haiku。|
+| 評估範圍 | **Sidekick 對話 + 診斷 Agent 卡片**都評分、都進 memory。|
+| Memory 層級 | **粉專層級** `pages/{pageId}/sidekickFeedback`（同粉專 admin 共享學習）；舊 `users/{uid}/sidekickFeedback` 相容讀取。|
+
+### 9.3 關鍵設計：互動 vs 批次，評估方式不同
+- **Sidekick（互動）**：產出 → **立即回給使用者**（不阻塞）；評分在**背景**跑（fire-and-forget）→ 存 evalScore 進 memory。**不做同步重試**（不讓使用者等）。分數只餵學習，不即時 gating。
+- **診斷批次 Agent（非互動 cron）**：產出 → 評分 → 低於門檻**同步重試 1 次**（扣分理由回灌）→ 存。這裡可阻塞，沒人在等。
+
+### 9.4 元件與檔案
+| 檔案 | 職責 |
+|------|------|
+| `lib/ai/geminiText.ts`（新） | 極薄 Gemini 文字呼叫（REST `generativelanguage…:generateContent`），key = `getUserApiKey(uid,'gemini') ?? GEMINI_API_KEY`，回純文字。|
+| `lib/sidekick/evaluator.ts`（新） | rubric prompt（§3 五維度 0–5）→ Gemini 主、Claude Haiku fallback → 回 `{ scores, overall, reasons, pass }`。含 JSON 容錯解析。|
+| `lib/sidekick/feedbackStore.ts`（新） | 寫 `pages/{pageId}/sidekickFeedback`（source/goal/contextPage/alertType/context/output/evalScore/evalReasons/humanAction/adoptedText/createdAt/byUid）。|
+| `lib/sidekick/feedbackRetrieval.ts`（新） | 撈 few-shot：`humanAction==='adopted'` 優先（近期），次依 `evalScore` desc，取前 3；無資料用冷啟動種子常數。|
+| `api/ai/feedback`（改） | 收 `pageId` + `humanAction` + `adoptedText`，寫粉專層級（相容舊 per-user）。|
+| `api/ai/sidekick`（改） | 背景評分 + 注入 few-shot；few-shot 來源改用 `feedbackRetrieval`。|
+| `diagnosisAgentServer.ts`（改） | 批次：生成後評分 + 低分重試；注入 few-shot；存 memory。|
+| 診斷卡 / Sidekick UI（改） | 把「標記完成/略過」→ `adopted`/`rejected` 寫進 memory；Sidekick 加「採用此建議」動作存 `adoptedText`。|
+
+### 9.5 Vertical Slices（一次一片，三關全綠才 commit）
+- **Slice 8** — `geminiText.ts` + Gemini 文字 key 驗證 + `evaluator.ts`（rubric、Gemini 主/Claude fallback）。先可獨立測試，不接線。
+- **Slice 9** — 粉專層級 feedback memory（`feedbackStore.ts`）+ 改 `api/ai/feedback`（pageId/humanAction/adoptedText，相容舊）+ 診斷卡完成/略過→adopted/rejected。
+- **Slice 10** — `feedbackRetrieval.ts`（採用>高分排序 + 冷啟動種子）→ 注入 Sidekick + 診斷 Agent prompt。
+- **Slice 11** — 評估器接線：批次 Agent 同步評分+重試；Sidekick 背景評分；evalScore 進 memory。
+- （略）LangSmith 觀測：依 §5 ADR 暫不導入。
+
+### 9.6 驗收
+- [ ] Gemini 文字 key 可用（否則 fallback Claude Haiku，log 標示走哪個）。
+- [ ] 每則 Sidekick 回覆與每張診斷卡都有 evalScore + reasons 進 memory。
+- [ ] 批次低分會重試一次並可在 log 看到分數變化。
+- [ ] 採用/略過/改寫有寫進 memory；adopted 的 adoptedText 有被存。
+- [ ] 同 goal+情境下，prompt 有撈到過去高分/採用範例（log 可驗證）。
