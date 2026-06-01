@@ -52,6 +52,7 @@ export function DiagnosisSection({ data, posts, onAskAI }: { data: AdData; posts
   const askQ: Record<string, string> = {
     d1: '我的受眾是否疲乏了？', d2: 'CPA 為什麼偏高？',
     d3: '預算怎麼分配最划算？', d4: '哪支素材表現最好？', d5: '哪個廣告組合應該增加預算？',
+    c1: '這篇貼文要怎麼投廣告加碼推廣？', c2: '為什麼我的貼文互動下滑了？', c3: '我應該多久發一次文？',
   }
   const criticalCount = data.diagnosis.filter(d => d.severity === 'critical').length
   const warningCount = data.diagnosis.filter(d => d.severity === 'warning').length

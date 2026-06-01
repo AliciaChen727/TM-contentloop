@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { MOCK_DATA } from '@/components/ads/mockData'
 import { mapRawAdCreative, buildDiagnosis } from '@/lib/ads/diagnosis'
+import { buildContentDiagnosis } from '@/lib/ads/contentDiagnosis'
 import { Icon } from '@/components/ads/Icon'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import { OverviewSection } from '@/components/ads/sections/OverviewSection'
@@ -831,7 +832,17 @@ export default function AdsPage() {
             <>
               {active === 'overview' && <OverviewSection data={adData} onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts} optimizationGoal={optimizationGoal} />}
               {active === 'insights' && <InsightsSection pageId={selectedPageId} onAskAI={canSidekick ? openSidekick : undefined} />}
-              {active === 'diagnosis' && <DiagnosisSection data={adData} posts={realPosts} onAskAI={canSidekick ? openSidekick : undefined} />}
+              {active === 'diagnosis' && (() => {
+                // Merge content (post) diagnosis into the ad diagnosis for display.
+                // Rules live in contentDiagnosis.ts (Layer 1); posts are page-scoped
+                // and date-filtered to match the rest of the dashboard.
+                const filteredPosts = (realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo)
+                const contentDiag = buildContentDiagnosis(filteredPosts)
+                // Drop the ad-only "帳戶表現良好" placeholder when we have content items.
+                const adDiag = contentDiag.length > 0 ? adData.diagnosis.filter(d => d.id !== 'd0') : adData.diagnosis
+                const mergedData = { ...adData, diagnosis: [...adDiag, ...contentDiag] }
+                return <DiagnosisSection data={mergedData} posts={realPosts} onAskAI={canSidekick ? openSidekick : undefined} />
+              })()}
               {active === 'creative' && <CreativeSection
                 data={adData}
                 onAskAI={canSidekick ? openSidekick : undefined}
