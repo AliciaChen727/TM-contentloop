@@ -6,7 +6,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import { resolvePageProfile } from '@/lib/page-profile'
-import { getFewShotExamples, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
+import { getSidekickFewShot, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
 
 interface MetricsContext {
   // Posts metrics
@@ -592,8 +592,9 @@ export async function POST(req: NextRequest) {
   // Sidekick replies for this page + context, ranked by adoption then eval score.
   if (pageId) {
     try {
+      const geminiKey = process.env.GEMINI_API_KEY ?? (await getUserApiKey(uid, 'gemini'))
       const fewShot = formatFewShot(
-        await getFewShotExamples(pageId, { source: 'sidekick', goal: profile.optimizationGoal ?? null, alertType: contextPage }),
+        await getSidekickFewShot(pageId, message ?? '', { goal: profile.optimizationGoal ?? null, alertType: contextPage }, geminiKey),
       )
       if (fewShot) systemPrompt = `${systemPrompt}\n\n${fewShot}`
     } catch { /* retrieval is best-effort */ }

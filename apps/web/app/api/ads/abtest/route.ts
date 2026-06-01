@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { writeFeedback } from '@/lib/sidekick/feedbackStore'
 
 async function hasPageAccess(uid: string, pageId: string): Promise<boolean> {
   if (isSuperAdmin(uid)) return true
@@ -83,6 +84,23 @@ export async function POST(req: NextRequest) {
       cpaDelta: cpaDelta ?? null,
       completedAt: FieldValue.serverTimestamp(),
     })
+
+    // Feed the proven winner into feedback memory as an adopted example — the
+    // highest-quality learning signal (a real, measured win). 'B' = AI-suggested
+    // variant won; 'A' = control won. The winning copy becomes adoptedText so it
+    // surfaces as a top few-shot example in future diagnosis prompts.
+    const winningCopy = winner === 'B' ? (variantCopy ?? '') : (controlCopy ?? '')
+    if (winningCopy) {
+      const deltaStr = `CTR ${ctrDelta != null ? (ctrDelta > 0 ? `+${ctrDelta}%` : `${ctrDelta}%`) : 'N/A'}、CPA ${cpaDelta != null ? `${cpaDelta > 0 ? '-' : '+'}${Math.abs(cpaDelta)}%` : 'N/A'}`
+      await writeFeedback(pageId, {
+        source: 'diagnosis', alertType: 'ab_winner',
+        context: `A/B 勝出（${winner === 'B' ? 'AI 建議版' : '控制組'}）；當初診斷：${aiDiagnosis ?? 'N/A'}；實際結果：${deltaStr}`,
+        output: winningCopy,
+        humanAction: 'adopted',
+        adoptedText: winningCopy,
+        byUid: uid,
+      }, experimentName ? `ab__${experimentName}`.replace(/\s+/g, '_').slice(0, 180) : undefined).catch(() => {})
+    }
   }
 
   return NextResponse.json({ ok: true })

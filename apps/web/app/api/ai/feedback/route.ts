@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { writeFeedback, type HumanAction } from '@/lib/sidekick/feedbackStore'
+import { getUserApiKey } from '@/lib/userApiKeys'
+import { geminiEmbed } from '@/lib/ai/geminiEmbed'
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -48,15 +50,24 @@ export async function POST(req: NextRequest) {
   // New page-level memory (shared across the page's admins). thumbs-up ≈ adopted,
   // thumbs-down ≈ rejected, unless an explicit humanAction is provided.
   if (pageId) {
+    const ctx = typeof dataSnapshot === 'object' && dataSnapshot ? JSON.stringify(dataSnapshot).slice(0, 2000) : ''
+    // Embed (context + reply) for semantic retrieval. Best-effort — skip on failure.
+    let embedding: number[] | null = null
+    try {
+      const geminiKey = process.env.GEMINI_API_KEY ?? (await getUserApiKey(uid, 'gemini'))
+      if (geminiKey) embedding = await geminiEmbed(`${pageContext ?? ''}\n${response}`, geminiKey)
+    } catch { /* no embedding → retrieval falls back to metadata */ }
+
     await writeFeedback(pageId, {
       source: 'sidekick',
       goal: goal ?? null,
       alertType: pageContext ?? null,
-      context: typeof dataSnapshot === 'object' && dataSnapshot ? JSON.stringify(dataSnapshot).slice(0, 2000) : '',
+      context: ctx,
       output: response,
       humanAction: humanAction ?? (rating === 'helpful' ? 'adopted' : 'rejected'),
       adoptedText: adoptedText ?? null,
       byUid: uid,
+      embedding,
     })
   }
 

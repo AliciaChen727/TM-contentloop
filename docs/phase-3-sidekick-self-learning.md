@@ -183,7 +183,14 @@ pages/{pageId}/sidekickFeedback/{id}
 - [x] **Slice 9** — 粉專層級 feedback memory（`feedbackStore.ts`）+ 改 `api/ai/feedback` + 診斷卡完成/略過→adopted/rejected。
 - [x] **Slice 10** — `feedbackRetrieval.ts`（採用>高分排序 + 冷啟動種子）→ 注入 Sidekick + 診斷 Agent prompt。
 - [x] **Slice 11** — 評估器接線（診斷批次 Agent）：`getOrGenerateDiagnosisCards` 產出→評分→低分同步重試 1 次（理由回灌）→ 每卡 evalScore 寫進 `diag__{cardKey}`（與人類動作同 doc，merge）。route 與 cron 都帶 `evalKeys`（Gemini 主、Claude fallback）。
+- [x] **Slice 12** — A/B 勝出案例進 memory：`api/ads/abtest` 判定 winner(A/B) 時，把勝出文案以 `humanAction:'adopted'` + `adoptedText` 寫進 `sidekickFeedback`（`source:'diagnosis'`, `alertType:'ab_winner'`，docId `ab__{experimentName}`），自動成為診斷 few-shot 的高分範例。
+- [x] **Slice 13** — Sidekick 語意檢索（embedding）：`lib/ai/geminiEmbed.ts`（**gemini-embedding-001**, 3072 維；此 key 無 text-embedding-004）。Sidekick 回覆被 👍/👎 時，於 `api/ai/feedback` 算 `embedding` 存進記錄；Sidekick 取 few-shot 改用 `getSidekickFewShot`：embed 當前提問 → cosine 相似度 + 採用/評分加權 → top 3；無 key/失敗/無向量則 fallback 回 metadata。**診斷卡維持 metadata 比對**（alertType 為固定列舉，類別比對已足夠）。
 - （略）LangSmith 觀測：依 §5 ADR 暫不導入。
+
+### 9.8 檢索策略：診斷 metadata vs Sidekick embedding（決策 2026-06-02）
+- **診斷卡（`source:'diagnosis'`）→ metadata 比對 + 啟發式排序**：情境是固定類別（`low_ctr`/`content_boost`/…），同類別比對即「最相關」，embedding 加分有限。
+- **Sidekick（`source:'sidekick'`）→ embedding 語意檢索**：使用者輸入自由文字，語意相似度才能對到「過去類似問題的好回答」。
+- 向量存 Firestore（資料量小，記憶體算 cosine，**不需專門向量 DB**）。A/B 勝出案例經 Slice 12 進入診斷 few-shot。
 
 ### 9.7 Sidekick 自動評分的取捨（為何不做同步/背景 eval）
 - **Serverless 限制**：回應後的「背景」工作在 Vercel function 不保證跑完（response 結束即可能凍結），fire-and-forget 不可靠。

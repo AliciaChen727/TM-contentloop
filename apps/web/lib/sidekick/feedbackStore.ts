@@ -19,6 +19,7 @@ export interface FeedbackInput {
   humanAction?: HumanAction | null
   adoptedText?: string | null   // final text if adopted/edited (highest signal)
   byUid?: string | null
+  embedding?: number[] | null   // semantic vector (sidekick) for similarity retrieval
 }
 
 // Write/merge a feedback record. When `docId` is given it upserts (preserves
@@ -39,6 +40,7 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   if (input.humanAction !== undefined) payload.humanAction = input.humanAction ?? null
   if (input.adoptedText !== undefined) payload.adoptedText = input.adoptedText ? input.adoptedText.slice(0, 2000) : null
   if (input.byUid !== undefined) payload.byUid = input.byUid ?? null
+  if (input.embedding !== undefined) payload.embedding = input.embedding ?? null
   if (docId) {
     const ref = col.doc(docId)
     const exists = (await ref.get()).exists

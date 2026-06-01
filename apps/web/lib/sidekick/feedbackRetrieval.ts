@@ -4,6 +4,7 @@
 // page hasn't accumulated feedback yet. See docs/phase-3-sidekick-self-learning.md.
 
 import { adminDb } from '@/lib/firebase/admin'
+import { geminiEmbed, cosineSim } from '@/lib/ai/geminiEmbed'
 
 export interface FewShotExample { context: string; text: string; why?: string }
 
@@ -60,6 +61,47 @@ export async function getFewShotExamples(pageId: string, q: Query, n = 3): Promi
     }
   }
   return examples
+}
+
+// Semantic retrieval for Sidekick (free-text queries): embed the current query,
+// cosine-rank past sidekick examples that have stored embeddings, blended with the
+// adoption/eval signal. Falls back to metadata getFewShotExamples when there's no
+// Gemini key, embedding fails, or no embedded examples exist yet.
+export async function getSidekickFewShot(
+  pageId: string, queryText: string, q: Omit<Query, 'source'>, geminiKey: string | null, n = 3,
+): Promise<FewShotExample[]> {
+  const fallback = () => getFewShotExamples(pageId, { source: 'sidekick', ...q }, n)
+  if (!geminiKey || !queryText.trim()) return fallback()
+
+  let qVec: number[]
+  try {
+    qVec = await geminiEmbed(queryText, geminiKey)
+  } catch {
+    return fallback()
+  }
+
+  try {
+    const snap = await adminDb.collection('pages').doc(pageId).collection('sidekickFeedback')
+      .orderBy('createdAt', 'desc').limit(100).get()
+    const scored = snap.docs
+      .map(d => d.data())
+      .filter(d => d.source === 'sidekick' && d.humanAction !== 'rejected' && Array.isArray(d.embedding) && (d.adoptedText || d.output))
+      .map(d => {
+        const sim = cosineSim(qVec, d.embedding as number[])
+        const signal = (d.humanAction === 'adopted' ? 0.15 : 0) + (typeof d.evalScore === 'number' ? d.evalScore / 50 : 0)
+        return { d, score: sim + signal }
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n)
+    const examples = scored.map(({ d }) => ({
+      context: String(d.context ?? ''),
+      text: String(d.adoptedText ?? d.output ?? ''),
+      why: typeof d.evalReasons === 'string' ? d.evalReasons : undefined,
+    }))
+    return examples.length > 0 ? examples : fallback()
+  } catch {
+    return fallback()
+  }
 }
 
 // Render examples as a prompt block (empty string when none).
