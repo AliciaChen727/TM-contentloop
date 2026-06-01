@@ -72,6 +72,15 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     : isClickBased
       ? '點擊效益＝每花 NT$100 取得的連結點擊次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。'
       : 'ROAS＝廣告營收 ÷ 廣告花費，需有購買轉換追蹤的營收資料。'
+
+  // No accessible ad data in range → fall back the 觸及人數 card to organic post
+  // reach (clearly labelled), instead of a meaningless 0. Other ad-only cards
+  // (花費/CPM/CPA) stay 0 — they have no organic equivalent.
+  const postsSource = posts ?? POSTS_DATA
+  const reachPosts = postsSource.filter(p => (p.reach ?? 0) > 0)
+  const totalOrganicReach = reachPosts.reduce((acc, p) => acc + (p.reach ?? 0), 0)
+  const noAdData = (s.spend ?? 0) <= 0 && (s.impressions ?? 0) <= 0
+
   const cards: Record<string, { label: string; value: string; meta: string; color: string; delta: string; dir: string; q: string; tip?: string }> = {
     roas: { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPA 如何降低？', tip: roasTip },
     spend: { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
@@ -79,7 +88,9 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     ctr: { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
     cpc: { label: 'CPC', value: `$${fmt((s.clicks ?? 0) > 0 ? (s.spend ?? 0) / (s.clicks ?? 1) : 0, 2)}`, meta: '每次點擊成本（含互動）', color: 'blue', delta: '', dir: 'neutral', q: 'CPC 如何降低？' },
     cpm: { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
-    reach: { label: '觸及人數', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)} 次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
+    reach: noAdData
+      ? { label: '觸及人數', value: fmtCount(totalOrganicReach), meta: '自然貼文觸及（無廣告）', color: 'blue', delta: '', dir: 'neutral', q: '如何擴大自然觸及？', tip: '此粉專所選區間無廣告數據，這裡顯示的是自然貼文的總觸及人數。' }
+      : { label: '觸及人數', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)} 次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
     impressions: { label: '曝光次數', value: fmtCount(impressions), meta: `觸及 ${fmtCount(reach)} 人`, color: 'blue', delta: '', dir: 'neutral', q: '曝光與觸及的差距代表什麼？' },
     conversions: { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？', tip: isVideoBased ? '此活動為影片觀看目標，顯示影片觀看次數（非轉換率）。' : isClickBased ? '此活動為連結點擊目標，「轉換」即連結點擊，故顯示點擊次數（非轉換率）。真正的購買轉換需設定轉換追蹤。' : '購買轉換次數（非轉換率）。' },
     link_clicks: { label: '連結點擊數', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '已點擊連結次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '怎麼提升連結點擊？' },
@@ -111,9 +122,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     })
     .filter(r => r.spend > 0 || r.impressions > 0)
 
-  const postsSource = posts ?? POSTS_DATA
   const adPosts = postsSource.filter(p => p.hasAd)
-  const reachPosts = postsSource.filter(p => (p.reach ?? 0) > 0)
   const avgReach = reachPosts.length > 0 ? Math.round(reachPosts.reduce((s, p) => s + (p.reach ?? 0), 0) / reachPosts.length) : 0
   const topReach = reachPosts.length > 0 ? Math.max(...reachPosts.map(p => p.reach ?? 0)) : 0
   const top3 = [...reachPosts].sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0)).slice(0, 3)
@@ -127,6 +136,13 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
         </div>
         <div className="ads-date-pill"><Icon name="calendar" size={12} />{data.overview.dateRange}</div>
       </div>
+
+      {noAdData && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'var(--ad-blue-light, #eef3fd)', border: '1px solid var(--ad-border)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12.5, color: 'var(--ad-text2)', lineHeight: 1.6 }}>
+          <span style={{ flexShrink: 0 }}>ℹ️</span>
+          <span>此粉專在所選區間沒有可存取的廣告數據，廣告指標（花費／CTR／CPM 等）顯示為 0。「觸及人數」已改為自然貼文觸及；完整自然成效請見下方「內容表現摘要」或左側「內容表現」。</span>
+        </div>
+      )}
 
       <div className="ads-kpi-grid">
         {kpis.map(k => (
