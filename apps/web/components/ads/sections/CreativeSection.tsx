@@ -280,19 +280,20 @@ function pctColor(val: number, base: number, higherIsBetter: boolean): string {
   return improved ? '#16a34a' : '#dc2626'
 }
 
-interface GroupStats { ctr: number; cpa: number; roas: number; totalSpend: number; count: number }
+interface GroupStats { ctr: number; cpa: number; roas: number; totalSpend: number; totalImpr: number; count: number }
 
 function calcGroupStats(creatives: AdData['creatives']): GroupStats {
-  if (creatives.length === 0) return { ctr: 0, cpa: 0, roas: 0, totalSpend: 0, count: 0 }
-  let totalSpend = 0, wCtr = 0, wCpa = 0, wRoas = 0
+  if (creatives.length === 0) return { ctr: 0, cpa: 0, roas: 0, totalSpend: 0, totalImpr: 0, count: 0 }
+  let totalSpend = 0, totalImpr = 0, wCtr = 0, wCpa = 0, wRoas = 0
   for (const c of creatives) {
     totalSpend += c.spend
+    totalImpr += c.impressions ?? 0
     wCtr += Number(c.ctr) * c.spend
     wCpa += c.cpa * c.spend
     wRoas += c.roas * c.spend
   }
   const s = totalSpend || 1
-  return { ctr: wCtr / s, cpa: wCpa / s, roas: wRoas / s, totalSpend, count: creatives.length }
+  return { ctr: wCtr / s, cpa: wCpa / s, roas: wRoas / s, totalSpend, totalImpr, count: creatives.length }
 }
 
 type AbDiagnosis = {
@@ -306,13 +307,75 @@ function buildAbDiagnosis(
   baseStats: GroupStats,
   testStats: GroupStats,
   testLabel: 'A' | 'B',
-  hasControl: boolean
+  hasControl: boolean,
+  winner: WinnerType
 ): AbDiagnosis {
   const ctrDelta = baseStats.ctr > 0 ? (testStats.ctr - baseStats.ctr) / baseStats.ctr : 0
   const roasDelta = baseStats.roas > 0 ? (testStats.roas - baseStats.roas) / baseStats.roas : 0
   const baseLabel = hasControl ? '控制組' : 'A 版'
   const v = testLabel
 
+  // 投放條件對等性：曝光或花費落差過大 → 數據量不足以達統計顯著性
+  const imprBase = Math.max(baseStats.totalImpr, testStats.totalImpr)
+  const spendBase = Math.max(baseStats.totalSpend, testStats.totalSpend)
+  const imprGap = imprBase > 0 ? Math.abs(testStats.totalImpr - baseStats.totalImpr) / imprBase : 0
+  const spendGap = spendBase > 0 ? Math.abs(testStats.totalSpend - baseStats.totalSpend) / spendBase : 0
+  const spendDiff = Math.abs(testStats.totalSpend - baseStats.totalSpend)
+  const imbalanced = imprGap > 0.30 || spendGap > 0.25
+  const imbalanceDesc = `曝光差 ${(imprGap * 100).toFixed(0)}%、花費差 ${fmtK(spendDiff)}`
+
+  // CTR 文字描述（給已結束 / 不顯著的情境用）
+  const ctrPct = ctrDelta * 100
+  const ctrPhrase = Math.abs(ctrPct) >= 3
+    ? `${v} 版 CTR ${ctrPct >= 0 ? '高出' : '低於'}${baseLabel} ${Math.abs(ctrPct).toFixed(0)}%`
+    : `${v} 版 CTR 與${baseLabel}相近`
+
+  // 1) 使用者已手動判定勝出組 → 投放已結束，直接宣告結果（最高優先）
+  if (winner === 'A' || winner === 'B') {
+    const wl = `${winner} 版`
+    const roiPhrase = roasDelta > 0.02 ? '點擊效益更佳' : roasDelta < -0.02 ? '點擊效益略低' : '點擊效益與其相當'
+    const balanceNote = imbalanced
+      ? `（兩組投放條件略有落差：${imbalanceDesc}，判讀時宜留意）`
+      : '，且兩組投放條件相近、具參考價值'
+    return {
+      pattern: '勝出版本',
+      roiWinner: winner,
+      interpretation: `投放已結束，確認由 ${wl}勝出。${ctrPhrase}，${roiPhrase}${balanceNote}。建議將 ${wl}素材作為後續同類廣告的基準版本。`,
+      actions: [
+        `以 ${wl}素材作為後續同類廣告的基準版本`,
+        `記錄 ${wl}相對${baseLabel}的差異（文案、視覺、CTA），沿用到下一檔活動`,
+      ],
+    }
+  }
+
+  // 2) 明確判定無顯著差異
+  if (winner === 'inconclusive') {
+    return {
+      pattern: null,
+      roiWinner: 'inconclusive',
+      interpretation: imbalanced
+        ? `兩組投放條件不對等（${imbalanceDesc}），數據量尚不足以達統計顯著性，因此無法判定勝出版本。`
+        : `兩組投放條件相近，但各項指標差距未達顯著水準，因此判定無明顯勝出版本。`,
+      actions: imbalanced
+        ? [`下次實驗請拉齊兩版的預算與投放期間，再行判定`, `先沿用現有主力素材，不貿然汰換`]
+        : [`可結束本次實驗，沿用現有主力素材`, `下次調整更顯著的變數（如完全不同的視覺或 hook）再測`],
+    }
+  }
+
+  // 3) winner = pending 且投放條件不對等 → 點出原因，未達顯著
+  if (imbalanced) {
+    return {
+      pattern: null,
+      roiWinner: 'inconclusive',
+      interpretation: `${ctrPhrase}，但兩組投放條件不對等（${imbalanceDesc}），數據量尚不足以達統計顯著性，目前無法判定勝出版本。`,
+      actions: [
+        `拉齊兩版的預算與投放期間後再行判定`,
+        `避免在條件不對等時就汰換素材`,
+      ],
+    }
+  }
+
+  // 4) pending 且條件對等 → 沿用原本的 pattern 規則
   const ctrUp = ctrDelta > 0.15
   const ctrDown = ctrDelta < -0.05
   const roasUp = roasDelta > 0.10
@@ -370,10 +433,10 @@ function buildAbDiagnosis(
   return {
     pattern: null,
     roiWinner: 'inconclusive',
-    interpretation: `目前數據尚未顯示明確的點擊效益差異，建議繼續跑取得更多數據再判斷。`,
+    interpretation: `兩組投放條件相近，但 CTR 與點擊效益差距都還小（未達顯著水準），目前看不出明確的勝出版本，建議再累積一些曝光量後判讀。`,
     actions: [
       `維持現狀，等待曝光量增加後再評估`,
-      `確認兩版本的預算分配是否對等`,
+      `若想更快分出高下，下次可調整更顯著的變數（視覺或 hook）`,
     ],
   }
 }
@@ -539,7 +602,8 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
 
   const testStats = controlStats ? (aStats ?? bStats) : bStats
   const testLabel: 'A' | 'B' = controlStats ? (aStats ? 'A' : 'B') : 'B'
-  const diag = testStats ? buildAbDiagnosis(baseStats, testStats, testLabel, hasControl) : null
+  const winner = (experiment.winner as WinnerType) ?? 'pending'
+  const diag = testStats ? buildAbDiagnosis(baseStats, testStats, testLabel, hasControl, winner) : null
 
   return (
     <div style={{ marginBottom: 16, borderRadius: 12, border: '1.5px solid #bfdbfe', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', padding: '14px 16px' }}>
