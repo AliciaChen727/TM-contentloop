@@ -5,8 +5,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { adminAuth } from '@/lib/firebase/admin'
 import { getUserApiKey } from '@/lib/userApiKeys'
 
-const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，專門為非營利組織與社群團體提供洞察報告。
+const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，為各產業的社群／品牌經營者提供洞察報告。
 請根據提供的數據，用繁體中文撰寫一份簡潔有力的月度洞察報告。
+分析時請以「產業 Benchmark」欄位所標示的產業為比較基準（不要預設為非營利組織）。
 
 【JSON 格式規範 - 嚴格遵守】
 1. 只輸出純 JSON，不要有任何 markdown、code fence 或多餘文字
@@ -28,7 +29,12 @@ const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，專門為非營
 1. 明確指出勝出變體 vs 控制組的「具體數據對比」，例如「A 組 CTR 4.2% vs 控制組 2.1%，高出 100%」。一定要寫出雙方的實際數字。
 2. 解釋勝出的可能原因（從素材/文案角度推論）。
 3. 若 winner 為 pending：說明這可能是因為兩組投放期間或曝光量差異大（看 impressions/spend 差距）導致數據量不足、尚未達統計顯著性，所以系統標為 pending。但仍要「觀察方向性差異」——即使期間不同，仍可指出目前 A 組與控制組的 CTR/CPA 表現差異與初步趨勢，並建議延長觀察或拉齊投放條件後再定奪。
-4. 若完全沒有 variants 數據才寫籠統說明；abTestInsight 無 A/B 數據時寫 ""。`
+4. 若完全沒有 variants 數據才寫籠統說明；abTestInsight 無 A/B 數據時寫 ""。
+
+【同業比較規則（benchmarkInsight）】
+- 以「產業 Benchmark」標示的產業為準解讀互動率與廣告成效，明確指出高於或低於該產業常見水準。
+- 若產業為自由填寫的其他產業（非預設類別），請運用你對「該特定產業」常見社群互動率與廣告 CTR/CPC 水準的知識，給出貼近該產業的同業比較，不要套用非營利組織的數字。
+- 若標示為「未設定」，請在 benchmarkInsight 提醒使用者到設定填寫產業類別以取得更準確的比較。`
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -58,6 +64,9 @@ export async function POST(req: NextRequest) {
 
   const ov = summary.overview as Record<string, unknown>
   const ads = summary.adsSummary as Record<string, unknown>
+  const bc = (summary.benchmarkCompare as { fb?: Record<string, { benchmark?: number }> } | undefined)?.fb
+  const erBench = bc?.engagementRate?.benchmark
+  const ctrBench = bc?.adCtr?.benchmark
 
   // Sanitize ad records (strip newlines/quotes from names) before sending
   function sanitizeAd(a: Record<string, unknown>) {
@@ -80,13 +89,13 @@ export async function POST(req: NextRequest) {
 
 【整體表現】
 - 發文數：${ov?.totalPosts} 則
-- 平均互動率：${ov?.avgEngRate}%
+- 平均互動率：${ov?.avgEngRate}%${erBench != null ? `（同業標準 ${erBench}%）` : ''}
 - 平均觸及：${ov?.avgReach} 人
 - 追蹤者成長：+${ov?.followerGrowth} 人（${ov?.followerGrowthRate}%）
 
 【廣告表現】
 - 投放金額：$${ads?.spend}
-- CTR：${ads?.ctr}%（同業標準 1.8%）
+- CTR：${ads?.ctr}%${ctrBench != null ? `（同業標準 ${ctrBench}%）` : ''}
 - CPC：$${ads?.cpc}
 - CPM：$${ads?.cpm}
 

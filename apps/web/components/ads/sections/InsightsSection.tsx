@@ -78,6 +78,8 @@ interface Summary {
   hasAbTest?: boolean
   benchmarkCompare: { fb: { engagementRate: BenchmarkStatus; followerGrowth: BenchmarkStatus; adCtr: BenchmarkStatus; adCpc: BenchmarkStatus; adCpm: BenchmarkStatus; adRoas?: BenchmarkStatus } }
   benchmarkIndustry: string
+  benchmarkIndustrySet?: boolean
+  industryOther?: string
   adsSummary: { spend: number; ctr: number; cpm: number; cpc: number; clicks: number; impressions: number; frequency: number; reach: number; adCount: number }
 }
 
@@ -541,6 +543,12 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             </div>
             <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>基準：{summary.benchmarkIndustry}</span>
           </div>
+          {summary.benchmarkIndustrySet === false && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#92400e', lineHeight: 1.6 }}>
+              <span style={{ flexShrink: 0 }}>⚠️</span>
+              <span>尚未設定產業類別，目前暫用「非營利組織 / 社群」的預設基準，比較可能不準。請到「設定」填寫產業類別，系統會自動換成該產業的同業 benchmark。</span>
+            </div>
+          )}
           {metricRow('平均互動率（FB+IG）', summary.benchmarkCompare.fb.engagementRate)}
           {metricRow('追蹤者成長率', summary.benchmarkCompare.fb.followerGrowth)}
           {(GOAL_AD_METRICS[summary.optimizationGoal] ?? []).includes('adRoas') && (

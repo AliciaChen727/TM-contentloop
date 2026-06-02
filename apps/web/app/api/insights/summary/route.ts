@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
-import { BENCHMARKS, getBenchmarkByGoal } from '@/lib/benchmarks'
+import { getBenchmarkByIndustry, getBenchmarkByGoal } from '@/lib/benchmarks'
+import { resolvePageProfile } from '@/lib/page-profile'
+import type { Industry } from '@/lib/profile-types'
 
 // Period helpers
 function getPeriodRange(year: number, periodType: 'month' | 'quarter' | 'year', value: number): {
@@ -98,8 +100,15 @@ export async function GET(req: NextRequest) {
   // Goal/industry live under onboardingData (page-scoped); fall back to any
   // legacy flat fields, then defaults.
   const ob = (profile.onboardingData ?? {}) as Record<string, unknown>
-  const optimizationGoal = (ob.optimizationGoal ?? profile.optimizationGoal ?? 'clicks') as string
-  const industry = (ob.industry ?? profile.industry ?? 'event') as string
+  // Canonical resolver: page-level override → user onboarding → legacy. This is
+  // where a per-page industry (and the data owner's own onboarding, e.g. Irene's
+  // education) actually lives — the page doc onboardingData is only a fallback.
+  const resolved = await resolvePageProfile(dataOwnerUid, pageId).catch(() => null)
+  const optimizationGoal = (resolved?.optimizationGoal ?? ob.optimizationGoal ?? profile.optimizationGoal ?? 'clicks') as string
+  const industryKey = (resolved?.industry ?? (ob.industry as Industry | undefined) ?? (profile.industry as Industry | undefined) ?? null)
+  const industryOther = resolved?.industryOther ?? (ob.industryOther as string | undefined) ?? null
+  const indBench = getBenchmarkByIndustry(industryKey, industryOther)
+  const industry = industryKey ?? 'event'
 
   // --- Fetch FB posts: both page-scoped (live sync) + legacy (CSV/MD import) ---
   // Limit caps Firestore reads/cost. We fetch the latest N then filter by the
@@ -429,8 +438,8 @@ export async function GET(req: NextRequest) {
   const goalBenchmarks = getBenchmarkByGoal(optimizationGoal)
   const benchmarkCompare = {
     fb: {
-      engagementRate: { value: avgEngRate, benchmark: BENCHMARKS.fb.engagementRate, status: avgEngRate >= BENCHMARKS.fb.engagementRate ? 'above' : 'below' as const },
-      followerGrowth: { value: followerGrowthRate, benchmark: BENCHMARKS.fb.followerGrowthMonthly, status: followerGrowthRate >= BENCHMARKS.fb.followerGrowthMonthly ? 'above' : 'below' as const },
+      engagementRate: { value: avgEngRate, benchmark: indBench.fb.engagementRate, status: avgEngRate >= indBench.fb.engagementRate ? 'above' : 'below' as const },
+      followerGrowth: { value: followerGrowthRate, benchmark: indBench.fb.followerGrowthMonthly, status: followerGrowthRate >= indBench.fb.followerGrowthMonthly ? 'above' : 'below' as const },
       adCtr: { value: Number(adCtr.toFixed(2)), benchmark: goalBenchmarks.ctr, status: adCtr === 0 ? 'nodata' : adCtr >= goalBenchmarks.ctr ? 'above' : 'below' as const },
       adCpc: { value: Number(adCpc.toFixed(2)), benchmark: goalBenchmarks.cpc, status: adCpc === 0 ? 'nodata' : adCpc <= goalBenchmarks.cpc ? 'above' : 'below' as const },
       adCpm: { value: Number(adCpm.toFixed(2)), benchmark: goalBenchmarks.cpm, status: adCpm === 0 ? 'nodata' : adCpm <= goalBenchmarks.cpm ? 'above' : 'below' as const },
@@ -452,7 +461,9 @@ export async function GET(req: NextRequest) {
     topAds, underAds,
     abTest, hasAbTest,
     benchmarkCompare,
-    benchmarkIndustry: BENCHMARKS.industry,
+    benchmarkIndustry: indBench.label,
+    benchmarkIndustrySet: indBench.isSet,
+    industryOther,
     adsSummary: {
       spend: adSpend, impressions: adImpressions, clicks: adClicks,
       ctr: Number(adCtr.toFixed(2)), cpc: Number(adCpc.toFixed(2)),
