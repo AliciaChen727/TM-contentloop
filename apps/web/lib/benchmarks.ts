@@ -1,8 +1,10 @@
 // Industry benchmarks for social / ad performance comparison.
-// Sources: Rival IQ & Sprout Social 2024 Industry Benchmark Reports + Meta Ads
-// benchmarks for Taiwan/Asia. Organic-engagement values are directional and
-// scaled to this dashboard's engagement-rate definition — adjust as real data
-// accumulates.
+// Sources: Rival IQ 2025 & Sprout Social Industry Benchmark Reports, Socialinsider
+// 2025/2026 + Meta Ads benchmarks for Taiwan/Asia. Organic-engagement values are
+// directional and scaled to this dashboard's engagement-rate definition (which is
+// reach-based, vs the reports' follower-based denominator) — they preserve the
+// relative ordering across industries, not absolute report figures. Adjust as
+// real data accumulates. See personal_brand below for a worked example/citation.
 
 import type { Industry } from './profile-types'
 
@@ -48,11 +50,16 @@ export const INDUSTRY_BENCHMARKS: Record<Industry, IndustryBenchmark> = {
     fb: { engagementRate: 0.60, reachRate: 8.0, followerGrowthMonthly: 0.5 },
     ig: { engagementRate: 1.5, reachRate: 12.0, followerGrowthMonthly: 1.0 },
   },
-  // 個人品牌 / 創作者，受眾黏著度高、互動率最高
+  // 個人品牌 / 創作者 / 自媒體 — 全表互動率最高的類別。
+  // 依據（2026-06 查證）：Rival IQ 2025 報告 IG 全產業中位 ER 0.36%、前 25% 1.05%，
+  // 而 Influencers/Creators 是互動率最高的 niche 之一（carousel/photo 帶頭）；一般
+  // 認定 IG 1–3% 普通、3–6% 好。FB 全平台 ER 很低（2025 約 0.15%, Socialinsider），
+  // 創作者略高於平均。註：Rival IQ 是 by-follower 分母，本表沿用偏 reach-based 的同
+  // 一尺度（值較高）以維持跨產業可比，故此處取「全表最高」的相對定位、非照搬原始值。
   personal_brand: {
     label: '個人品牌 / 自媒體',
     fb: { engagementRate: 0.80, reachRate: 10.0, followerGrowthMonthly: 0.8 },
-    ig: { engagementRate: 2.2, reachRate: 16.0, followerGrowthMonthly: 1.5 },
+    ig: { engagementRate: 2.5, reachRate: 16.0, followerGrowthMonthly: 1.5 },
   },
   // 自由填寫產業：沿用 base 數值，實際同業比較交由洞察報告 LLM 依該產業給出
   other: {
