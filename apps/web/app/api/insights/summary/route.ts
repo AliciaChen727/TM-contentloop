@@ -436,9 +436,18 @@ export async function GET(req: NextRequest) {
 
   // --- Goal-aware benchmark comparison ---
   const goalBenchmarks = getBenchmarkByGoal(optimizationGoal)
+  // Blended engagement benchmark: avgEngRate is a per-post mean across FB+IG, so
+  // weight the FB / IG industry benchmarks by the FB/IG post split that actually
+  // contributed (postsWithReach), instead of comparing against FB-only.
+  const fbWithReach = postsWithReach.filter(p => p.platform === 'FB').length
+  const igWithReach = postsWithReach.filter(p => p.platform === 'IG').length
+  const engDenom = fbWithReach + igWithReach
+  const engBenchmark = engDenom > 0
+    ? Number(((fbWithReach * indBench.fb.engagementRate + igWithReach * indBench.ig.engagementRate) / engDenom).toFixed(2))
+    : indBench.fb.engagementRate
   const benchmarkCompare = {
     fb: {
-      engagementRate: { value: avgEngRate, benchmark: indBench.fb.engagementRate, status: avgEngRate >= indBench.fb.engagementRate ? 'above' : 'below' as const },
+      engagementRate: { value: avgEngRate, benchmark: engBenchmark, status: avgEngRate >= engBenchmark ? 'above' : 'below' as const },
       followerGrowth: { value: followerGrowthRate, benchmark: indBench.fb.followerGrowthMonthly, status: followerGrowthRate >= indBench.fb.followerGrowthMonthly ? 'above' : 'below' as const },
       adCtr: { value: Number(adCtr.toFixed(2)), benchmark: goalBenchmarks.ctr, status: adCtr === 0 ? 'nodata' : adCtr >= goalBenchmarks.ctr ? 'above' : 'below' as const },
       adCpc: { value: Number(adCpc.toFixed(2)), benchmark: goalBenchmarks.cpc, status: adCpc === 0 ? 'nodata' : adCpc <= goalBenchmarks.cpc ? 'above' : 'below' as const },
