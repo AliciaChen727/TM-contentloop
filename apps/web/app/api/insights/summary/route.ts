@@ -103,10 +103,17 @@ export async function GET(req: NextRequest) {
   // Canonical resolver: page-level override → user onboarding → legacy. This is
   // where a per-page industry (and the data owner's own onboarding, e.g. Irene's
   // education) actually lives — the page doc onboardingData is only a fallback.
+  // Per-page settings are saved by the settings UI onto the PAGE DOC's
+  // onboardingData (pages/{pageId}.onboardingData) — that is the per-page source
+  // of truth and MUST win. resolvePageProfile only reads the profile/profile
+  // subcollection → user onboarding → legacy, so it can only serve as a last
+  // fallback for pages that never saved page-level settings. (Bug 2026-06-02:
+  // putting resolved first let the owner's user-level goal=clicks override each
+  // page's real goal — both D67 & Legacy reports showed 提升點擊率.)
   const resolved = await resolvePageProfile(dataOwnerUid, pageId).catch(() => null)
-  const optimizationGoal = (resolved?.optimizationGoal ?? ob.optimizationGoal ?? profile.optimizationGoal ?? 'clicks') as string
-  const industryKey = (resolved?.industry ?? (ob.industry as Industry | undefined) ?? (profile.industry as Industry | undefined) ?? null)
-  const industryOther = resolved?.industryOther ?? (ob.industryOther as string | undefined) ?? null
+  const optimizationGoal = (ob.optimizationGoal ?? profile.optimizationGoal ?? resolved?.optimizationGoal ?? 'clicks') as string
+  const industryKey = ((ob.industry as Industry | undefined) ?? (profile.industry as Industry | undefined) ?? resolved?.industry ?? null)
+  const industryOther = (ob.industryOther as string | undefined) ?? resolved?.industryOther ?? null
   const indBench = getBenchmarkByIndustry(industryKey, industryOther)
   const industry = industryKey ?? 'event'
 
