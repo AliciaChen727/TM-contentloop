@@ -3,8 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase/client'
+import { auth } from '@/lib/firebase/client'
 import { FbPostsTable } from '@/components/dashboard/FbPostsTable'
 import { FbCsvImport } from '@/components/dashboard/FbCsvImport'
 import { FbMdImport } from '@/components/dashboard/FbMdImport'
@@ -110,20 +109,16 @@ export default function DashboardPage() {
       const idToken = await u.getIdToken()
       const headers = { Authorization: `Bearer ${idToken}` }
 
-      // Fetch pages list from API
+      // Fetch pages list from API (BFF — Admin SDK; client never reads Firestore)
       const pagesRes = await fetch('/api/pages', { headers })
       let pageList: PageInfo[] = []
+      let adminFlag = false
       if (pagesRes.ok) {
         const d = await pagesRes.json()
         pageList = d.pages ?? []
         setPages(pageList)
         setIsOwner(d.isOwner ?? false)
-      }
-
-      // Fallback: try legacy metaTokens/page doc for display name
-      if (pageList.length === 0) {
-        const tokenSnap = await getDoc(doc(db, 'users', u.uid, 'metaTokens', 'page'))
-        if (tokenSnap.exists()) setPageData(tokenSnap.data() as PageTokenData)
+        adminFlag = d.isAdmin ?? false
       }
 
       // Respect previously selected page; fall back to first page
@@ -139,10 +134,7 @@ export default function DashboardPage() {
         localStorage.setItem('selectedPageId', activePageId)
         localStorage.setItem('selectedPageName', activePageName)
       }
-      // Determine if user is admin (has Facebook token)
-      const { getDocs: getDocsClient, collection: collectionClient } = await import('firebase/firestore')
-      const tokensSnap = await getDocsClient(collectionClient(db, 'users', u.uid, 'metaTokens'))
-      const adminFlag = tokensSnap.docs.some(d => d.id !== 'userToken')
+      // Admin flag comes from /api/pages (server-side), not a client Firestore read.
       setIsAdmin(adminFlag)
       setUserName(u.displayName ?? u.email ?? '')
       setIdToken(idToken)

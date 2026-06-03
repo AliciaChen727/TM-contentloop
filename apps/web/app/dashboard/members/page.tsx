@@ -2,8 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
-import { getDocs, collection } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase/client'
+import { auth } from '@/lib/firebase/client'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface Member {
@@ -48,12 +47,12 @@ export default function MembersPage() {
       const token = await u.getIdToken()
       setIdToken(token)
 
-      // Check if admin
-      const tokensSnap = await getDocs(collection(db, 'users', u.uid, 'metaTokens'))
-      const adminDocs = tokensSnap.docs.filter(d => d.id !== 'userToken')
-      if (adminDocs.length === 0) { router.replace('/dashboard'); return }
+      // Check if admin via server (BFF — client never reads Firestore).
+      const pagesRes = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
+      const adminPages: { pageId: string }[] = pagesRes.ok ? ((await pagesRes.json()).pages ?? []) : []
+      if (adminPages.length === 0) { router.replace('/dashboard'); return }
 
-      const pid = localStorage.getItem('selectedPageId') ?? adminDocs[0].id
+      const pid = localStorage.getItem('selectedPageId') ?? adminPages[0].pageId
       setPageId(pid)
       await loadMembers(token, pid)
       setLoading(false)

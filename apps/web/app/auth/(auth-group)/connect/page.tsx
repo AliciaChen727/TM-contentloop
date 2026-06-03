@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
-import { collection, getDocs } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase/client'
+import { auth } from '@/lib/firebase/client'
 import { Suspense } from 'react'
 
 const SCOPES = [
@@ -33,13 +32,14 @@ function ConnectContent() {
         router.replace('/auth/login')
         return
       }
-      // Query existing page tokens to show the correct page name in instructions
+      // Query existing pages via server (BFF — client never reads Firestore)
+      // to show the correct page name in instructions.
       try {
-        const tokensSnap = await getDocs(collection(db, 'users', user.uid, 'metaTokens'))
+        const token = await user.getIdToken()
+        const res = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
+        const pages: { pageName?: string }[] = res.ok ? ((await res.json()).pages ?? []) : []
         const names = Array.from(new Set(
-          tokensSnap.docs
-            .filter(d => d.id !== 'userToken' && d.data().pageName)
-            .map(d => d.data().pageName as string)
+          pages.map(p => p.pageName).filter((n): n is string => !!n)
         ))
         setPageLabel(names.length > 0 ? names.join('、') : '')
       } catch {

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   // Skip this when ownOnly=true so settings page only shows managed pages.
   if (isSuperAdmin(uid) && !ownOnly) {
     const allPages = await listAllPages()
-    return NextResponse.json({ pages: allPages, isOwner: true })
+    return NextResponse.json({ pages: allPages, isOwner: true, isAdmin: true })
   }
 
   interface PageEntry { pageId: string; pageName: string; igUserId: string | null; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }
@@ -42,6 +42,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Admin = has at least one connected-Meta page (before viewer pages appended).
+  const isAdmin = pages.length > 0
+
   // Also include viewer pages granted via invite (skipped when ownOnly=true)
   const viewerSnap = !ownOnly ? await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get() : null
   if (viewerSnap?.exists) {
@@ -60,5 +63,5 @@ export async function GET(req: NextRequest) {
     if (adminDoc.data()?.isOwner === true) { isOwner = true; break }
   }
 
-  return NextResponse.json({ pages, isOwner })
+  return NextResponse.json({ pages, isOwner, isAdmin })
 }

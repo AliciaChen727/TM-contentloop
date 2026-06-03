@@ -61,5 +61,12 @@ export async function GET(req: NextRequest) {
     if (!authorizedPageIds.includes(pageId)) authorizedPageIds.push(pageId)
   }
 
-  return NextResponse.json({ authorized: authorizedPageIds.length > 0, authorizedPageIds })
+  // hasConnectedMeta: user has connected Meta (metaTokens exist) regardless of
+  // current authorization — lets the login flow distinguish "connected but
+  // unauthorized" (show error) from "brand new user" (go to /auth/connect).
+  return NextResponse.json({
+    authorized: authorizedPageIds.length > 0,
+    authorizedPageIds,
+    hasConnectedMeta: pageIds.length > 0,
+  })
 }

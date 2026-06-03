@@ -1,41 +1,37 @@
 'use client'
 
 import { signInWithPopup, signOut, linkWithCredential, FacebookAuthProvider, type AuthError } from 'firebase/auth'
-import { collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { auth, googleProvider, facebookProvider, db } from '@/lib/firebase/client'
+import { auth, googleProvider, facebookProvider } from '@/lib/firebase/client'
 
 export default function LoginPage() {
   const router = useRouter()
   const [error, setError] = useState('')
 
-  async function handlePostLogin(idToken: string, uid: string) {
+  async function handlePostLogin(idToken: string) {
     await fetch('/api/auth/accept-invite', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}` },
     })
 
-    const tokensSnap = await getDocs(collection(db, 'users', uid, 'metaTokens'))
-    const hasAdminPages = tokensSnap.docs.some(d => d.id !== 'userToken')
+    // All routing decisions go through the server (BFF, Admin SDK) — the client
+    // must NOT read Firestore directly (security rules block it → login fails).
+    const authRes = await fetch('/api/auth/check-admin-auth', {
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    const { authorized, hasConnectedMeta } = authRes.ok
+      ? await authRes.json()
+      : { authorized: false, hasConnectedMeta: false }
 
-    if (hasAdminPages) {
-      const authRes = await fetch('/api/auth/check-admin-auth', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
-      const { authorized } = authRes.ok ? await authRes.json() : { authorized: false }
-      if (!authorized) {
-        await signOut(auth)
-        setError('你沒有取得此粉絲頁的授權，請聯絡管理員取得存取權限。')
-        return
-      }
+    if (authorized) {
       router.push('/dashboard')
+    } else if (hasConnectedMeta) {
+      // Connected Meta before but no current authorization on any page.
+      await signOut(auth)
+      setError('你沒有取得此粉絲頁的授權，請聯絡管理員取得存取權限。')
     } else {
-      const pagesRes = await fetch('/api/pages', { headers: { Authorization: `Bearer ${idToken}` } })
-      if (pagesRes.ok) {
-        const { pages } = await pagesRes.json()
-        if (pages.length > 0) { router.push('/dashboard'); return }
-      }
+      // Brand new user — go connect a page.
       router.push('/auth/connect')
     }
   }
@@ -45,7 +41,7 @@ export default function LoginPage() {
       setError('')
       const result = await signInWithPopup(auth, googleProvider)
       const idToken = await result.user.getIdToken()
-      await handlePostLogin(idToken, result.user.uid)
+      await handlePostLogin(idToken)
     } catch (err) {
       console.error('Login failed:', err)
       setError('登入失敗，請重試。')
@@ -57,7 +53,7 @@ export default function LoginPage() {
       setError('')
       const result = await signInWithPopup(auth, facebookProvider)
       const idToken = await result.user.getIdToken()
-      await handlePostLogin(idToken, result.user.uid)
+      await handlePostLogin(idToken)
     } catch (err: unknown) {
       const authErr = err as AuthError
       if (authErr?.code === 'auth/account-exists-with-different-credential') {
@@ -78,7 +74,7 @@ export default function LoginPage() {
             }
             setError('')
             const idToken = await googleResult.user.getIdToken()
-            await handlePostLogin(idToken, googleResult.user.uid)
+            await handlePostLogin(idToken)
           } catch (googleErr) {
             console.error('Google sign-in during linking failed:', googleErr)
             setError('帳號連結失敗，請重試或聯絡管理員。')
