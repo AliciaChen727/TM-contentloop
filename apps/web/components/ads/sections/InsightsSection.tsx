@@ -277,12 +277,29 @@ function fingerprintOf(s: Summary): string {
   return ['v4', a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
 }
 
+// First/last calendar day (YYYY-MM-DD) of the selected report period — used to
+// auto-sync ads for exactly the range the report will display.
+function periodBounds(
+  periodType: 'month' | 'quarter' | 'year',
+  year: number, month: number, quarter: number,
+): { since: string; until: string } {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const lastDay = (y: number, m: number) => new Date(y, m, 0).getDate() // m = 1-based
+  if (periodType === 'year') return { since: `${year}-01-01`, until: `${year}-12-31` }
+  if (periodType === 'quarter') {
+    const sm = (quarter - 1) * 3 + 1, em = sm + 2
+    return { since: `${year}-${pad(sm)}-01`, until: `${year}-${pad(em)}-${pad(lastDay(year, em))}` }
+  }
+  return { since: `${year}-${pad(month)}-01`, until: `${year}-${pad(month)}-${pad(lastDay(year, month))}` }
+}
+
 export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?: (q: string) => void }) {
   const [periodType, setPeriodType] = useState<'month' | 'quarter' | 'year'>('month')
   const [year, setYear] = useState(CURRENT_YEAR)
   const [month, setMonth] = useState(CURRENT_MONTH)
   const [quarter, setQuarter] = useState(CURRENT_QUARTER)
   const [loading, setLoading] = useState(false)
+  const [syncingAds, setSyncingAds] = useState(false)
   const [cacheChecking, setCacheChecking] = useState(false)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [report, setReport] = useState<InsightReport | null>(null)
@@ -366,12 +383,28 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       if (!idToken) throw new Error('請先登入')
       const headers = { Authorization: `Bearer ${idToken}` }
 
+      // Step 0: best-effort sync ads for the SELECTED report period, so the
+      // report reflects the whole month/quarter/year. Without this, the ad
+      // snapshot only covers whatever range the ads-dashboard header was last
+      // synced with — which often won't match the report period (footgun).
+      // Admins only; viewers get 403 → ignored. Failure never blocks the report.
+      const { since, until } = periodBounds(periodType, year, month, quarter)
+      setSyncingAds(true)
+      try {
+        await fetch('/api/ads/sync', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId, since, until }),
+        })
+      } catch { /* best-effort: report still generates from existing snapshot */ }
+      setSyncingAds(false)
+
       // Build query params
       const params = new URLSearchParams({ pageId, periodType, year: String(year) })
       if (periodType === 'month') params.set('month', String(month))
       else if (periodType === 'quarter') params.set('quarter', String(quarter))
 
-      // Step 1: fetch summary
+      // Step 1: fetch summary (recomputed live from the freshly-synced snapshot)
       const sumRes = await fetch(`/api/insights/summary?${params}`, { headers })
       if (!sumRes.ok) throw new Error('資料載入失敗')
       const sumData: Summary = await sumRes.json()
@@ -402,6 +435,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       setError(e instanceof Error ? e.message : '發生錯誤')
     } finally {
       setLoading(false)
+      setSyncingAds(false)
     }
   }
 
@@ -462,14 +496,14 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
         {!report && !cacheChecking && (
           <button onClick={() => generate()} disabled={loading}
             style={{ padding: '7px 18px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: loading ? '#94a3b8' : 'var(--ad-blue)', color: 'white', cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {loading ? '⋯ 分析中' : '✨ 生成報告'}
+            {syncingAds ? '⋯ 同步廣告中' : loading ? '⋯ 分析中' : '✨ 生成報告'}
           </button>
         )}
         {report && (
           <>
             <button onClick={() => generate(true)} disabled={loading}
               style={{ padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 8, border: '1px solid var(--ad-border)', background: 'white', color: 'var(--ad-text2)', cursor: loading ? 'default' : 'pointer' }}>
-              {loading ? '⋯' : '↻ 重新生成'}
+              {syncingAds ? '⋯ 同步廣告中' : loading ? '⋯ 生成中' : '↻ 重新生成'}
             </button>
             {summary && (
               <button onClick={() => {
