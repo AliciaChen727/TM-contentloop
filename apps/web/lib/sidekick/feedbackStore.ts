@@ -20,6 +20,7 @@ export interface FeedbackInput {
   recommendToFewShot?: boolean | null  // evalScore>=7 && humanAction='adopted'
   humanAction?: HumanAction | null
   adoptedText?: string | null   // final text if adopted/edited (highest signal)
+  metricsBefore?: { ctr: number; cpc: number; roas: number } | null  // account metrics at adoption (for 7-day delta)
   byUid?: string | null
   embedding?: number[] | null   // semantic vector (sidekick) for similarity retrieval
 }
@@ -42,6 +43,9 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   if (input.weakestDimension !== undefined) payload.weakestDimension = input.weakestDimension ?? null
   if (input.recommendToFewShot !== undefined) payload.recommendToFewShot = input.recommendToFewShot ?? null
   if (input.humanAction !== undefined) payload.humanAction = input.humanAction ?? null
+  // Stamp adoption time so the daily batch knows when the 7-day effect window opens.
+  if (input.humanAction === 'adopted') payload.adoptedAt = FieldValue.serverTimestamp()
+  if (input.metricsBefore !== undefined) payload.metricsBefore = input.metricsBefore ?? null
   if (input.adoptedText !== undefined) payload.adoptedText = input.adoptedText ? input.adoptedText.slice(0, 2000) : null
   if (input.byUid !== undefined) payload.byUid = input.byUid ?? null
   if (input.embedding !== undefined) payload.embedding = input.embedding ?? null

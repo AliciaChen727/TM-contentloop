@@ -85,10 +85,20 @@ export async function POST(req: NextRequest) {
   // place. Best-effort — never block the status write.
   if (output) {
     const humanAction = status === 'completed' ? 'adopted' : status === 'dismissed' ? 'rejected' : null
+    // Snapshot account-level metrics at adoption so the daily batch can compute a
+    // 7-day delta (decision: account granularity). adInsights summary is kept fresh
+    // by the daily ad sync → no Meta call needed here or in the batch.
+    let metricsBefore: { ctr: number; cpc: number; roas: number } | null = null
+    if (status === 'completed') {
+      try {
+        const s = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data()?.summary ?? {}
+        metricsBefore = { ctr: Number(s.ctr) || 0, cpc: Number(s.cpa ?? s.cpc) || 0, roas: Number(s.roas) || 0 }
+      } catch { /* best-effort */ }
+    }
     try {
       await writeFeedback(pageId, {
         source: 'diagnosis', goal: goal ?? null, alertType: alertType ?? null,
-        context: context ?? null, output, humanAction, byUid: uid,
+        context: context ?? null, output, humanAction, metricsBefore, byUid: uid,
       }, `diag__${cardKey}`)
     } catch (e) {
       console.error('[diagnosis-status] feedback write failed', e)
