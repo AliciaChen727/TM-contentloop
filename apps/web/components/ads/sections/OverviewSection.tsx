@@ -39,7 +39,7 @@ export type OptimizationGoal = 'clicks' | 'conversion' | 'reach' | 'event'
 // 3 leading KPI ids per optimization goal. Cards not listed retain original order behind these.
 const GOAL_PRIORITY: Record<OptimizationGoal, string[]> = {
   clicks: ['ctr', 'cpc', 'link_clicks'],
-  conversion: ['roas', 'cpa', 'conversions'],
+  conversion: ['roasReal', 'roas', 'cpa', 'conversions'],
   reach: ['reach', 'cpm', 'impressions'],
   event: ['ctr', 'cpl', 'link_page_views'],
 }
@@ -97,10 +97,15 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     cpl: { label: 'CPL', value: cpl > 0 ? `$${fmt(cpl, 2)}` : '–', meta: '每次報名點擊成本', color: 'orange', delta: '', dir: 'neutral', q: 'CPL 如何降低？' },
     link_page_views: { label: '連結頁面瀏覽', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '連結頁面瀏覽次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '連結頁面瀏覽如何提升？' },
     frequency: { label: '頻率', value: frequency.toFixed(2), meta: '建議 < 3.5', color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? '⚠ 偏高' : '正常', dir: frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
+    // Dedicated real-ROAS card. Only meaningful for purchase campaigns with revenue
+    // tracking; otherwise shows N/A + how to enable it (don't fake a ROAS number).
+    roasReal: (convType === 'purchase' && roas > 0)
+      ? { label: 'ROAS', value: `${roas.toFixed(2)}x`, meta: '營收 ÷ 花費', color: 'green', delta: '', dir: 'neutral', q: 'ROAS 如何進一步提升？' }
+      : { label: 'ROAS', value: 'N/A', meta: '需設定購買轉換追蹤', color: '', delta: '', dir: 'neutral', q: '如何設定購買轉換追蹤以計算 ROAS？', tip: '真正的 ROAS（營收÷花費）需在 Meta 設定購買事件與金額追蹤才能計算；此活動非購買目標，故無法計算。' },
   }
 
   // Default order (used when no onboarding goal selected) preserves prior layout.
-  const defaultOrder = ['roas', 'spend', 'cpa', 'ctr', 'cpm', 'reach', 'conversions', 'frequency']
+  const defaultOrder = ['roas', 'roasReal', 'spend', 'cpa', 'ctr', 'cpm', 'reach', 'conversions', 'frequency']
   const lead = optimizationGoal ? GOAL_PRIORITY[optimizationGoal] : []
   const tail = defaultOrder.filter(id => !lead.includes(id))
   const orderedIds = [...lead, ...tail]
