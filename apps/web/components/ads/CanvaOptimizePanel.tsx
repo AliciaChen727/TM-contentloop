@@ -2,6 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { auth } from '@/lib/firebase/client'
 import { uploadImageForCanva } from '@/lib/firebase/storage'
+import { fireCreativeSignal } from '@/lib/ai/creativeSignalClient'
 
 interface Props {
   open: boolean
@@ -123,6 +124,7 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
         return
       }
       setPushedUrl(d.editUrl)
+      fireCreativeSignal(pageId, briefText.trim() || gen.headline || '', 'canva_import')
     } catch {
       setPushError('推送失敗，請稍後再試。')
     } finally {
@@ -174,6 +176,7 @@ export function CanvaOptimizePanel({ open, onClose, pageId, onSendToChat }: Prop
     a.href = `data:${gen.mimeType};base64,${gen.imageData}`
     a.download = `contentloop-creative-${Date.now()}.png`
     a.click()
+    fireCreativeSignal(pageId, briefText.trim() || gen.headline || '', 'download')
   }
 
   async function handleImageFile(file: File) {

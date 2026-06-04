@@ -9,8 +9,12 @@ import { FieldValue } from 'firebase-admin/firestore'
 export type HumanAction = 'adopted' | 'edited' | 'rejected'
 
 export interface FeedbackInput {
-  source: 'sidekick' | 'diagnosis'
+  source: 'sidekick' | 'diagnosis' | 'creative'
   goal?: string | null          // optimizationGoal
+  // Creative (image-gen) intent signal: 'canva_import' (took into Canva) /
+  // 'download'. Weaker than adopted — weighted by signalWeight in retrieval.
+  signal?: string | null
+  signalWeight?: number | null
   alertType?: string | null     // diagnosis: DiagItem.type；sidekick: contextPage
   context?: string | null       // ad/post data or conversation context
   output?: string | null        // the AI text
@@ -40,6 +44,8 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   // human-action write, which has no evalScore) never clobbers fields set by an
   // earlier write (e.g. the generation-time eval score). `undefined` = leave as-is.
   const payload: Record<string, unknown> = { source: input.source, updatedAt: FieldValue.serverTimestamp() }
+  if (input.signal !== undefined) payload.signal = input.signal ?? null
+  if (input.signalWeight !== undefined) payload.signalWeight = input.signalWeight ?? null
   if (input.goal !== undefined) payload.goal = input.goal ?? null
   if (input.alertType !== undefined) payload.alertType = input.alertType ?? null
   if (input.context !== undefined) payload.context = (input.context ?? '').slice(0, 2000)

@@ -5,6 +5,7 @@ import { auth } from '@/lib/firebase/client'
 import { uploadVideoForAnalysis } from '@/lib/firebase/storage'
 import { Icon } from './Icon'
 import { CanvaOptimizePanel } from './CanvaOptimizePanel'
+import { fireCreativeSignal } from '@/lib/ai/creativeSignalClient'
 
 interface CopyVariant { label: string; copy: string; rationale: string }
 
@@ -1062,13 +1063,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                               <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
                                 <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenImage}>↻ 重新生成</button>
                                 <a href={msg.imageUrl} download="ad-creative.jpg"
+                                  onClick={() => fireCreativeSignal(pageId, editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? '', 'download')}
                                   style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', color: 'var(--ad-text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
                                   ⬇ 下載圖片
                                 </a>
                               </div>
                               {canvaConnected && (
                                 <button
-                                  onClick={() => pushToCanva(msg.id, msg.imageUrl!)}
+                                  onClick={() => { fireCreativeSignal(pageId, editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? '', 'canva_import'); pushToCanva(msg.id, msg.imageUrl!) }}
                                   disabled={canvaPushing === msg.id}
                                   style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '7px 0', borderRadius: 8, border: 'none', background: canvaPushing === msg.id ? '#b2dfdb' : '#4dd0c4', color: '#fff', cursor: canvaPushing === msg.id ? 'default' : 'pointer', fontWeight: 500 }}>
                                   {canvaPushing === msg.id ? '推送中⋯' : '🎨 推到 Canva 建立設計稿'}
