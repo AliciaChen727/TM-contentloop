@@ -737,7 +737,7 @@ export async function POST(req: NextRequest) {
     summary: { spend: pageSpend, reach: pageReach, impressions: pageImpressions, clicks: pageClicks, ctr: pageCtr, cpm: pageCpm, frequency: pageFrequency, conversions: pageConversions, revenue: pageRevenue, roas: pageRoas, cpa: pageCpa },
     daily: pageFilteredDaily,
     adCreatives: adCreativesWithTitle,
-    creativeFingerprint: computeCreativeFingerprint(adCreativesWithTitle),
+    creativeFingerprint: computeCreativeFingerprint(pageMatchedCreatives),
     creativeTrends,
     demographics,
     platformBreakdown,
@@ -770,7 +770,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
       syncedAt: Timestamp.now(),
       adCreatives: adCreativesWithTitle,
-      creativeFingerprint: computeCreativeFingerprint(adCreativesWithTitle),
+      creativeFingerprint: computeCreativeFingerprint(pageMatchedCreatives),
       creativeTrends,
       demographics,
       platformBreakdown,
@@ -794,6 +794,10 @@ export async function POST(req: NextRequest) {
         diagnosis: diag.items,
         diagnosisCounts: { critical: diag.criticalCount, warning: diag.warningCount },
         diagnosisUpdatedAt: Timestamp.now(),
+        // Always persist the all-status creative fingerprint here (this block runs
+        // even when there are no ACTIVE creatives, e.g. a page whose only ad is
+        // paused) → Slice E execution detection works for those pages too.
+        creativeFingerprint: computeCreativeFingerprint(pageMatchedCreatives),
       }, { merge: true })
     }
   }
