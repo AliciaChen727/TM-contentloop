@@ -21,6 +21,7 @@ export interface FeedbackInput {
   humanAction?: HumanAction | null
   adoptedText?: string | null   // final text if adopted/edited (highest signal)
   metricsBefore?: { ctr: number; cpc: number; roas: number } | null  // account metrics at adoption (for 7-day delta)
+  execBeforeFp?: string | null  // creative fingerprint at adoption (Slice E execution detection)
   // Structured diagnosis fields (for few-shot block rendering, Slice C)
   diagTitle?: string | null
   diagDesc?: string | null
@@ -51,6 +52,7 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   // Stamp adoption time so the daily batch knows when the 7-day effect window opens.
   if (input.humanAction === 'adopted') payload.adoptedAt = FieldValue.serverTimestamp()
   if (input.metricsBefore !== undefined) payload.metricsBefore = input.metricsBefore ?? null
+  if (input.execBeforeFp !== undefined) payload.execBeforeFp = input.execBeforeFp ?? null
   if (input.diagTitle !== undefined) payload.diagTitle = input.diagTitle ?? null
   if (input.diagDesc !== undefined) payload.diagDesc = input.diagDesc ?? null
   if (input.cardTitle !== undefined) payload.cardTitle = input.cardTitle ?? null

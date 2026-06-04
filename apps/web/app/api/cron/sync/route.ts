@@ -6,6 +6,7 @@ import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 import { syncIgStories } from '@/lib/meta/igStories'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
+import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -338,6 +339,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
     hourly,
     adPostIds,
     adCreatives,
+    creativeFingerprint: computeCreativeFingerprint(adCreatives),
   }, { merge: true })
 
   // NEW: shared page-level snapshot (enables cross-admin merged view)
@@ -476,6 +478,7 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     hourly: mergeHourlyArrays(deduped as { hourly?: HourRow[] }[]),
     adPostIds: mergedPostIds,
     adCreatives: mergedCreatives,
+    creativeFingerprint: computeCreativeFingerprint(mergedCreatives),
     diagnosis: diag.items,
     diagnosisCounts: { critical: diag.criticalCount, warning: diag.warningCount },
     diagnosisUpdatedAt: Timestamp.now(),

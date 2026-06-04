@@ -89,16 +89,21 @@ export async function POST(req: NextRequest) {
     // 7-day delta (decision: account granularity). adInsights summary is kept fresh
     // by the daily ad sync → no Meta call needed here or in the batch.
     let metricsBefore: { ctr: number; cpc: number; roas: number } | null = null
+    let execBeforeFp: string | null = null
     if (status === 'completed') {
       try {
-        const s = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data()?.summary ?? {}
+        const snap = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data() ?? {}
+        const s = (snap.summary ?? {}) as Record<string, unknown>
         metricsBefore = { ctr: Number(s.ctr) || 0, cpc: Number(s.cpa ?? s.cpc) || 0, roas: Number(s.roas) || 0 }
+        // Creative fingerprint at adoption → batch later diffs it to confirm the
+        // recommendation was actually EXECUTED (creatives changed), not just adopted.
+        execBeforeFp = (snap.creativeFingerprint as string | undefined) ?? null
       } catch { /* best-effort */ }
     }
     try {
       await writeFeedback(pageId, {
         source: 'diagnosis', goal: goal ?? null, alertType: alertType ?? null,
-        context: context ?? null, output, humanAction, metricsBefore, byUid: uid,
+        context: context ?? null, output, humanAction, metricsBefore, execBeforeFp, byUid: uid,
       }, `diag__${cardKey}`)
     } catch (e) {
       console.error('[diagnosis-status] feedback write failed', e)

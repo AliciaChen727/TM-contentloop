@@ -5,6 +5,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
+import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -732,6 +733,7 @@ export async function POST(req: NextRequest) {
     summary: { spend: pageSpend, reach: pageReach, impressions: pageImpressions, clicks: pageClicks, ctr: pageCtr, cpm: pageCpm, frequency: pageFrequency, conversions: pageConversions, revenue: pageRevenue, roas: pageRoas, cpa: pageCpa },
     daily: pageFilteredDaily,
     adCreatives: adCreativesWithTitle,
+    creativeFingerprint: computeCreativeFingerprint(adCreativesWithTitle),
     creativeTrends,
     demographics,
     platformBreakdown,
@@ -764,6 +766,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
       syncedAt: Timestamp.now(),
       adCreatives: adCreativesWithTitle,
+      creativeFingerprint: computeCreativeFingerprint(adCreativesWithTitle),
       creativeTrends,
       demographics,
       platformBreakdown,

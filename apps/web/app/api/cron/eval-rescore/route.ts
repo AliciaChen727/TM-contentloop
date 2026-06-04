@@ -44,14 +44,16 @@ export async function POST(req: NextRequest) {
   }
 
   const now = Date.now()
-  let pagesProcessed = 0, scored = 0, effectComputed = 0
+  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0
 
   const pages = await adminDb.collection('pages').get()
   for (const page of pages.docs) {
     const pageId = page.id
     pagesProcessed++
 
-    const metricsNow = toMetrics((await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data()?.summary as Record<string, unknown>)
+    const snapData = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data() ?? {}
+    const metricsNow = toMetrics(snapData.summary as Record<string, unknown>)
+    const fpNow = (snapData.creativeFingerprint as string | undefined) ?? ''
 
     const fbCol = adminDb.collection('pages').doc(pageId).collection('sidekickFeedback')
     const fbSnap = await fbCol.orderBy('createdAt', 'desc').limit(500).get()
@@ -63,6 +65,15 @@ export async function POST(req: NextRequest) {
       const d = doc.data()
       const humanAction = d.humanAction as 'adopted' | 'edited' | 'rejected' | undefined
       if (!humanAction) continue
+
+      // 0) Execution detection (Slice E): an adopted card counts as EXECUTED only
+      // when the creative set actually changed since adoption (fingerprint diff) —
+      // turns "標示完成" into a verified "真的去改了素材" signal.
+      if (humanAction === 'adopted' && d.execBeforeFp && !d.executed && fpNow && fpNow !== d.execBeforeFp) {
+        await fbCol.doc(doc.id).set({ executed: true, executedAt: FieldValue.serverTimestamp() }, { merge: true })
+        d.executed = true
+        executedDetected++
+      }
 
       // 1) 7-day effect window → compute adMetricsAfter once.
       let adMetricsAfter = (d.adMetricsAfter as AdMetricsAfter | undefined) ?? null
@@ -135,5 +146,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed })
+  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected })
 }
