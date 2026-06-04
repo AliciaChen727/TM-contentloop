@@ -28,8 +28,19 @@ export async function POST(req: NextRequest) {
   try {
   const body = await req.json().catch(() => ({}))
   const pageId: string | undefined = body.pageId
-  const since: string | undefined = body.since
+  let since: string | undefined = body.since
   const until: string | undefined = body.until
+
+  // Meta insights only go back ~37 months. Clamp the start date to the earliest
+  // allowed day (with a small buffer) so a too-early header range degrades to
+  // "earliest available data" instead of erroring out with Meta #3018.
+  if (since) {
+    const floor = new Date()
+    floor.setMonth(floor.getMonth() - 37)
+    floor.setDate(floor.getDate() + 2) // buffer against month-edge / TZ
+    const floorStr = floor.toISOString().slice(0, 10)
+    if (since < floorStr) since = floorStr
+  }
 
   // Sync requires a Meta token — only page admins (not viewers) can sync with their own.
   // Super-admins may sync on behalf of the page owner: act fully AS the owner so the
