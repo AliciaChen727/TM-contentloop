@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
+import { GaConnectCard } from '@/components/analytics/GaConnectCard'
 
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
@@ -292,6 +293,11 @@ export default function SettingsPage() {
               {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
             </select>
           </div>
+        )}
+
+        {/* GA4 self-service connection (per page) */}
+        {selectedPageId && idToken && (
+          <GaConnectCard pageId={selectedPageId} idToken={idToken} />
         )}
 
         {/* Copy-from-first banner */}

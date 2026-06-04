@@ -52,3 +52,31 @@
 
 ## 面試講法
 「我發現這家電商主力在 Google Ads 不在 Meta，所以評估了 GA4 串接：因為 GA4 連結 Google Ads 後能一站拿到花費+轉換+ROAS，且用 service account 授權門檻比 Google Ads API（要審 developer token）低很多。我規劃了一個 service-account 的 PoC，per-page 存 propertyId、走既有 BFF 架構，把電商管道 ROAS 拉進 ContentLoop——這是把產品從 Meta-only 擴張到多平台的第一步。」
+
+---
+
+# 自助串接（讓廣告主自己設定，不用透過 owner）— 分階段
+
+痛點：目前 propertyId + 加 SA 權限都要 owner 代問代設，不可規模化。分兩階段：
+
+## Phase B（現在做）— 設定精靈 + Service Account（半自助、零審核）
+廣告主在 ContentLoop 設定頁自己完成，owner 不介入：
+1. **複製 SA email**（一鍵）：`firebase-adminsdk-fbsvc@contentloop-dev.iam.gserviceaccount.com`（由後端讀 `FIREBASE_ADMIN_CLIENT_EMAIL` 回傳，不寫死）。
+2. 引導他到 GA4「資源存取權管理」把該 email 加為**檢視者**。
+3. **貼上 GA4 Property ID** → 存到 `pages/{pageId}.gaPropertyId`。
+4. **測試連線**：呼叫現有 `POST /api/analytics/ga/sync`，成功顯示「抓到 N 管道、營收 $X」，失敗回明確錯誤（權限沒加好 / ID 錯）。
+- 元件：`components/analytics/GaConnectCard.tsx`（掛在設定頁，admin-only）。
+- 端點：`app/api/analytics/ga/config`（GET 讀 propertyId + SA email；POST admin 存 propertyId）。
+- 消費端：`GaSection` 接進廣告儀表板導覽，gated on `gaPropertyId` 有設定才出現。
+- 優點：零 Google 審核、後端幾乎現成、owner 退出流程。
+- 代價：廣告主要手動在 GA4 點幾下加 SA（比 OAuth 多一步）。
+
+## Phase A（規模化再做）— OAuth 自助連接
+當「手動加 SA」變成轉換障礙時升級：
+1. 設定頁「連接 GA4」→ Google OAuth（scope `analytics.readonly`）。
+2. 用 GA Admin API `accountSummaries.list` 列出他的 GA4 資源 → 他選一個。
+3. 存**加密 refresh token**（per-page）+ propertyId；同步改用他的 OAuth token（非 SA）。
+- 新建：OAuth 流程（authorize/callback）、token 加密儲存與刷新、資源選擇 UI。
+- ⚠️ **Google OAuth 應用審核**：`analytics.readonly` 是敏感範圍，給外部一般用戶要過 Google 品牌/安全審查（類似 Meta App Review）；未過前只能加測試用戶。工期主要卡在審核等待。
+- 優點：全自助、零手動、可大規模。
+- 遷移：Phase B 的 propertyId 設定可沿用；只是把「SA 讀」換成「使用者 OAuth token 讀」。
