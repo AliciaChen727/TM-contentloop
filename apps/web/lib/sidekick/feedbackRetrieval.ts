@@ -6,9 +6,29 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { geminiEmbed, cosineSim } from '@/lib/ai/geminiEmbed'
 
-export interface FewShotExample { context: string; text: string; why?: string }
+export interface FewShotExample {
+  context: string; text: string; why?: string
+  // Structured diagnosis fields (Slice C) — drive the rich few-shot block.
+  alertType?: string; diagTitle?: string; diagDesc?: string; cardTitle?: string; cardWhy0?: string
+  adoptedText?: string; deltaCtr?: number; deltaRoas?: number
+}
 
 interface Query { source: 'sidekick' | 'diagnosis'; goal?: string | null; alertType?: string | null }
+
+// Build a rich example from a feedback doc.
+function toExample(d: Record<string, unknown>): FewShotExample {
+  const delta = ((d.adMetricsAfter as { deltaVsBefore?: { ctr?: number; roas?: number } } | undefined)?.deltaVsBefore) ?? {}
+  const str = (v: unknown) => (v ? String(v) : undefined)
+  return {
+    context: String(d.context ?? ''),
+    text: String(d.adoptedText ?? d.output ?? ''),
+    why: reasonText(d.evalReasons),
+    alertType: str(d.alertType), diagTitle: str(d.diagTitle), diagDesc: str(d.diagDesc),
+    cardTitle: str(d.cardTitle), cardWhy0: str(d.cardWhy0), adoptedText: str(d.adoptedText),
+    deltaCtr: typeof delta.ctr === 'number' ? delta.ctr : undefined,
+    deltaRoas: typeof delta.roas === 'number' ? delta.roas : undefined,
+  }
+}
 
 // Hand-written cold-start seeds (Toastmasters / 非營利 語氣) so the loop produces
 // good output before any real feedback exists. Replaced naturally as adopted
@@ -55,16 +75,22 @@ export async function getFewShotExamples(pageId: string, q: Query, n = 3): Promi
     // avoid composite-index setup.
     const snap = await adminDb.collection('pages').doc(pageId).collection('sidekickFeedback')
       .orderBy('createdAt', 'desc').limit(100).get()
-    const rows = snap.docs
-      .map(d => d.data())
-      .filter(d => d.source === q.source && d.humanAction !== 'rejected' && (d.adoptedText || d.output))
+    const all = snap.docs.map(d => d.data())
+      .filter(d => d.source === q.source && (d.adoptedText || d.output))
+
+    // Quality-first: Judge-approved, adopted, high-scoring examples. Top up with
+    // the broader (non-rejected) ranking when there aren't enough, so cold-start
+    // still produces examples.
+    const picked: Record<string, unknown>[] = all
+      .filter(d => d.humanAction === 'adopted' && d.recommendToFewShot === true && norm10(d.evalScore) >= 7)
       .sort((a, b) => matchScore(b, q) - matchScore(a, q))
       .slice(0, n)
-    examples = rows.map(d => ({
-      context: String(d.context ?? ''),
-      text: String(d.adoptedText ?? d.output ?? ''),
-      why: reasonText(d.evalReasons),
-    }))
+    if (picked.length < n) {
+      const rest = all.filter(d => d.humanAction !== 'rejected' && !picked.includes(d))
+        .sort((a, b) => matchScore(b, q) - matchScore(a, q))
+      for (const d of rest) { if (picked.length >= n) break; picked.push(d) }
+    }
+    examples = picked.map(toExample)
   } catch { /* fall through to seeds */ }
 
   if (examples.length < n) {
@@ -118,11 +144,31 @@ export async function getSidekickFewShot(
   }
 }
 
-// Render examples as a prompt block (empty string when none).
+const sign = (v: number) => `${v > 0 ? '+' : ''}${v}`
+
+// Rich block for a structured diagnosis example (Slice C spec format).
+function diagnosisBlock(e: FewShotExample): string {
+  const lines = [
+    `[優質診斷範例 - ${e.alertType ?? '診斷'}]`,
+    `情境：${e.context.slice(0, 80)}`,
+    `原始數據發現：${e.diagTitle ?? ''} - ${e.diagDesc ?? ''}`,
+    `AI 改寫建議：${e.cardTitle ?? ''} / ${e.cardWhy0 ?? ''}`,
+    `用戶採納版本：${e.adoptedText ?? '完整採納'}`,
+  ]
+  if (e.deltaCtr !== undefined || e.deltaRoas !== undefined) {
+    lines.push(`效果：CTR ${sign(e.deltaCtr ?? 0)} / ROAS ${sign(e.deltaRoas ?? 0)}`)
+  }
+  return lines.join('\n')
+}
+
+// Render examples as a prompt block (empty string when none). Diagnosis examples
+// with structured fields use the rich block; others fall back to the simple form.
 export function formatFewShot(examples: FewShotExample[], heading = '過去被採用 / 高分的優質範例（風格參考，勿照抄）：'): string {
   if (examples.length === 0) return ''
   const body = examples
-    .map((e, i) => `範例 ${i + 1}｜情境：${e.context}\n產出：${e.text}${e.why ? `\n(為何好：${e.why})` : ''}`)
+    .map((e, i) => e.diagTitle
+      ? diagnosisBlock(e)
+      : `範例 ${i + 1}｜情境：${e.context}\n產出：${e.text}${e.why ? `\n(為何好：${e.why})` : ''}`)
     .join('\n\n')
   return `${heading}\n${body}`
 }

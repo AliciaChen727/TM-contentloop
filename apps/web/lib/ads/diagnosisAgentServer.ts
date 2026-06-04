@@ -52,6 +52,7 @@ async function evaluateAndStore(
         source: 'diagnosis', goal, alertType: item.type,
         context: `${item.metric}｜${item.desc}`,
         output: `${c.title}：${c.why.join(' ')}`,
+        diagTitle: item.title, diagDesc: item.desc, cardTitle: c.title, cardWhy0: c.why[0] ?? '',
         evalScore: result.evalScore, evalReasons: result.evalReasons,
         weakestDimension: result.weakestDimension, recommendToFewShot: result.recommendToFewShot,
       }, `diag__${diagnosisCardKey(item)}`).catch(() => {})

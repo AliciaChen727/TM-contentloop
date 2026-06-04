@@ -21,6 +21,11 @@ export interface FeedbackInput {
   humanAction?: HumanAction | null
   adoptedText?: string | null   // final text if adopted/edited (highest signal)
   metricsBefore?: { ctr: number; cpc: number; roas: number } | null  // account metrics at adoption (for 7-day delta)
+  // Structured diagnosis fields (for few-shot block rendering, Slice C)
+  diagTitle?: string | null
+  diagDesc?: string | null
+  cardTitle?: string | null
+  cardWhy0?: string | null
   byUid?: string | null
   embedding?: number[] | null   // semantic vector (sidekick) for similarity retrieval
 }
@@ -46,6 +51,10 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   // Stamp adoption time so the daily batch knows when the 7-day effect window opens.
   if (input.humanAction === 'adopted') payload.adoptedAt = FieldValue.serverTimestamp()
   if (input.metricsBefore !== undefined) payload.metricsBefore = input.metricsBefore ?? null
+  if (input.diagTitle !== undefined) payload.diagTitle = input.diagTitle ?? null
+  if (input.diagDesc !== undefined) payload.diagDesc = input.diagDesc ?? null
+  if (input.cardTitle !== undefined) payload.cardTitle = input.cardTitle ?? null
+  if (input.cardWhy0 !== undefined) payload.cardWhy0 = input.cardWhy0 ?? null
   if (input.adoptedText !== undefined) payload.adoptedText = input.adoptedText ? input.adoptedText.slice(0, 2000) : null
   if (input.byUid !== undefined) payload.byUid = input.byUid ?? null
   if (input.embedding !== undefined) payload.embedding = input.embedding ?? null
