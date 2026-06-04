@@ -252,7 +252,9 @@ ${(report.underAdAnalysis && report.underAdAnalysis.length > 0) ? `<h2>📉 需�
 const CURRENT_YEAR = new Date().getFullYear()
 const CURRENT_MONTH = new Date().getMonth() + 1
 const CURRENT_QUARTER = Math.ceil(CURRENT_MONTH / 3)
-const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR].filter(y => y >= 2024)
+// Meta insights go back ~37 months, so offer the last 4 years (floored at 2023)
+// — lets users view historical campaigns (e.g. data that only exists in 2023).
+const YEARS = [CURRENT_YEAR - 3, CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR].filter(y => y >= 2023)
 
 function StatusBadge({ status, lowerIsBetter = false }: { status: 'above' | 'below' | 'nodata'; lowerIsBetter?: boolean }) {
   if (status === 'nodata') return <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#f3f4f6', color: '#9ca3af', fontWeight: 600 }}>無資料</span>
