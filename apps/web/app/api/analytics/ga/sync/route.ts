@@ -1,41 +1,88 @@
 /**
- * GA4 Sync Route — PLACEHOLDER (not yet implemented)
+ * GA4 Sync / Read Route
  *
- * This route will sync Google Analytics 4 data into Firestore adInsights.ga
- * once the user connects their GA4 property.
+ * POST { pageId, since, until }  → fetch GA4 channel report, store snapshot, return it.
+ * GET  ?pageId=...               → read the latest stored snapshot (for viewers / display).
  *
- * Prerequisites before activating:
- * 1. Enable Google Analytics Data API in GCP console:
- *    https://console.developers.google.com/apis/api/analyticsdata.googleapis.com
- * 2. Add GA4 Property ID to user settings (e.g. "G-XXXXXXXXXX")
- * 3. Grant the Firebase service account "Viewer" access in GA4 property settings
- * 4. Set environment variable: GA4_PROPERTY_ID (or store per-user in Firestore)
+ * Auth: BFF — Bearer ID token + verifyIdToken. Access gated to the page's
+ * admin / viewer / super-admin (same pattern as /api/insights/summary).
  *
- * Data to sync (all stored under adInsights.ga in Firestore):
- * - sessions: total sessions for the date range
- * - formPageViews: pageviews of the registration/form landing page
- * - formClicks: goal completions (form submissions via GA Events)
- * - bounceRate: overall bounce rate %
- * - avgSessionDuration: average session duration in seconds
- * - organicSessions: sessions from utm_medium=organic or (none)
- * - paidSessions: sessions from utm_medium=paid (requires UTM params on ad links)
- * - topLandingPages: top 5 landing pages by sessions
- *
- * Implementation plan:
- * - Use @google-analytics/data SDK (BetaAnalyticsDataClient)
- * - Auth: GoogleAuth with existing firebase-adminsdk service account credentials
- *   (same pattern as Vertex AI in /api/ai/image/route.ts)
- * - Run via cron or on-demand, same pattern as /api/cron/sync/route.ts
+ * Prereq to get real data (see docs/ga4-integration-poc.md):
+ * 1. Enable Google Analytics Data API in GCP (contentloop-dev).
+ * 2. pages/{pageId}.gaPropertyId set to the GA4 property id.
+ * 3. SA (FIREBASE_ADMIN_CLIENT_EMAIL) granted Viewer on that GA4 property.
  */
 
 export const dynamic = 'force-dynamic'
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { runGaChannelReport } from '@/lib/analytics/gaClient'
 
-export async function POST() {
-  // TODO: Implement GA4 sync when user connects GA property
-  return NextResponse.json({
-    status: 'not_implemented',
-    message: 'GA4 integration is reserved for future implementation. See comments in this file for setup instructions.',
-  }, { status: 501 })
+async function authPage(req: NextRequest, pageId: string): Promise<{ uid: string } | NextResponse> {
+  const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
+  if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let uid: string
+  try { uid = (await adminAuth.verifyIdToken(idToken)).uid }
+  catch { return NextResponse.json({ error: 'Invalid token' }, { status: 401 }) }
+  if (!pageId) return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
+
+  const adminSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
+  if (!adminSnap.exists) {
+    const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+    const viewerPages: { pageId: string }[] = viewerSnap.data()?.pages ?? []
+    const allowed = viewerPages.some(p => p.pageId === pageId) || isSuperAdmin(uid)
+    if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  return { uid }
+}
+
+async function getPropertyId(pageId: string): Promise<string | null> {
+  const pageDoc = await adminDb.collection('pages').doc(pageId).get()
+  return (pageDoc.data()?.gaPropertyId as string | undefined) ?? null
+}
+
+const snapshotRef = (pageId: string) =>
+  adminDb.collection('pages').doc(pageId).collection('gaInsights').doc('latest')
+
+export async function GET(req: NextRequest) {
+  const pageId = req.nextUrl.searchParams.get('pageId') ?? ''
+  const auth = await authPage(req, pageId)
+  if (auth instanceof NextResponse) return auth
+
+  const propertyId = await getPropertyId(pageId)
+  if (!propertyId) return NextResponse.json({ configured: false, summary: null })
+
+  const snap = await snapshotRef(pageId).get()
+  return NextResponse.json({ configured: true, summary: snap.exists ? snap.data() : null })
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}))
+  const pageId: string = body.pageId ?? ''
+  const auth = await authPage(req, pageId)
+  if (auth instanceof NextResponse) return auth
+
+  const propertyId = await getPropertyId(pageId)
+  if (!propertyId) {
+    return NextResponse.json(
+      { error: 'GA4 未設定，請先在設定填入 GA4 Property ID（pages/{pageId}.gaPropertyId）', configured: false },
+      { status: 400 },
+    )
+  }
+
+  const since: string = body.since ?? new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)
+  const until: string = body.until ?? new Date().toISOString().slice(0, 10)
+
+  try {
+    const summary = await runGaChannelReport(propertyId, since, until)
+    await snapshotRef(pageId).set(summary)
+    return NextResponse.json({ configured: true, summary })
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'GA sync failed' },
+      { status: 502 },
+    )
+  }
 }
