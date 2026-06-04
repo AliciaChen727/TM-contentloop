@@ -23,11 +23,25 @@ const SEEDS: Record<'sidekick' | 'diagnosis', FewShotExample[]> = {
   ],
 }
 
+// Normalize evalScore to the 1–10 scale: legacy rows stored the old 0–5 mean, so
+// values <=5 are doubled. New behavior-aware scores are already 1–10.
+function norm10(v: unknown): number {
+  if (typeof v !== 'number') return 0
+  return v <= 5 ? v * 2 : v
+}
+
+// evalReasons may be legacy string or new string[] — render as one line.
+function reasonText(v: unknown): string | undefined {
+  if (typeof v === 'string') return v || undefined
+  if (Array.isArray(v)) return v.join('；') || undefined
+  return undefined
+}
+
 function matchScore(d: Record<string, unknown>, q: Query): number {
   let s = 0
   if (d.humanAction === 'adopted') s += 100
   else if (d.humanAction === 'edited') s += 60
-  if (typeof d.evalScore === 'number') s += d.evalScore * 10
+  s += norm10(d.evalScore) * 5           // 1–10 → up to 50
   if (q.goal && d.goal === q.goal) s += 8
   if (q.alertType && d.alertType === q.alertType) s += 8
   return s
@@ -49,7 +63,7 @@ export async function getFewShotExamples(pageId: string, q: Query, n = 3): Promi
     examples = rows.map(d => ({
       context: String(d.context ?? ''),
       text: String(d.adoptedText ?? d.output ?? ''),
-      why: typeof d.evalReasons === 'string' ? d.evalReasons : undefined,
+      why: reasonText(d.evalReasons),
     }))
   } catch { /* fall through to seeds */ }
 
@@ -88,7 +102,7 @@ export async function getSidekickFewShot(
       .filter(d => d.source === 'sidekick' && d.humanAction !== 'rejected' && Array.isArray(d.embedding) && (d.adoptedText || d.output))
       .map(d => {
         const sim = cosineSim(qVec, d.embedding as number[])
-        const signal = (d.humanAction === 'adopted' ? 0.15 : 0) + (typeof d.evalScore === 'number' ? d.evalScore / 50 : 0)
+        const signal = (d.humanAction === 'adopted' ? 0.15 : 0) + norm10(d.evalScore) / 100
         return { d, score: sim + signal }
       })
       .sort((a, b) => b.score - a.score)
@@ -96,7 +110,7 @@ export async function getSidekickFewShot(
     const examples = scored.map(({ d }) => ({
       context: String(d.context ?? ''),
       text: String(d.adoptedText ?? d.output ?? ''),
-      why: typeof d.evalReasons === 'string' ? d.evalReasons : undefined,
+      why: reasonText(d.evalReasons),
     }))
     return examples.length > 0 ? examples : fallback()
   } catch {

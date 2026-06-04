@@ -28,15 +28,18 @@ async function evaluateAndStore(
   const context = items.map(d => `${d.title}：${d.metric}（門檻 ${d.threshold}）`).join('；').slice(0, 1500)
   const goal = typeof summary.goal === 'string' ? summary.goal : null
 
+  // Generation-time gate: evaluate the combined card set once (no humanAction yet
+  // → scores the 3 always-on dims, 1–10). Per-card behavior-aware re-scoring runs
+  // later in the daily batch once a human adopts/dismisses.
   let finalCards = cards
   let result = await evaluateOutput({ output: combine(cards), context, goal, kind: 'diagnosis' }, evalKeys)
 
   if (!result.pass && result.judge !== 'none') {
-    const retryHint = `${fewShot}\n上一版評分偏低（${result.overall}/5），原因：${result.reasons}。請針對這些點改進後重出。`
+    const retryHint = `${fewShot}\n上一版評分偏低（${result.evalScore}/10），原因：${result.evalReasons.join('；')}。請針對這些點改進後重出。`
     const retry = await runDiagnosisAgent(items, summary, apiKey, retryHint)
     if (retry) {
       const retryEval = await evaluateOutput({ output: combine(retry), context, goal, kind: 'diagnosis' }, evalKeys)
-      if (retryEval.overall > result.overall) { finalCards = retry; result = retryEval }
+      if (retryEval.evalScore > result.evalScore) { finalCards = retry; result = retryEval }
     }
   }
 
@@ -49,7 +52,8 @@ async function evaluateAndStore(
         source: 'diagnosis', goal, alertType: item.type,
         context: `${item.metric}｜${item.desc}`,
         output: `${c.title}：${c.why.join(' ')}`,
-        evalScore: result.overall, evalReasons: result.reasons,
+        evalScore: result.evalScore, evalReasons: result.evalReasons,
+        weakestDimension: result.weakestDimension, recommendToFewShot: result.recommendToFewShot,
       }, `diag__${diagnosisCardKey(item)}`).catch(() => {})
     }))
   }

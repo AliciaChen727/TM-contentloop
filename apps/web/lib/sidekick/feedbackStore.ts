@@ -14,8 +14,10 @@ export interface FeedbackInput {
   alertType?: string | null     // diagnosis: DiagItem.type；sidekick: contextPage
   context?: string | null       // ad/post data or conversation context
   output?: string | null        // the AI text
-  evalScore?: number | null     // Quality evaluator overall (Slice 11)
-  evalReasons?: string | null
+  evalScore?: number | null     // Quality evaluator total, 1–10 (behavior-aware)
+  evalReasons?: string[] | null // per-dimension one-liners
+  weakestDimension?: string | null
+  recommendToFewShot?: boolean | null  // evalScore>=7 && humanAction='adopted'
   humanAction?: HumanAction | null
   adoptedText?: string | null   // final text if adopted/edited (highest signal)
   byUid?: string | null
@@ -37,6 +39,8 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   if (input.output !== undefined) payload.output = (input.output ?? '').slice(0, 2000)
   if (input.evalScore !== undefined) payload.evalScore = typeof input.evalScore === 'number' ? input.evalScore : null
   if (input.evalReasons !== undefined) payload.evalReasons = input.evalReasons ?? null
+  if (input.weakestDimension !== undefined) payload.weakestDimension = input.weakestDimension ?? null
+  if (input.recommendToFewShot !== undefined) payload.recommendToFewShot = input.recommendToFewShot ?? null
   if (input.humanAction !== undefined) payload.humanAction = input.humanAction ?? null
   if (input.adoptedText !== undefined) payload.adoptedText = input.adoptedText ? input.adoptedText.slice(0, 2000) : null
   if (input.byUid !== undefined) payload.byUid = input.byUid ?? null
@@ -51,9 +55,22 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   return ref.id
 }
 
-// Patch only the eval fields on an existing record (used by background scoring in
-// Slice 11, which runs after the human-action write).
-export async function patchFeedbackEval(pageId: string, docId: string, evalScore: number, evalReasons: string): Promise<void> {
+// Patch the eval fields on an existing record (used by the daily batch re-score
+// that runs after the human-action write). Only provided fields are written.
+export interface EvalPatch {
+  evalScore: number
+  evalReasons: string[]
+  weakestDimension?: string
+  recommendToFewShot?: boolean
+  adMetricsAfter?: Record<string, unknown> | null
+}
+export async function patchFeedbackEval(pageId: string, docId: string, patch: EvalPatch): Promise<void> {
+  const p: Record<string, unknown> = {
+    evalScore: patch.evalScore, evalReasons: patch.evalReasons, updatedAt: FieldValue.serverTimestamp(),
+  }
+  if (patch.weakestDimension !== undefined) p.weakestDimension = patch.weakestDimension
+  if (patch.recommendToFewShot !== undefined) p.recommendToFewShot = patch.recommendToFewShot
+  if (patch.adMetricsAfter !== undefined) p.adMetricsAfter = patch.adMetricsAfter
   await adminDb.collection('pages').doc(pageId).collection('sidekickFeedback').doc(docId)
-    .set({ evalScore, evalReasons, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+    .set(p, { merge: true })
 }
