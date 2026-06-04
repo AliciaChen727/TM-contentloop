@@ -4,14 +4,9 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
+import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 
 const BASE = 'https://graph.facebook.com/v19.0'
-
-type MetaAction = { action_type: string; value: string }
-
-function parseActions(actions: MetaAction[], type: string): number {
-  return parseFloat(actions.find(a => a.action_type === type)?.value ?? '0')
-}
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -191,7 +186,7 @@ export async function POST(req: NextRequest) {
   const sActions: MetaAction[] = s.actions ?? []
 
   // Determine conversion type: purchase > link_click > video_view
-  const hasPurchase = sActions.some(a => a.action_type === 'purchase')
+  const hasPurchase = hasPurchaseAction(sActions)
   const hasLinkClick = sActions.some(a => a.action_type === 'link_click')
   const conversionType = hasPurchase ? 'purchase' : hasLinkClick ? 'link_click' : 'video_view'
 

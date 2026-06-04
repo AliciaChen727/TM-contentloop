@@ -5,14 +5,9 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 import { syncIgStories } from '@/lib/meta/igStories'
+import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 
 const BASE = 'https://graph.facebook.com/v19.0'
-
-type MetaAction = { action_type: string; value: string }
-
-function parseActions(actions: MetaAction[], type: string): number {
-  return parseFloat(actions.find(a => a.action_type === type)?.value ?? '0')
-}
 
 // ── FB Posts Sync ─────────────────────────────────────────────────────────────
 
@@ -255,7 +250,7 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   const frequency = parseFloat(s.frequency ?? '0')
   const sActions: MetaAction[] = s.actions ?? []
   const sActionValues: MetaAction[] = s.action_values ?? []
-  const hasPurchase = sActions.some(a => a.action_type === 'purchase')
+  const hasPurchase = hasPurchaseAction(sActions)
   const linkClicks = parseActions(sActions, 'link_click')
   const videoViews = parseActions(sActions, 'video_view')
   // Detect campaign type: purchase > link_click > video_view > fallback

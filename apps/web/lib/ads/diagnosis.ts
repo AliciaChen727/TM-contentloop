@@ -5,6 +5,7 @@
 
 import type { DiagItem } from '@/components/ads/types'
 import type { AlertItem } from '@/lib/alerts/types'
+import { parseActionValue } from '@/lib/meta/purchaseActions'
 
 export function inferCreativeType(name: string): string {
   if (/reels/i.test(name)) return 'Reels'
@@ -34,10 +35,10 @@ export function mapRawAdCreative(c: any, idx: number) {
   const ctr = parseFloat(c.ctr ?? '0')
   const actions: { action_type: string; value: string }[] = c.actions ?? []
   const actionValues: { action_type: string; value: string }[] = c.action_values ?? []
-  const purchases = parseFloat(actions.find(a => a.action_type === 'purchase')?.value ?? '0')
+  const purchases = parseActionValue(actions, 'purchase')          // alias-aware
   const linkClicks = parseFloat(actions.find(a => a.action_type === 'link_click')?.value ?? '0')
   const videoViews = parseFloat(actions.find(a => a.action_type === 'video_view')?.value ?? '0')
-  const revenue = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value ?? '0')
+  const revenue = parseActionValue(actionValues, 'purchase')       // alias-aware
   const hasPurchase = purchases > 0
   const primaryMetric = hasPurchase ? revenue : linkClicks > 0 ? linkClicks : videoViews
   // For non-revenue accounts (e.g. D67 non-profit), ROAS is meaningless.
