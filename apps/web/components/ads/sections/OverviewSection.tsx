@@ -105,7 +105,10 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   }
 
   // Default order (used when no onboarding goal selected) preserves prior layout.
-  const defaultOrder = ['roas', 'roasReal', 'spend', 'cpa', 'ctr', 'cpm', 'reach', 'conversions', 'frequency']
+  // roasReal is intentionally NOT in defaultOrder — it only surfaces for the
+  // 「提升轉換與 ROI」(conversion) goal via GOAL_PRIORITY, so non-ROI goals don't
+  // get a noisy N/A ROAS card.
+  const defaultOrder = ['roas', 'spend', 'cpa', 'ctr', 'cpm', 'reach', 'conversions', 'frequency']
   const lead = optimizationGoal ? GOAL_PRIORITY[optimizationGoal] : []
   const tail = defaultOrder.filter(id => !lead.includes(id))
   const orderedIds = [...lead, ...tail]
