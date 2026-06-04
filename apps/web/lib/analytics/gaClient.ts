@@ -19,10 +19,23 @@ const METRICS = [
   'ecommercePurchases', 'advertiserAdCost', 'advertiserAdClicks', 'returnOnAdSpend',
 ] as const
 
+// Prefer a dedicated least-privilege GA-reader SA (GA_SA_*); fall back to the
+// firebase-admin SA only if the dedicated one isn't configured. The dedicated
+// SA should have NO project IAM roles — its only power is GA property access.
+function resolveSa(): { clientEmail: string; privateKey: string } {
+  const clientEmail = process.env.GA_SA_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL || ''
+  const rawKey = process.env.GA_SA_PRIVATE_KEY || process.env.FIREBASE_ADMIN_PRIVATE_KEY || ''
+  return { clientEmail, privateKey: rawKey.replace(/\\n/g, '\n') }
+}
+
+/** The SA email advertisers must add as a GA4 Viewer (shown in the wizard). */
+export function gaServiceAccountEmail(): string {
+  return process.env.GA_SA_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL || ''
+}
+
 async function getAccessToken(): Promise<string> {
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n')
-  if (!clientEmail || !privateKey) throw new Error('GCP Service Account not configured')
+  const { clientEmail, privateKey } = resolveSa()
+  if (!clientEmail || !privateKey) throw new Error('GA Service Account not configured')
   const auth = new GoogleAuth({
     credentials: { client_email: clientEmail, private_key: privateKey },
     scopes: ['https://www.googleapis.com/auth/analytics.readonly'],

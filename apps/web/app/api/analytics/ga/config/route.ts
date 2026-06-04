@@ -13,8 +13,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
-
-const SA_EMAIL = process.env.FIREBASE_ADMIN_CLIENT_EMAIL ?? ''
+import { gaServiceAccountEmail } from '@/lib/analytics/gaClient'
 
 async function verify(req: NextRequest): Promise<string | NextResponse> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -39,7 +38,7 @@ export async function GET(req: NextRequest) {
   const pageDoc = await adminDb.collection('pages').doc(pageId).get()
   return NextResponse.json({
     propertyId: (pageDoc.data()?.gaPropertyId as string | undefined) ?? '',
-    serviceAccountEmail: SA_EMAIL,
+    serviceAccountEmail: gaServiceAccountEmail(),
   })
 }
 
