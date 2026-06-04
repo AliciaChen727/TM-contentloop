@@ -6,6 +6,7 @@ import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
+import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -89,12 +90,15 @@ export async function POST(req: NextRequest) {
   if (!accounts.length) {
     return NextResponse.json({ error: 'No ad accounts found under this user.' }, { status: 400 })
   }
-  const adAccountId = accounts[0].id
+  // Pick the account that actually contains THIS page's ads (story-id prefix), not
+  // just accounts[0] — a page's campaigns can live in a different account.
+  const selectedAccount = await selectAdAccountForPage(accounts, effectivePagePrefix ?? '', userAccessToken)
+  const adAccountId = selectedAccount.id
   // Meta returns budgets in the currency's minor unit for 2-decimal currencies
   // (÷100), but some currencies (incl. TWD, verified against this account, plus
   // the zero-decimal currencies) are returned already in the major unit (÷1).
   const NO_DIVIDE = new Set(['TWD', 'JPY', 'KRW', 'VND', 'CLP', 'BIF', 'DJF', 'GNF', 'ISK', 'KMF', 'PYG', 'RWF', 'UGX', 'VUV', 'XAF', 'XOF', 'XPF', 'MGA'])
-  const budgetDivisor = NO_DIVIDE.has(accounts[0].currency ?? '') ? 1 : 100
+  const budgetDivisor = NO_DIVIDE.has(selectedAccount.currency ?? '') ? 1 : 100
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
 

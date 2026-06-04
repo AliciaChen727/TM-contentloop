@@ -7,6 +7,7 @@ import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 import { syncIgStories } from '@/lib/meta/igStories'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
+import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -189,7 +190,9 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
 
   const accounts: { id: string }[] = accountsData.data ?? []
   if (!accounts.length) return { error: 'no ad accounts' }
-  const adAccountId = accounts[0].id
+  // Pick the account that actually contains this page's ads (story-id prefix),
+  // not just accounts[0] — a page's campaigns can live in a different account.
+  const adAccountId = (await selectAdAccountForPage(accounts, pageId, userAccessToken)).id
 
   const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
   const summaryUrl = new URL(`${BASE}/${adAccountId}/insights`)
