@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { GaConnectCard } from '@/components/analytics/GaConnectCard'
 import { ThreadsConnectCard } from '@/components/analytics/ThreadsConnectCard'
+import { BrandAssetsCard } from '@/components/analytics/BrandAssetsCard'
 
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
@@ -304,6 +305,11 @@ export default function SettingsPage() {
         {/* Threads connection (per page) */}
         {selectedPageId && idToken && (
           <ThreadsConnectCard pageId={selectedPageId} idToken={idToken} />
+        )}
+
+        {/* Brand asset library (per page) */}
+        {selectedPageId && idToken && (
+          <BrandAssetsCard pageId={selectedPageId} idToken={idToken} />
         )}
 
         {/* Copy-from-first banner */}
