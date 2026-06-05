@@ -59,13 +59,15 @@ export async function POST(req: NextRequest) {
     const fbCol = adminDb.collection('pages').doc(pageId).collection('sidekickFeedback')
     const fbSnap = await fbCol.orderBy('createdAt', 'desc').limit(500).get()
 
-    // For qualityStats aggregation.
-    const byType = new Map<string, { sum: number; n: number; adopted: number; top: { id: string; score: number } | null }>()
+    // For qualityStats aggregation (+ counter-metrics: effect improvement, regret).
+    const byType = new Map<string, { sum: number; n: number; adopted: number; withEffect: number; improved: number; reverted: number; top: { id: string; score: number } | null }>()
 
     for (const doc of fbSnap.docs) {
       const d = doc.data()
       const humanAction = d.humanAction as 'adopted' | 'edited' | 'rejected' | undefined
-      if (!humanAction) continue
+      // Process docs with a humanAction, plus reverted ones (reopened → null action)
+      // so the regret rate still counts them.
+      if (!humanAction && d.reverted !== true) continue
 
       // 0) Execution detection (Slice E): an adopted card counts as EXECUTED only
       // when the creative set actually changed since adoption (fingerprint diff) —
@@ -139,14 +141,21 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 3) Aggregate per alertType.
+      // 3) Aggregate per alertType (+ counter-metrics).
       const t = String(d.alertType ?? 'unknown')
-      const agg = byType.get(t) ?? { sum: 0, n: 0, adopted: 0, top: null }
+      const agg = byType.get(t) ?? { sum: 0, n: 0, adopted: 0, withEffect: 0, improved: 0, reverted: 0, top: null }
       const score = norm10(d.evalScore)
       agg.sum += score; agg.n++
       if (humanAction === 'adopted') {
         agg.adopted++
         if (!agg.top || score > agg.top.score) agg.top = { id: doc.id, score }
+      }
+      if (d.reverted === true) agg.reverted++   // adopted then reopened/dismissed
+      // Effect improvement: among cards with a 7-day delta, did it improve?
+      const delta = (adMetricsAfter as AdMetricsAfter | null)?.deltaVsBefore
+      if (delta) {
+        agg.withEffect++
+        if ((delta.roas ?? 0) > 0 || (delta.ctr ?? 0) > 0 || (delta.cpc ?? 0) < 0) agg.improved++
       }
       byType.set(t, agg)
     }
@@ -159,6 +168,10 @@ export async function POST(req: NextRequest) {
         adoptedRate: a.n ? Number((a.adopted / a.n).toFixed(2)) : 0,
         sampleCount: a.n,
         topAdoptedExample: a.top?.id ?? null,
+        // Counter-metrics (anti-gaming guardrails):
+        effectImproveRate: a.withEffect ? Number((a.improved / a.withEffect).toFixed(2)) : null, // null = no 7-day data yet
+        effectSampleCount: a.withEffect,
+        regretRate: (a.adopted + a.reverted) ? Number((a.reverted / (a.adopted + a.reverted)).toFixed(2)) : 0,  // reverted / ever-adopted
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true })
     }

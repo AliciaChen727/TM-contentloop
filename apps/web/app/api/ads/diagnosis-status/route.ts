@@ -80,6 +80,16 @@ export async function POST(req: NextRequest) {
     await ref.set({ status, byUid: uid, updatedAt: new Date().toISOString(), severityRank: severityRank ?? 0 })
   }
 
+  // Regret signal: a previously-adopted card now reopened / dismissed = the user
+  // reverted. Mark it (independent of `output`) for the qualityStats regret rate.
+  const fbRef = adminDb.collection('pages').doc(pageId).collection('sidekickFeedback').doc(`diag__${cardKey}`)
+  if (status === 'open' || status === 'dismissed') {
+    try {
+      const prev = (await fbRef.get()).data()
+      if (prev?.humanAction === 'adopted') await fbRef.set({ reverted: true, revertedAt: new Date() }, { merge: true })
+    } catch { /* best-effort */ }
+  }
+
   // Card status doubles as a learning signal: completed ≈ adopted, dismissed ≈
   // rejected, reopen ≈ clear. Upsert keyed by cardKey so re-marking updates in
   // place. Best-effort — never block the status write.
@@ -116,6 +126,7 @@ export async function POST(req: NextRequest) {
         source: 'diagnosis', goal: goal ?? null, alertType: alertType ?? null,
         context: context ?? null, output, humanAction, metricsBefore, execBeforeFp,
         execTargetId, execTargetCopyHash, byUid: uid,
+        reverted: status === 'completed' ? false : undefined,  // re-adopt clears regret
       }, `diag__${cardKey}`)
     } catch (e) {
       console.error('[diagnosis-status] feedback write failed', e)
