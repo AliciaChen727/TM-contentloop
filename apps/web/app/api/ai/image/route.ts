@@ -6,6 +6,7 @@ import { adminAuth } from '@/lib/firebase/admin'
 import { recordImageGeneration } from '@/lib/usage'
 import { checkImageQuota } from '@/lib/quota'
 import { generateImage, type ImageEngine } from '@/lib/ai/generateImage'
+import { maybeOverlayBrandAsset } from '@/lib/ai/overlayBrandAsset'
 
 const VALID_ENGINES: ImageEngine[] = ['vertex-imagen', 'fal-recraft', 'fal-flux', 'fal-grok-image', 'fal-gpt-image-2']
 
@@ -28,16 +29,22 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { prompt, engine } = await req.json() as { prompt: string; engine?: ImageEngine }
+  const { prompt, engine, pageId } = await req.json() as { prompt: string; engine?: ImageEngine; pageId?: string }
   if (!prompt?.trim()) return NextResponse.json({ error: 'Empty prompt' }, { status: 400 })
 
   // Default to Vertex Imagen for backward compatibility; only honour known engines.
   const chosen: ImageEngine = engine && VALID_ENGINES.includes(engine) ? engine : 'vertex-imagen'
 
   try {
-    const { imageData, mimeType } = await generateImage(chosen, prompt)
+    const gen = await generateImage(chosen, prompt)
     await recordImageGeneration(uid)
-    return NextResponse.json({ imageData, mimeType, engine: chosen })
+    // If the prompt names a brand asset (e.g. "logo"), composite the real asset in.
+    const ov = await maybeOverlayBrandAsset(pageId, prompt, gen.imageData)
+    return NextResponse.json({
+      imageData: ov.overlaid ? ov.imageData : gen.imageData,
+      mimeType: ov.overlaid ? ov.mimeType : gen.mimeType,
+      engine: chosen, brandOverlaid: ov.overlaid, brandAsset: ov.assetName ?? null,
+    })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Internal server error' }, { status: 500 })
   }

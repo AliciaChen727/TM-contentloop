@@ -8,6 +8,7 @@ import { resolvePageProfile } from '@/lib/page-profile'
 import { checkImageQuota } from '@/lib/quota'
 import { recordImageGeneration } from '@/lib/usage'
 import { generateImage, type ImageEngine } from '@/lib/ai/generateImage'
+import { maybeOverlayBrandAsset } from '@/lib/ai/overlayBrandAsset'
 
 const VALID_ENGINES: ImageEngine[] = ['vertex-imagen', 'fal-recraft', 'fal-flux', 'fal-grok-image', 'fal-gpt-image-2']
 
@@ -109,9 +110,14 @@ export async function POST(req: NextRequest) {
   }
   await recordImageGeneration(uid)
 
+  // If the brief / image prompt names a brand asset (e.g. "logo"), composite it in.
+  const ov = await maybeOverlayBrandAsset(pageId, `${brief ?? ''}\n${parsed.imagePrompt}`, img.imageData)
+
   return NextResponse.json({
-    imageData: img.imageData,
-    mimeType: img.mimeType,
+    imageData: ov.overlaid ? ov.imageData : img.imageData,
+    mimeType: ov.overlaid ? ov.mimeType : img.mimeType,
+    brandOverlaid: ov.overlaid,
+    brandAsset: ov.assetName ?? null,
     engine: chosenEngine,
     headline: parsed.headline,
     subhead: parsed.subhead,

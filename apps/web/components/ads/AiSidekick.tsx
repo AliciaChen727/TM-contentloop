@@ -376,7 +376,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ prompt, engine }),
+        body: JSON.stringify({ prompt, engine, pageId }),
       })
       const data = await res.json()
       if (!res.ok || !data.imageData) {
