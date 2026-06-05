@@ -64,7 +64,9 @@ export function BrandAssetsCard({ pageId, idToken }: { pageId: string; idToken: 
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 20, background: 'white' }}>
       <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🏷️ 品牌素材庫</h3>
-      <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>存 logo 等品牌素材並標關鍵字。生圖後可一鍵把素材「帶進 Canva」，在 Canva 拖到設計上（logo 像素級正確，不靠 AI 生）。</p>
+      <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8, lineHeight: 1.7 }}>存 logo 等品牌素材並標<b>關鍵字</b>。兩種用法：<br />
+        ① <b>自動疊：</b>生圖時 prompt 提到該關鍵字（例「…加上 <b>logo</b>」），系統會自動把這個素材疊到圖右下角（像素級正確，不靠 AI 生）。<br />
+        ② <b>帶進 Canva：</b>按下方按鈕把素材丟進 Canva uploads，自己拖到設計上。</p>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
         <input ref={fileRef} type="file" accept="image/*" style={{ fontSize: 12 }} />
