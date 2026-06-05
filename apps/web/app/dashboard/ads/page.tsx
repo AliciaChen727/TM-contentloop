@@ -12,6 +12,7 @@ import { AiSidekick } from '@/components/ads/AiSidekick'
 import { OverviewSection } from '@/components/ads/sections/OverviewSection'
 import { DiagnosisSection, type CardStatus } from '@/components/ads/sections/DiagnosisSection'
 import { CreativeSection } from '@/components/ads/sections/CreativeSection'
+import { BrandAssetsCard } from '@/components/analytics/BrandAssetsCard'
 import { CreativeTrendsSection } from '@/components/ads/sections/CreativeTrendsSection'
 import { AudienceSection } from '@/components/ads/sections/AudienceSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
@@ -924,6 +925,11 @@ export default function AdsPage() {
                 onCardAction={handleCardAction}
                 onAskAI={canSidekick ? openSidekick : undefined}
               />}
+              {active === 'creative' && selectedPageId && idTokenRef && (
+                <div style={{ marginBottom: 16 }}>
+                  <BrandAssetsCard pageId={selectedPageId} idToken={idTokenRef} />
+                </div>
+              )}
               {active === 'creative' && <CreativeSection
                 data={adData}
                 onAskAI={canSidekick ? openSidekick : undefined}
