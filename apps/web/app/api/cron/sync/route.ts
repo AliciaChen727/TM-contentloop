@@ -8,6 +8,7 @@ import { syncIgStories } from '@/lib/meta/igStories'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
 import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
+import { syncThreadsForPage } from '@/lib/threads/sync'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -534,10 +535,23 @@ export async function POST(req: NextRequest) {
 
     await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
 
+    // Threads (separate OAuth/token) — sync every connected page's Threads too.
+    let threadsSynced = 0
+    try {
+      const threadsTokens = await adminDb.collectionGroup('threadsTokens').get()
+      for (const doc of threadsTokens.docs) {
+        const uid = doc.ref.parent.parent?.id
+        const pageId = doc.id
+        if (!uid || !pageId) continue
+        const r = await syncThreadsForPage(uid, pageId).catch(() => ({ ok: false }))
+        if (r.ok) threadsSynced++
+      }
+    } catch (e) { console.error('[cron/sync] threads sync error', e) }
+
     // Alert emails are decoupled: sent on a per-page schedule by
     // /api/cron/send-alerts (hourly). Sync only refreshes data here.
 
-    return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge) })
+    return NextResponse.json({ synced: results.length, results, mergedPages: Array.from(pageIdsToMerge), threadsSynced })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[cron/sync] FATAL ERROR:', msg, err)
