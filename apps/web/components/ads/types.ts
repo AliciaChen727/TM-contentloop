@@ -184,7 +184,7 @@ export interface CreativeTrend {
   daily: CreativeTrendDaily[]
 }
 
-export type NavId = 'overview' | 'insights' | 'diagnosis' | 'creative' | 'posts' | 'time' | 'budget' | 'trends' | 'audience'
+export type NavId = 'overview' | 'insights' | 'diagnosis' | 'creative' | 'brand' | 'posts' | 'time' | 'budget' | 'trends' | 'audience'
 
 export type Variant = 'A' | 'B' | 'control'
 

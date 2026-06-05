@@ -12,6 +12,7 @@ import { AiSidekick } from '@/components/ads/AiSidekick'
 import { OverviewSection } from '@/components/ads/sections/OverviewSection'
 import { DiagnosisSection, type CardStatus } from '@/components/ads/sections/DiagnosisSection'
 import { CreativeSection } from '@/components/ads/sections/CreativeSection'
+import { BrandAssetsCard } from '@/components/analytics/BrandAssetsCard'
 import { CreativeTrendsSection } from '@/components/ads/sections/CreativeTrendsSection'
 import { AudienceSection } from '@/components/ads/sections/AudienceSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
@@ -24,7 +25,8 @@ const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: '總覽', icon: 'chart' },
   { id: 'insights', label: '洞察報告', icon: 'chart' },
   { id: 'diagnosis', label: '診斷建議', icon: 'alert' },
-  { id: 'creative', label: '素材庫', icon: 'creative' },
+  { id: 'creative', label: '素材績效排行', icon: 'creative' },
+  { id: 'brand', label: '品牌素材庫', icon: 'creative' },
   { id: 'trends', label: '成效趨勢', icon: 'chart' },
   { id: 'audience', label: '受眾分析', icon: 'chart' },
   { id: 'posts', label: '內容表現', icon: 'calendar' },
@@ -33,7 +35,7 @@ const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
 ]
 
 const NAV_LABELS: Record<NavId, string> = {
-  overview: '總覽', insights: '洞察報告', diagnosis: '診斷建議', creative: '素材庫', trends: '成效趨勢',
+  overview: '總覽', insights: '洞察報告', diagnosis: '診斷建議', creative: '素材績效排行', brand: '品牌素材庫', trends: '成效趨勢',
   audience: '受眾分析', posts: '內容表現', time: '最佳時段', budget: '預算模擬',
 }
 
@@ -926,8 +928,6 @@ export default function AdsPage() {
               />}
               {active === 'creative' && <CreativeSection
                 data={adData}
-                pageId={selectedPageId}
-                idToken={idTokenRef}
                 onAskAI={canSidekick ? openSidekick : undefined}
                 creativeLabels={creativeLabels}
                 experiments={experiments}
@@ -958,6 +958,7 @@ export default function AdsPage() {
                   await fetch('/api/ads/experiments', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, action: 'delete', experimentId }) })
                 } : undefined}
               />}
+              {active === 'brand' && selectedPageId && idTokenRef && <BrandAssetsCard pageId={selectedPageId} idToken={idTokenRef} />}
               {active === 'trends' && <CreativeTrendsSection trends={adData.creativeTrends ?? []} dateFrom={dateFrom} dateTo={dateTo} conversionType={adData.conversionType} experiments={experiments} creativeLabels={creativeLabels} />}
               {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} conversionType={adData.conversionType} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
