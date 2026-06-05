@@ -90,6 +90,8 @@ export async function POST(req: NextRequest) {
     // by the daily ad sync → no Meta call needed here or in the batch.
     let metricsBefore: { ctr: number; cpc: number; roas: number } | null = null
     let execBeforeFp: string | null = null
+    let execTargetId: string | null = null
+    let execTargetCopyHash: string | null = null
     if (status === 'completed') {
       try {
         const snap = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data() ?? {}
@@ -98,12 +100,22 @@ export async function POST(req: NextRequest) {
         // Creative fingerprint at adoption → batch later diffs it to confirm the
         // recommendation was actually EXECUTED (creatives changed), not just adopted.
         execBeforeFp = (snap.creativeFingerprint as string | undefined) ?? null
+        // Specificity: if this card targets a specific creative, the cardKey is
+        // `{type}__{storyId}` (storyId = `{pageId}_{postId}`). Snapshot THAT
+        // creative's copy hash so the batch can verify the right ad's copy changed.
+        const target = cardKey.split('__').slice(1).join('__')
+        if (/^\d+_\d+/.test(target)) {
+          execTargetId = target
+          const ff = (snap.adFieldFingerprints as Record<string, { copy?: string }> | undefined)?.[target]
+          execTargetCopyHash = ff?.copy ?? null
+        }
       } catch { /* best-effort */ }
     }
     try {
       await writeFeedback(pageId, {
         source: 'diagnosis', goal: goal ?? null, alertType: alertType ?? null,
-        context: context ?? null, output, humanAction, metricsBefore, execBeforeFp, byUid: uid,
+        context: context ?? null, output, humanAction, metricsBefore, execBeforeFp,
+        execTargetId, execTargetCopyHash, byUid: uid,
       }, `diag__${cardKey}`)
     } catch (e) {
       console.error('[diagnosis-status] feedback write failed', e)

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   const now = Date.now()
-  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0
+  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0, specificDetected = 0
 
   const pages = await adminDb.collection('pages').get()
   for (const page of pages.docs) {
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     const snapData = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data() ?? {}
     const metricsNow = toMetrics(snapData.summary as Record<string, unknown>)
     const fpNow = (snapData.creativeFingerprint as string | undefined) ?? ''
+    const fieldFpNow = (snapData.adFieldFingerprints as Record<string, { copy?: string }> | undefined) ?? {}
 
     const fbCol = adminDb.collection('pages').doc(pageId).collection('sidekickFeedback')
     const fbSnap = await fbCol.orderBy('createdAt', 'desc').limit(500).get()
@@ -73,6 +74,23 @@ export async function POST(req: NextRequest) {
         await fbCol.doc(doc.id).set({ executed: true, executedAt: FieldValue.serverTimestamp() }, { merge: true })
         d.executed = true
         executedDetected++
+      }
+
+      // 0b) Specificity matching: for a card that targeted a specific creative,
+      // verify THAT creative changed — its copy edited ('copy') or the creative
+      // gone/replaced ('creative_replaced') — not just "some creative changed".
+      if (humanAction === 'adopted' && d.execTargetId && d.execTargetCopyHash && !d.executedSpecific) {
+        const cur = fieldFpNow[d.execTargetId as string]
+        const field = !cur ? 'creative_replaced'              // targeted creative gone/replaced
+          : (cur.copy && cur.copy !== d.execTargetCopyHash) ? 'copy'  // its copy edited
+          : null
+        if (field) {
+          await fbCol.doc(doc.id).set({
+            executedSpecific: true, executedSpecificAt: FieldValue.serverTimestamp(), specificChangedField: field,
+          }, { merge: true })
+          d.executedSpecific = true
+          specificDetected++
+        }
       }
 
       // 1) 7-day effect window → compute adMetricsAfter once.
@@ -146,5 +164,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected })
+  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected, specificDetected })
 }

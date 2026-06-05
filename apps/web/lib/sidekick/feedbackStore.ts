@@ -26,6 +26,10 @@ export interface FeedbackInput {
   adoptedText?: string | null   // final text if adopted/edited (highest signal)
   metricsBefore?: { ctr: number; cpc: number; roas: number } | null  // account metrics at adoption (for 7-day delta)
   execBeforeFp?: string | null  // creative fingerprint at adoption (Slice E execution detection)
+  // Specificity matching: the card's target creative (storyId) + its copy hash at
+  // adoption → batch later checks whether THAT creative's copy changed.
+  execTargetId?: string | null
+  execTargetCopyHash?: string | null
   // Structured diagnosis fields (for few-shot block rendering, Slice C)
   diagTitle?: string | null
   diagDesc?: string | null
@@ -59,6 +63,8 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   if (input.humanAction === 'adopted') payload.adoptedAt = FieldValue.serverTimestamp()
   if (input.metricsBefore !== undefined) payload.metricsBefore = input.metricsBefore ?? null
   if (input.execBeforeFp !== undefined) payload.execBeforeFp = input.execBeforeFp ?? null
+  if (input.execTargetId !== undefined) payload.execTargetId = input.execTargetId ?? null
+  if (input.execTargetCopyHash !== undefined) payload.execTargetCopyHash = input.execTargetCopyHash ?? null
   if (input.diagTitle !== undefined) payload.diagTitle = input.diagTitle ?? null
   if (input.diagDesc !== undefined) payload.diagDesc = input.diagDesc ?? null
   if (input.cardTitle !== undefined) payload.cardTitle = input.cardTitle ?? null

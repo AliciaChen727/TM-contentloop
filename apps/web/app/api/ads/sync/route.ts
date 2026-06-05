@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { computeDiagnosisFromSnapshot } from '@/lib/ads/diagnosis'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
-import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
+import { computeCreativeFingerprint, computeAdFieldFingerprints } from '@/lib/ads/creativeFingerprint'
 import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
 
 const BASE = 'https://graph.facebook.com/v19.0'
@@ -798,6 +798,8 @@ export async function POST(req: NextRequest) {
         // even when there are no ACTIVE creatives, e.g. a page whose only ad is
         // paused) → Slice E execution detection works for those pages too.
         creativeFingerprint: computeCreativeFingerprint(pageMatchedCreatives),
+        // Per-ad copy fingerprints (keyed by storyId) for specificity matching.
+        adFieldFingerprints: computeAdFieldFingerprints(adCreativesWithTitle),
       }, { merge: true })
     }
   }
