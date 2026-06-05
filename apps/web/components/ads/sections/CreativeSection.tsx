@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../Icon'
+import { BrandAssetsCard } from '@/components/analytics/BrandAssetsCard'
 import type { AdData, Variant, LabelEntry, Experiment } from '../types'
 
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}`
@@ -675,7 +676,7 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
   )
 }
 
-export function CreativeSection({ data, onAskAI, creativeLabels, experiments, onLabelChange, onCreateExperiment, onExperimentUpdate, onDeleteExperiment }: {
+export function CreativeSection({ data, onAskAI, creativeLabels, experiments, onLabelChange, onCreateExperiment, onExperimentUpdate, onDeleteExperiment, pageId, idToken }: {
   data: AdData
   onAskAI?: (q: string, autoSend?: boolean) => void
   creativeLabels?: Record<string, LabelEntry>
@@ -684,6 +685,8 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
   onCreateExperiment?: (name: string) => Promise<string>
   onExperimentUpdate?: (experimentId: string, update: ExperimentUpdate) => void
   onDeleteExperiment?: (experimentId: string) => void
+  pageId?: string
+  idToken?: string
 }) {
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
@@ -710,7 +713,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析素材</button>}
           <div className="ads-tabs">
-            {TYPES.map(t => <button key={t} className={`ads-tab ${filter === t ? 'active' : ''}`} onClick={() => setFilter(t)}>{t}</button>)}
+            {[...TYPES, '品牌素材庫'].map(t => <button key={t} className={`ads-tab ${filter === t ? 'active' : ''}`} onClick={() => setFilter(t)}>{t}</button>)}
           </div>
           <select
             style={{ fontSize: 12, padding: '5px 10px', border: '1px solid var(--ad-border)', borderRadius: 7, background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
@@ -722,6 +725,10 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
           </select>
         </div>
       </div>
+
+      {filter === '品牌素材庫' ? (
+        <BrandAssetsCard pageId={pageId ?? ''} idToken={idToken ?? ''} />
+      ) : (<>
 
       {onLabelChange && exps.map(exp => (
         <ExperimentResultCard
@@ -789,6 +796,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
           )
         })}
       </div>
+      </>)}
     </div>
   )
 }
