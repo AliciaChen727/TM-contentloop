@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type Lang = 'zh' | 'en'
 
@@ -81,8 +81,19 @@ const STEPS: Record<Lang, { n: string; title: string; desc: string }[]> = {
 }
 
 export default function Home() {
+  // SSR/prerender 用 'zh'；掛載後再讀 localStorage 偏好，避免 hydration 不一致。
   const [lang, setLang] = useState<Lang>('zh')
   const t = COPY[lang]
+
+  useEffect(() => {
+    const saved = localStorage.getItem('cl_lang')
+    if (saved === 'en' || saved === 'zh') setLang(saved)
+  }, [])
+
+  function changeLang(next: Lang) {
+    setLang(next)
+    localStorage.setItem('cl_lang', next)
+  }
 
   return (
     <div className="min-h-screen bg-white text-gray-900 font-[family-name:var(--font-geist-sans)]">
@@ -96,14 +107,14 @@ export default function Home() {
             {/* Language toggle */}
             <div className="flex items-center rounded-full border border-gray-200 p-0.5 text-xs font-semibold">
               <button
-                onClick={() => setLang('zh')}
+                onClick={() => changeLang('zh')}
                 className={`rounded-full px-3 py-1 transition ${lang === 'zh' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}
                 aria-pressed={lang === 'zh'}
               >
                 中
               </button>
               <button
-                onClick={() => setLang('en')}
+                onClick={() => changeLang('en')}
                 className={`rounded-full px-3 py-1 transition ${lang === 'en' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}
                 aria-pressed={lang === 'en'}
               >
