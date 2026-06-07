@@ -49,6 +49,7 @@ npm run build        # production build（commit/push 前務必跑過）
 3. **一次完成一個 vertical slice**，不東改西改
 4. **每個檔案職責單一**，component 不超過 200 行
 5. 所有 secret / token 只存 `.env.local`（前端）或 Firebase Secret Manager（後端），絕不 commit
+6. **部署流程：程式改完 → 跑三關 → 先在 localhost（`npm run dev`，http://localhost:3000）給使用者測 → 等使用者回「OK」→ 才 commit git + push（Vercel 自動部署）。不要自己先 push。** 純文件（README/docs/memory）類改動可豁免 localhost 步驟。詳見 memory `feedback_deploy_flow`。
 
 ## Firestore 資料模型（草案）
 ```

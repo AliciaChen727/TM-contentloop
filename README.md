@@ -114,7 +114,13 @@ npm run build        # production build
 
 **紀律**：每次改完 → `tsc` + `eslint` + `next build` **三關全綠**才 commit。
 
-**部署**：push `main` → Vercel 自動部署（前端 + API）；`functions/` 變更 → `firebase deploy`。
+**部署流程（2026-06-07 起）**：
+1. 改完 → 三關全綠
+2. **先 `npm run dev` 跑 localhost（http://localhost:3000）給使用者測**
+3. 使用者確認「OK」**才** `git commit` + `git push`（main → Vercel 自動部署前端 + API）
+4. `functions/` 變更 → `firebase deploy`
+
+> ⚠️ 未經使用者在 localhost 測試確認前，不要逕自 push。純文件（README/docs/memory）類改動可豁免 localhost 步驟。
 
 ---
 
@@ -152,7 +158,8 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
-| 2026-06-07 | 首頁支援 `/?lang=en` URL 帶語言 + 對應 metadata/hreflang（SEO、可分享）；頁面拆 server+client | _本次_ |
+| 2026-06-07 | 新部署流程：改完先 localhost 測，OK 才 commit/push（記入 CLAUDE.md + memory） | _本次_ |
+| 2026-06-07 | 首頁支援 `/?lang=en` URL 帶語言 + 對應 metadata/hreflang（SEO、可分享）；頁面拆 server+client | `（前次）` |
 | 2026-06-07 | 語言偏好用 localStorage 記住（下次造訪自動套用） | `（前次）` |
 | 2026-06-07 | 行銷首頁加中／英語言切換（整頁文案切換） | `（前次）` |
 | 2026-06-06 | 新增本 README（含維護規範）；首頁改為行銷頁 + 登入入口 | `1383933` |
