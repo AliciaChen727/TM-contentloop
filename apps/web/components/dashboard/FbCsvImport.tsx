@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { auth } from '@/lib/firebase/client'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 interface Props {
   pageId: string
@@ -45,6 +46,7 @@ function parseCSV(text: string): Record<string, string>[] {
 type Status = 'idle' | 'parsing' | 'preview' | 'importing' | 'done' | 'error'
 
 export function FbCsvImport({ pageId, onImported }: Props) {
+  const { L } = useLang()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<Status>('idle')
   const [rows, setRows] = useState<Record<string, string>[]>([])
@@ -60,7 +62,7 @@ export function FbCsvImport({ pageId, onImported }: Props) {
     reader.onload = (e) => {
       const text = e.target?.result as string
       const parsed = parseCSV(text)
-      if (!parsed.length) { setError('CSV 無法解析，請確認格式'); setStatus('error'); return }
+      if (!parsed.length) { setError(L('CSV 無法解析，請確認格式', "Can't parse CSV — please check the format")); setStatus('error'); return }
       setRows(parsed)
       setStatus('preview')
     }
@@ -78,12 +80,12 @@ export function FbCsvImport({ pageId, onImported }: Props) {
         body: JSON.stringify({ rows, pageId }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? '匯入失敗'); setStatus('error'); return }
+      if (!res.ok) { setError(data.error ?? L('匯入失敗', 'Import failed')); setStatus('error'); return }
       setResult({ updated: data.updated, skipped: data.skipped })
       setStatus('done')
       onImported()
     } catch {
-      setError('網路錯誤，請重試')
+      setError(L('網路錯誤，請重試', 'Network error, please retry'))
       setStatus('error')
     }
   }
@@ -103,7 +105,7 @@ export function FbCsvImport({ pageId, onImported }: Props) {
           color: 'var(--ad-text2)', display: 'flex', alignItems: 'center', gap: 5,
         }}
       >
-        ⬆️ 匯入 FB CSV
+        ⬆️ {L('匯入 FB CSV', 'Import FB CSV')}
       </button>
 
       {open && (
@@ -119,9 +121,9 @@ export function FbCsvImport({ pageId, onImported }: Props) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>匯入 Facebook Insights CSV</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{L('匯入 Facebook Insights CSV', 'Import Facebook Insights CSV')}</div>
                 <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-                  從 Meta Business Suite → Insights → 貼文 → 匯出數據
+                  {L('從 Meta Business Suite → Insights → 貼文 → 匯出數據', 'From Meta Business Suite → Insights → Posts → Export data')}
                 </div>
               </div>
               <button onClick={() => { setOpen(false); reset() }} style={{ fontSize: 18, background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>✕</button>
@@ -139,9 +141,9 @@ export function FbCsvImport({ pageId, onImported }: Props) {
               >
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📂</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
-                  {status === 'parsing' ? '解析中…' : '點擊選擇或拖曳 CSV 檔案'}
+                  {status === 'parsing' ? L('解析中…', 'Parsing…') : L('點擊選擇或拖曳 CSV 檔案', 'Click to choose or drag a CSV file')}
                 </div>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>支援 UTF-8 編碼的 CSV</div>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{L('支援 UTF-8 編碼的 CSV', 'Supports UTF-8 encoded CSV')}</div>
                 <input ref={inputRef} type="file" accept=".csv" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
               </div>
@@ -150,7 +152,7 @@ export function FbCsvImport({ pageId, onImported }: Props) {
             {status === 'preview' && (
               <>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
-                  檔案：<strong>{fileName}</strong>｜共 <strong>{rows.length}</strong> 筆
+                  {L('檔案：', 'File: ')}<strong>{fileName}</strong>{L('｜共 ', ' · ')}<strong>{rows.length}</strong>{L(' 筆', ' rows')}
                 </div>
                 <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 16 }}>
                   <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
@@ -178,10 +180,10 @@ export function FbCsvImport({ pageId, onImported }: Props) {
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={reset} style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#374151' }}>
-                    重選檔案
+                    {L('重選檔案', 'Choose another')}
                   </button>
                   <button onClick={handleImport} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#1877F2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                    開始匯入
+                    {L('開始匯入', 'Start import')}
                   </button>
                 </div>
               </>
@@ -189,19 +191,19 @@ export function FbCsvImport({ pageId, onImported }: Props) {
 
             {status === 'importing' && (
               <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280', fontSize: 13 }}>
-                匯入中，請稍候…
+                {L('匯入中，請稍候…', 'Importing, please wait…')}
               </div>
             )}
 
             {status === 'done' && result && (
               <div style={{ textAlign: 'center', padding: '24px 0' }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>匯入完成</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>{L('匯入完成', 'Import complete')}</div>
                 <div style={{ fontSize: 13, color: '#6b7280', marginTop: 6 }}>
-                  更新 <strong>{result.updated}</strong> 筆，略過 <strong>{result.skipped}</strong> 筆（無法解析 ID）
+                  {L('更新 ', 'Updated ')}<strong>{result.updated}</strong>{L(' 筆，略過 ', ', skipped ')}<strong>{result.skipped}</strong>{L(' 筆（無法解析 ID）', " (couldn't parse ID)")}
                 </div>
                 <button onClick={() => { setOpen(false); reset() }} style={{ marginTop: 20, padding: '8px 24px', borderRadius: 8, border: 'none', background: '#1877F2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  關閉
+                  {L('關閉', 'Close')}
                 </button>
               </div>
             )}
@@ -211,7 +213,7 @@ export function FbCsvImport({ pageId, onImported }: Props) {
                 <div style={{ fontSize: 40, marginBottom: 12 }}>❌</div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: '#dc2626' }}>{error}</div>
                 <button onClick={reset} style={{ marginTop: 16, padding: '7px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, cursor: 'pointer' }}>
-                  重試
+                  {L('重試', 'Retry')}
                 </button>
               </div>
             )}

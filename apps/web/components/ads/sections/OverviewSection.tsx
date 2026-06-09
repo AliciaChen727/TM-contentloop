@@ -4,26 +4,31 @@ import { SvgChart } from '../SvgCharts'
 import { Icon } from '../Icon'
 import { POSTS_DATA } from '../mockData'
 import type { AdData, Post } from '../types'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 const fmt = (n: number, d = 0) => n == null ? '–' : Number(n).toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtK = (n: number) => n >= 10000 ? `$${fmt(Math.round(n / 1000))}K` : `$${fmt(n)}`
-const fmtCount = (n: number) => n >= 10000 ? `${(n / 10000).toFixed(1)}萬` : n >= 1000 ? `${(n / 1000).toFixed(1)}千` : `${fmt(n)}`
+const fmtCount = (n: number, en = false) => en
+  ? (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${fmt(n)}`)
+  : (n >= 10000 ? `${(n / 10000).toFixed(1)}萬` : n >= 1000 ? `${(n / 1000).toFixed(1)}千` : `${fmt(n)}`)
 
 // Platform source (FB / IG) — moved here from the audience-analysis tab.
 const PLATFORM_ORDER = ['facebook', 'instagram', 'other']
-const PLATFORM_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', other: '其他版位 (Audience Network / Messenger)' }
+const platformLabel = (k: string, en: boolean): string =>
+  k === 'facebook' ? 'Facebook' : k === 'instagram' ? 'Instagram'
+  : (en ? 'Other placements (Audience Network / Messenger)' : '其他版位 (Audience Network / Messenger)')
 type PlatCell = { key: string; label: string; kind: 'currency' | 'int' | 'percent' | 'ratio' }
-const platCols = (hasPurchase: boolean): PlatCell[] => {
+const platCols = (hasPurchase: boolean, en: boolean): PlatCell[] => {
   const base: PlatCell[] = [
-    { key: 'spend', label: '花費', kind: 'currency' },
-    { key: 'clicks', label: '點擊', kind: 'int' },
+    { key: 'spend', label: en ? 'Spend' : '花費', kind: 'currency' },
+    { key: 'clicks', label: en ? 'Clicks' : '點擊', kind: 'int' },
     { key: 'ctr', label: 'CTR', kind: 'percent' },
     { key: 'cpc', label: 'CPC', kind: 'currency' },
     { key: 'roas', label: 'ROAS', kind: 'ratio' },
   ]
   if (hasPurchase) base.push(
     { key: 'revenue', label: 'Revenue', kind: 'currency' },
-    { key: 'conversions', label: '轉換', kind: 'int' },
+    { key: 'conversions', label: en ? 'Conversions' : '轉換', kind: 'int' },
     { key: 'cpp', label: 'Cost / Purchase', kind: 'currency' },
   )
   return base
@@ -45,20 +50,22 @@ const GOAL_PRIORITY: Record<OptimizationGoal, string[]> = {
 }
 
 export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { data: AdData; onAskAI?: (q: string) => void; posts?: Post[] | null; optimizationGoal?: OptimizationGoal | null }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const s = data.overview.summary
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const convType = (data as any).conversionType as string | undefined
   const isClickBased = convType === 'link_click'
   const isVideoBased = convType === 'video_view'
   const budgetPct = (s.spend / data.budget.total) * 100
-  const roasLabel = isVideoBased ? '觀看效益' : isClickBased ? '點擊效益' : 'CPA'
-  const roasUnit = isVideoBased || isClickBased ? '次/百元' : 'x'
+  const roasLabel = isVideoBased ? L('觀看效益', 'View value') : isClickBased ? L('點擊效益', 'Click value') : 'CPA'
+  const roasUnit = isVideoBased || isClickBased ? L('次/百元', '/NT$100') : 'x'
   // The dedicated `cpc` card already shows cost-per-click; this `cpa` card is the
   // cost-per-action/registration (with target). Label it CPA to avoid a duplicate CPC.
   const cpaLabel = isVideoBased ? 'CPV' : 'CPA'
-  const cpaQ = isVideoBased ? 'CPV 如何進一步降低？' : 'CPA 如何進一步降低？'
-  const convLabel = isVideoBased ? '影片觀看' : '轉換數'
-  const convMeta = isVideoBased ? '影片觀看次數' : isClickBased ? '連結點擊次數' : `營收 ${fmtK(s.revenue ?? 0)}`
+  const cpaQ = isVideoBased ? L('CPV 如何進一步降低？', 'How can I lower CPV further?') : L('CPA 如何進一步降低？', 'How can I lower CPA further?')
+  const convLabel = isVideoBased ? L('影片觀看', 'Video views') : L('轉換數', 'Conversions')
+  const convMeta = isVideoBased ? L('影片觀看次數', 'Video view count') : isClickBased ? L('連結點擊次數', 'Link click count') : L(`營收 ${fmtK(s.revenue ?? 0)}`, `Revenue ${fmtK(s.revenue ?? 0)}`)
   const roas = s.roas ?? 0
   const frequency = s.frequency ?? 0
   const reach = s.reach ?? 0
@@ -68,10 +75,10 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   const linkClicks = isClickBased ? (s.conversions ?? 0) : 0
   const cpl = linkClicks > 0 ? (s.spend ?? 0) / linkClicks : 0
   const roasTip = isVideoBased
-    ? '觀看效益＝每花 NT$100 取得的影片觀看次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。'
+    ? L('觀看效益＝每花 NT$100 取得的影片觀看次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。', 'View value = video views per NT$100 spent, not ROAS. True ROAS (revenue ÷ spend) requires purchase-conversion tracking.')
     : isClickBased
-      ? '點擊效益＝每花 NT$100 取得的連結點擊次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。'
-      : 'ROAS＝廣告營收 ÷ 廣告花費，需有購買轉換追蹤的營收資料。'
+      ? L('點擊效益＝每花 NT$100 取得的連結點擊次數，並非 ROAS。真正的 ROAS（營收÷花費）需設定購買轉換追蹤才能計算。', 'Click value = link clicks per NT$100 spent, not ROAS. True ROAS (revenue ÷ spend) requires purchase-conversion tracking.')
+      : L('ROAS＝廣告營收 ÷ 廣告花費，需有購買轉換追蹤的營收資料。', 'ROAS = ad revenue ÷ ad spend; requires revenue data from purchase-conversion tracking.')
 
   // No accessible ad data in range → fall back the 觸及人數 card to organic post
   // reach (clearly labelled), instead of a meaningless 0. Other ad-only cards
@@ -82,26 +89,26 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   const noAdData = (s.spend ?? 0) <= 0 && (s.impressions ?? 0) <= 0
 
   const cards: Record<string, { label: string; value: string; meta: string; color: string; delta: string; dir: string; q: string; tip?: string }> = {
-    roas: { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: `目標 ${s.roasTarget}${roasUnit}`, color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? '影片廣告效益如何提升？' : isClickBased ? '廣告點擊效益如何提升？' : 'CPA 如何降低？', tip: roasTip },
-    spend: { label: '總花費', value: fmtK(s.spend ?? 0), meta: `預算 ${fmtK(data.budget.total)}`, color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: '預算怎麼分配最划算？' },
-    cpa: { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: `目標 $${fmt(s.cpaTarget ?? 0)}`, color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
-    ctr: { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: '業界均值 1.8%', color: 'blue', delta: '+19%', dir: 'up', q: '哪支素材表現最好？' },
-    cpc: { label: 'CPC', value: `$${fmt((s.clicks ?? 0) > 0 ? (s.spend ?? 0) / (s.clicks ?? 1) : 0, 2)}`, meta: '每次點擊成本（含互動）', color: 'blue', delta: '', dir: 'neutral', q: 'CPC 如何降低？' },
-    cpm: { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: '千次曝光', color: 'orange', delta: '', dir: 'neutral', q: 'CPM 為什麼上升？' },
+    roas: { label: roasLabel, value: roas.toFixed(2) + roasUnit, meta: L(`目標 ${s.roasTarget}${roasUnit}`, `Target ${s.roasTarget}${roasUnit}`), color: roas >= s.roasTarget ? 'green' : 'orange', delta: s.roasTarget > 0 ? `${roas >= s.roasTarget ? '+' : ''}${((roas - s.roasTarget) / s.roasTarget * 100).toFixed(0)}%` : '', dir: roas >= s.roasTarget ? 'up' : 'down', q: isVideoBased ? L('影片廣告效益如何提升？', 'How can I improve video ad performance?') : isClickBased ? L('廣告點擊效益如何提升？', 'How can I improve ad click value?') : L('CPA 如何降低？', 'How can I lower CPA?'), tip: roasTip },
+    spend: { label: L('總花費', 'Total spend'), value: fmtK(s.spend ?? 0), meta: L(`預算 ${fmtK(data.budget.total)}`, `Budget ${fmtK(data.budget.total)}`), color: 'blue', delta: `${budgetPct.toFixed(0)}%`, dir: 'neutral', q: L('預算怎麼分配最划算？', "What's the most cost-effective budget split?") },
+    cpa: { label: cpaLabel, value: `$${fmt(s.cpa ?? 0)}`, meta: L(`目標 $${fmt(s.cpaTarget ?? 0)}`, `Target $${fmt(s.cpaTarget ?? 0)}`), color: (s.cpa ?? 0) > 0 && (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'green' : 'orange', delta: (s.cpa ?? 0) > 0 && (s.cpaTarget ?? 0) > 0 ? ((s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? `-${(((s.cpaTarget ?? 0) - (s.cpa ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%` : `+${(((s.cpa ?? 0) - (s.cpaTarget ?? 0)) / (s.cpaTarget ?? 1) * 100).toFixed(0)}%`) : '', dir: (s.cpa ?? 0) <= (s.cpaTarget ?? 0) ? 'up' : 'down', q: cpaQ },
+    ctr: { label: 'CTR', value: `${fmt(s.ctr ?? 0, 2)}%`, meta: L('業界均值 1.8%', 'Industry avg 1.8%'), color: 'blue', delta: '+19%', dir: 'up', q: L('哪支素材表現最好？', 'Which creative performs best?') },
+    cpc: { label: 'CPC', value: `$${fmt((s.clicks ?? 0) > 0 ? (s.spend ?? 0) / (s.clicks ?? 1) : 0, 2)}`, meta: L('每次點擊成本（含互動）', 'Cost per click (incl. engagement)'), color: 'blue', delta: '', dir: 'neutral', q: L('CPC 如何降低？', 'How can I lower CPC?') },
+    cpm: { label: 'CPM', value: `$${fmt(s.cpm ?? 0, 2)}`, meta: L('千次曝光', 'Per 1,000 impressions'), color: 'orange', delta: '', dir: 'neutral', q: L('CPM 為什麼上升？', 'Why is CPM rising?') },
     reach: noAdData
-      ? { label: '觸及人數', value: fmtCount(totalOrganicReach), meta: '自然貼文觸及（無廣告）', color: 'blue', delta: '', dir: 'neutral', q: '如何擴大自然觸及？', tip: '此粉專所選區間無廣告數據，這裡顯示的是自然貼文的總觸及人數。' }
-      : { label: '觸及人數', value: fmtCount(reach), meta: `曝光 ${fmtCount(impressions)} 次`, color: 'blue', delta: '', dir: 'neutral', q: '如何擴大觸及？' },
-    impressions: { label: '曝光次數', value: fmtCount(impressions), meta: `觸及 ${fmtCount(reach)} 人`, color: 'blue', delta: '', dir: 'neutral', q: '曝光與觸及的差距代表什麼？' },
-    conversions: { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: '哪個組合轉換最好？', tip: isVideoBased ? '此活動為影片觀看目標，顯示影片觀看次數（非轉換率）。' : isClickBased ? '此活動為連結點擊目標，「轉換」即連結點擊，故顯示點擊次數（非轉換率）。真正的購買轉換需設定轉換追蹤。' : '購買轉換次數（非轉換率）。' },
-    link_clicks: { label: '連結點擊數', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '已點擊連結次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '怎麼提升連結點擊？' },
-    cpl: { label: 'CPL', value: cpl > 0 ? `$${fmt(cpl, 2)}` : '–', meta: '每次報名點擊成本', color: 'orange', delta: '', dir: 'neutral', q: 'CPL 如何降低？' },
-    link_page_views: { label: '連結頁面瀏覽', value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? '連結頁面瀏覽次數' : '需設定為連結點擊目標', color: 'blue', delta: '', dir: 'neutral', q: '連結頁面瀏覽如何提升？' },
-    frequency: { label: '頻率', value: frequency.toFixed(2), meta: '建議 < 3.5', color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? '⚠ 偏高' : '正常', dir: frequency > 3.5 ? 'down' : 'up', q: '我的受眾是否疲乏了？' },
+      ? { label: L('觸及人數', 'Reach'), value: fmtCount(totalOrganicReach, en), meta: L('自然貼文觸及（無廣告）', 'Organic post reach (no ads)'), color: 'blue', delta: '', dir: 'neutral', q: L('如何擴大自然觸及？', 'How can I expand organic reach?'), tip: L('此粉專所選區間無廣告數據，這裡顯示的是自然貼文的總觸及人數。', 'No ad data for this page in the selected range; this shows the total organic post reach.') }
+      : { label: L('觸及人數', 'Reach'), value: fmtCount(reach, en), meta: L(`曝光 ${fmtCount(impressions, en)} 次`, `${fmtCount(impressions, en)} impressions`), color: 'blue', delta: '', dir: 'neutral', q: L('如何擴大觸及？', 'How can I expand reach?') },
+    impressions: { label: L('曝光次數', 'Impressions'), value: fmtCount(impressions, en), meta: L(`觸及 ${fmtCount(reach, en)} 人`, `${fmtCount(reach, en)} reached`), color: 'blue', delta: '', dir: 'neutral', q: L('曝光與觸及的差距代表什麼？', 'What does the gap between impressions and reach mean?') },
+    conversions: { label: convLabel, value: fmt(s.conversions ?? 0), meta: convMeta, color: 'green', delta: '', dir: 'neutral', q: L('哪個組合轉換最好？', 'Which ad set converts best?'), tip: isVideoBased ? L('此活動為影片觀看目標，顯示影片觀看次數（非轉換率）。', 'This campaign optimizes for video views; shows view count (not conversion rate).') : isClickBased ? L('此活動為連結點擊目標，「轉換」即連結點擊，故顯示點擊次數（非轉換率）。真正的購買轉換需設定轉換追蹤。', 'This campaign optimizes for link clicks, so "conversions" = link clicks (count, not rate). True purchase conversions require conversion tracking.') : L('購買轉換次數（非轉換率）。', 'Purchase conversion count (not rate).') },
+    link_clicks: { label: L('連結點擊數', 'Link clicks'), value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? L('已點擊連結次數', 'Link clicks count') : L('需設定為連結點擊目標', 'Requires link-click objective'), color: 'blue', delta: '', dir: 'neutral', q: L('怎麼提升連結點擊？', 'How can I boost link clicks?') },
+    cpl: { label: 'CPL', value: cpl > 0 ? `$${fmt(cpl, 2)}` : '–', meta: L('每次報名點擊成本', 'Cost per sign-up click'), color: 'orange', delta: '', dir: 'neutral', q: L('CPL 如何降低？', 'How can I lower CPL?') },
+    link_page_views: { label: L('連結頁面瀏覽', 'Link page views'), value: isClickBased ? fmt(linkClicks) : '–', meta: isClickBased ? L('連結頁面瀏覽次數', 'Link page view count') : L('需設定為連結點擊目標', 'Requires link-click objective'), color: 'blue', delta: '', dir: 'neutral', q: L('連結頁面瀏覽如何提升？', 'How can I increase link page views?') },
+    frequency: { label: L('頻率', 'Frequency'), value: frequency.toFixed(2), meta: L('建議 < 3.5', 'Recommended < 3.5'), color: frequency > 3.5 ? 'red' : 'green', delta: frequency > 3.5 ? L('⚠ 偏高', '⚠ High') : L('正常', 'Normal'), dir: frequency > 3.5 ? 'down' : 'up', q: L('我的受眾是否疲乏了？', 'Is my audience fatiguing?') },
     // Dedicated real-ROAS card. Only meaningful for purchase campaigns with revenue
     // tracking; otherwise shows N/A + how to enable it (don't fake a ROAS number).
     roasReal: (convType === 'purchase' && roas > 0)
-      ? { label: 'ROAS', value: `${roas.toFixed(2)}x`, meta: '營收 ÷ 花費', color: 'green', delta: '', dir: 'neutral', q: 'ROAS 如何進一步提升？' }
-      : { label: 'ROAS', value: 'N/A', meta: '需設定購買轉換追蹤', color: '', delta: '', dir: 'neutral', q: '如何設定購買轉換追蹤以計算 ROAS？', tip: '真正的 ROAS（營收÷花費）需在 Meta 設定購買事件與金額追蹤才能計算；此活動非購買目標，故無法計算。' },
+      ? { label: 'ROAS', value: `${roas.toFixed(2)}x`, meta: L('營收 ÷ 花費', 'Revenue ÷ spend'), color: 'green', delta: '', dir: 'neutral', q: L('ROAS 如何進一步提升？', 'How can I improve ROAS further?') }
+      : { label: 'ROAS', value: 'N/A', meta: L('需設定購買轉換追蹤', 'Requires purchase-conversion tracking'), color: '', delta: '', dir: 'neutral', q: L('如何設定購買轉換追蹤以計算 ROAS？', 'How do I set up purchase-conversion tracking to compute ROAS?'), tip: L('真正的 ROAS（營收÷花費）需在 Meta 設定購買事件與金額追蹤才能計算；此活動非購買目標，故無法計算。', 'True ROAS (revenue ÷ spend) requires purchase event + value tracking in Meta; this campaign is not a purchase objective, so it cannot be computed.') },
   }
 
   // Default order (used when no onboarding goal selected) preserves prior layout.
@@ -115,13 +122,13 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
   const kpis = orderedIds.map(id => cards[id]).filter(Boolean)
 
   const hasPurchase = convType === 'purchase'
-  const platformCols = platCols(hasPurchase)
+  const platformCols = platCols(hasPurchase, en)
   const platformRows = PLATFORM_ORDER
     .map(platform => {
       const p = (data.platformBreakdown ?? []).find(x => x.platform === platform)
       const spend = p?.spend ?? 0, clicks = p?.clicks ?? 0, impressions = p?.impressions ?? 0, conversions = p?.conversions ?? 0, revenue = p?.revenue ?? 0
       return {
-        label: PLATFORM_LABEL[platform] ?? platform, spend, clicks, impressions, conversions, revenue,
+        label: platformLabel(platform, en), spend, clicks, impressions, conversions, revenue,
         ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
         cpc: clicks > 0 ? spend / clicks : 0,
         roas: spend > 0 ? (hasPurchase ? revenue / spend : (conversions / spend) * 100) : 0,
@@ -140,7 +147,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name="chart" size={15} color="var(--ad-blue)" />
-          <span style={{ fontSize: 15, fontWeight: 700 }}>整體表現總覽</span>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>{L('整體表現總覽', 'Performance Overview')}</span>
         </div>
         <div className="ads-date-pill"><Icon name="calendar" size={12} />{data.overview.dateRange}</div>
       </div>
@@ -148,7 +155,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
       {noAdData && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'var(--ad-blue-light, #eef3fd)', border: '1px solid var(--ad-border)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12.5, color: 'var(--ad-text2)', lineHeight: 1.6 }}>
           <span style={{ flexShrink: 0 }}>ℹ️</span>
-          <span>此粉專在所選區間沒有可存取的廣告數據，廣告指標（花費／CTR／CPM 等）顯示為 0。「觸及人數」已改為自然貼文觸及；完整自然成效請見下方「內容表現摘要」或左側「內容表現」。</span>
+          <span>{L('此粉專在所選區間沒有可存取的廣告數據，廣告指標（花費／CTR／CPM 等）顯示為 0。「觸及人數」已改為自然貼文觸及；完整自然成效請見下方「內容表現摘要」或左側「內容表現」。', 'No accessible ad data for this page in the selected range, so ad metrics (spend / CTR / CPM, etc.) show 0. "Reach" now shows organic post reach; for full organic performance see "Content Summary" below or "Content" on the left.')}</span>
         </div>
       )}
 
@@ -168,39 +175,39 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
 
       <div className="ads-card ads-card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>月度預算進度</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{L('月度預算進度', 'Monthly budget progress')}</span>
           <span style={{ fontSize: 12, color: 'var(--ad-text3)', fontFamily: 'var(--font-dm-mono)' }}>{fmtK(s.spend)} / {fmtK(data.budget.total)}</span>
         </div>
         <div className="ads-budget-bar-wrap">
           <div className="ads-budget-bar-fill" style={{ width: `${budgetPct}%`, background: budgetPct > 95 ? 'var(--ad-orange)' : 'var(--ad-blue)' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--ad-text3)' }}>
-          <span>{budgetPct.toFixed(1)}% 已使用</span>
-          <span>剩餘 {fmtK(data.budget.remaining)} · 預計月底 {fmtK(data.budget.projectedSpend)}</span>
+          <span>{budgetPct.toFixed(1)}% {L('已使用', 'used')}</span>
+          <span>{L('剩餘', 'Remaining')} {fmtK(data.budget.remaining)} · {L('預計月底', 'projected EOM')} {fmtK(data.budget.projectedSpend)}</span>
         </div>
       </div>
 
       <div className="ads-grid-2">
         <div className="ads-card ads-card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>每日花費 vs 點擊數</div>
-          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'clicks', label: '點擊數', color: '#3B6FD4', isInt: true }, { key: 'spend', label: '花費', color: '#2E8B57', isCurr: true }]} />
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{L('每日花費 vs 點擊數', 'Daily spend vs clicks')}</div>
+          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'clicks', label: L('點擊數', 'Clicks'), color: '#3B6FD4', isInt: true }, { key: 'spend', label: L('花費', 'Spend'), color: '#2E8B57', isCurr: true }]} />
         </div>
         <div className="ads-card ads-card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isVideoBased ? '每日觀看效益趨勢' : isClickBased ? '每日點擊效益趨勢' : '每日 CPA 趨勢'}</div>
-          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: isClickBased ? '點擊效益' : 'CPA', color: '#3B6FD4' }]} />
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{isVideoBased ? L('每日觀看效益趨勢', 'Daily view-value trend') : isClickBased ? L('每日點擊效益趨勢', 'Daily click-value trend') : L('每日 CPA 趨勢', 'Daily CPA trend')}</div>
+          <SvgChart data={data.overview.dailySpend ?? []} height={170} lines={[{ key: 'roas', label: isClickBased ? L('點擊效益', 'Click value') : 'CPA', color: '#3B6FD4' }]} />
         </div>
       </div>
 
       {platformRows.length > 0 && (
         <div className="ads-card" style={{ overflow: 'hidden', marginTop: 16 }}>
           <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>平台來源（FB / IG）</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('平台來源（FB / IG）', 'Platform source (FB / IG)')}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--ad-border)' }}>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>平台</th>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>{L('平台', 'Platform')}</th>
                   {platformCols.map(c => (
                     <th key={c.key} style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.label}</th>
                   ))}
@@ -227,15 +234,15 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
       <div style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <Icon name="calendar" size={15} color="var(--ad-blue)" />
-          <span style={{ fontSize: 14, fontWeight: 700 }}>內容表現摘要</span>
-          <span style={{ fontSize: 11.5, color: 'var(--ad-text3)' }}>過去 30 天 · {postsSource.length} 篇貼文</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>{L('內容表現摘要', 'Content Summary')}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--ad-text3)' }}>{L(`過去 30 天 · ${postsSource.length} 篇貼文`, `Last 30 days · ${postsSource.length} posts`)}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 12 }}>
           {[
-            { label: '最高觸及', value: String(topReach), sub: top3[0] ? `${top3[0].date} ${top3[0].type}` : '—', color: 'var(--ad-blue)' },
-            { label: '平均觸及', value: String(avgReach), sub: '自然觸及', color: 'var(--ad-blue)' },
-            { label: '平均互動率', value: reachPosts.length > 0 ? `${(reachPosts.reduce((acc, p) => acc + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length).toFixed(2)}%` : '—', sub: '(讚+留言+分享)/觸及', color: 'var(--ad-green)' },
-            { label: '有廣告加持', value: `${adPosts.length} 篇`, sub: adPosts.length > 0 ? `最低 CPA $${Math.min(...adPosts.filter(p => (p.adCpa ?? 0) > 0).map(p => p.adCpa ?? 999)).toFixed(2)}` : '尚無廣告數據', color: 'var(--ad-orange)' },
+            { label: L('最高觸及', 'Top reach'), value: String(topReach), sub: top3[0] ? `${top3[0].date} ${top3[0].type}` : '—', color: 'var(--ad-blue)' },
+            { label: L('平均觸及', 'Avg reach'), value: String(avgReach), sub: L('自然觸及', 'Organic reach'), color: 'var(--ad-blue)' },
+            { label: L('平均互動率', 'Avg engagement'), value: reachPosts.length > 0 ? `${(reachPosts.reduce((acc, p) => acc + ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100), 0) / reachPosts.length).toFixed(2)}%` : '—', sub: L('(讚+留言+分享)/觸及', '(likes+comments+shares)/reach'), color: 'var(--ad-green)' },
+            { label: L('有廣告加持', 'Boosted'), value: L(`${adPosts.length} 篇`, `${adPosts.length}`), sub: adPosts.length > 0 ? L(`最低 CPA $${Math.min(...adPosts.filter(p => (p.adCpa ?? 0) > 0).map(p => p.adCpa ?? 999)).toFixed(2)}`, `Min CPA $${Math.min(...adPosts.filter(p => (p.adCpa ?? 0) > 0).map(p => p.adCpa ?? 999)).toFixed(2)}`) : L('尚無廣告數據', 'No ad data'), color: 'var(--ad-orange)' },
           ].map(s => (
             <div key={s.label} className="ads-card ads-card-pad" style={{ borderTop: `3px solid ${s.color}` }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ad-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
@@ -245,9 +252,9 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
           ))}
         </div>
         <div className="ads-card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)', fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>🏆 觸及率 Top 3 貼文</div>
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)', fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('🏆 觸及率 Top 3 貼文', '🏆 Top 3 posts by reach')}</div>
           {top3.length === 0 ? (
-            <div style={{ padding: '20px 16px', color: 'var(--ad-text3)', fontSize: 12.5 }}>暫無觸及資料</div>
+            <div style={{ padding: '20px 16px', color: 'var(--ad-text3)', fontSize: 12.5 }}>{L('暫無觸及資料', 'No reach data yet')}</div>
           ) : top3.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < top3.length - 1 ? '1px solid var(--ad-border)' : 'none' }}>
               <div style={{ width: 22, height: 22, borderRadius: 6, background: i === 0 ? 'var(--ad-green)' : i === 1 ? 'var(--ad-blue)' : 'var(--ad-surface2)', color: i < 2 ? 'white' : 'var(--ad-text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
@@ -257,7 +264,7 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ad-blue)', fontFamily: 'var(--font-dm-mono)' }}>{fmt(p.reach ?? 0)}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ad-text3)' }}>觸及</div>
+                <div style={{ fontSize: 10.5, color: 'var(--ad-text3)' }}>{L('觸及', 'Reach')}</div>
               </div>
               {p.hasAd && p.adCpa != null && p.adCpa > 0 && <span className="ads-posts-ad-badge">🎯 CPA ${p.adCpa}</span>}
             </div>

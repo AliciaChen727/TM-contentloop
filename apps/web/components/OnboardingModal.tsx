@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 export type OptimizationGoal = 'clicks' | 'conversion' | 'reach' | 'event'
 export type Industry = 'ecommerce' | 'education' | 'event' | 'personal_brand' | 'other'
@@ -15,22 +16,24 @@ type Submission =
   | { skip: true }
   | { skip: false; optimizationGoal: OptimizationGoal; industry: Industry; industryOther?: string }
 
-const GOAL_OPTIONS: { value: OptimizationGoal; title: string; desc: string }[] = [
-  { value: 'clicks', title: '提升點擊率', desc: '主推 CTR、CPC、連結點擊數' },
-  { value: 'conversion', title: '提升轉換與 ROI', desc: '主推 ROAS、CPA、轉換數' },
-  { value: 'reach', title: '擴大品牌觸及', desc: '主推 CPM、觸及人數、曝光次數' },
-  { value: 'event', title: '活動報名推廣', desc: '主推 CTR、CPL、連結頁面瀏覽' },
+const GOAL_OPTIONS: { value: OptimizationGoal; title: string; titleEn: string; desc: string; descEn: string }[] = [
+  { value: 'clicks', title: '提升點擊率', titleEn: 'Boost click-through', desc: '主推 CTR、CPC、連結點擊數', descEn: 'CTR, CPC, link clicks' },
+  { value: 'conversion', title: '提升轉換與 ROI', titleEn: 'Conversions & ROI', desc: '主推 ROAS、CPA、轉換數', descEn: 'ROAS, CPA, conversions' },
+  { value: 'reach', title: '擴大品牌觸及', titleEn: 'Brand reach', desc: '主推 CPM、觸及人數、曝光次數', descEn: 'CPM, reach, impressions' },
+  { value: 'event', title: '活動報名推廣', titleEn: 'Event sign-ups', desc: '主推 CTR、CPL、連結頁面瀏覽', descEn: 'CTR, CPL, page views' },
 ]
 
-const INDUSTRY_OPTIONS: { value: Industry; title: string }[] = [
-  { value: 'ecommerce', title: '電商 / 零售' },
-  { value: 'education', title: '課程 / 教育訓練' },
-  { value: 'event', title: '活動 / 社群組織' },
-  { value: 'personal_brand', title: '個人品牌 / 自媒體' },
-  { value: 'other', title: '其他' },
+const INDUSTRY_OPTIONS: { value: Industry; title: string; titleEn: string }[] = [
+  { value: 'ecommerce', title: '電商 / 零售', titleEn: 'E-commerce / Retail' },
+  { value: 'education', title: '課程 / 教育訓練', titleEn: 'Courses / Training' },
+  { value: 'event', title: '活動 / 社群組織', titleEn: 'Events / Community' },
+  { value: 'personal_brand', title: '個人品牌 / 自媒體', titleEn: 'Personal brand / Creator' },
+  { value: 'other', title: '其他', titleEn: 'Other' },
 ]
 
 export function OnboardingModal({ idToken, pageId, onDone }: Props) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [step, setStep] = useState<1 | 2>(1)
   const [goal, setGoal] = useState<OptimizationGoal | null>(null)
   const [industry, setIndustry] = useState<Industry | null>(null)
@@ -91,8 +94,8 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
         <div className="px-6 py-5">
           {step === 1 ? (
             <>
-              <h2 className="text-lg font-bold text-gray-900">你最在乎哪個廣告目標？</h2>
-              <p className="mt-1 mb-4 text-sm text-gray-500">我們會根據你的目標，推薦最重要的成效指標</p>
+              <h2 className="text-lg font-bold text-gray-900">{L('你最在乎哪個廣告目標？', 'Which ad objective matters most?')}</h2>
+              <p className="mt-1 mb-4 text-sm text-gray-500">{L('我們會根據你的目標，推薦最重要的成效指標', "We'll surface the most important metrics for your objective")}</p>
               <div className="space-y-2">
                 {GOAL_OPTIONS.map(opt => {
                   const active = goal === opt.value
@@ -102,8 +105,8 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
                       onClick={() => setGoal(opt.value)}
                       className={`w-full rounded-xl border p-3 text-left transition ${active ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
                     >
-                      <div className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-gray-800'}`}>{opt.title}</div>
-                      <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                      <div className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-gray-800'}`}>{en ? opt.titleEn : opt.title}</div>
+                      <div className="mt-0.5 text-xs text-gray-500">{en ? opt.descEn : opt.desc}</div>
                     </button>
                   )
                 })}
@@ -111,8 +114,8 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
             </>
           ) : (
             <>
-              <h2 className="text-lg font-bold text-gray-900">你的粉專主要經營什麼？</h2>
-              <p className="mt-1 mb-4 text-sm text-gray-500">幫助 AI Sidekick 給出更精準的診斷建議</p>
+              <h2 className="text-lg font-bold text-gray-900">{L('你的粉專主要經營什麼？', 'What does your Page mainly do?')}</h2>
+              <p className="mt-1 mb-4 text-sm text-gray-500">{L('幫助 AI Sidekick 給出更精準的診斷建議', 'Helps AI Sidekick give more precise advice')}</p>
               <div className="space-y-2">
                 {INDUSTRY_OPTIONS.map(opt => {
                   const active = industry === opt.value
@@ -122,7 +125,7 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
                       onClick={() => setIndustry(opt.value)}
                       className={`w-full rounded-xl border p-3 text-left transition ${active ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
                     >
-                      <div className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-gray-800'}`}>{opt.title}</div>
+                      <div className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-gray-800'}`}>{en ? opt.titleEn : opt.title}</div>
                     </button>
                   )
                 })}
@@ -132,7 +135,7 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
                   type="text"
                   value={industryOther}
                   onChange={e => setIndustryOther(e.target.value)}
-                  placeholder="請輸入你的產業（例：寵物用品、SaaS、醫美…）"
+                  placeholder={L('請輸入你的產業（例：寵物用品、SaaS、醫美…）', 'Enter your industry (e.g. pet supplies, SaaS, aesthetics…)')}
                   className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
                   autoFocus
                 />
@@ -147,7 +150,7 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
             disabled={saving}
             className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-40"
           >
-            跳過
+            {L('跳過', 'Skip')}
           </button>
           <div className="flex gap-2">
             {step === 2 && (
@@ -156,7 +159,7 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
                 disabled={saving}
                 className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50"
               >
-                上一步
+                {L('上一步', 'Back')}
               </button>
             )}
             <button
@@ -164,7 +167,7 @@ export function OnboardingModal({ idToken, pageId, onDone }: Props) {
               disabled={saving || (step === 1 ? !goal : !step2Ready)}
               className="rounded-lg bg-[#1877F2] px-5 py-2 text-sm font-semibold text-white hover:bg-[#166FE5] disabled:opacity-40"
             >
-              {step === 1 ? '下一步' : saving ? '儲存中⋯' : '完成'}
+              {step === 1 ? L('下一步', 'Next') : saving ? L('儲存中⋯', 'Saving…') : L('完成', 'Done')}
             </button>
           </div>
         </div>

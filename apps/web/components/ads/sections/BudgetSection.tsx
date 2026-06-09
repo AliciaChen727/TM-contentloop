@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Icon } from '../Icon'
 import type { AdData, Adset, LabelEntry, Experiment } from '../types'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${fmt(n)}`
@@ -54,6 +55,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
   creativeLabels?: Record<string, LabelEntry>
   experiments?: Experiment[]
 }) {
+  const { L } = useLang()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const convType = (data as any).conversionType as string | undefined
   const isClickBased = convType === 'link_click'
@@ -87,7 +89,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
       const cpa = spent > 0 ? members.reduce((s, m) => s + m.cpa * m.spent, 0) / spent : 0
       merged.push({
         id: `exp:${expId}`,
-        name: `🧪 ${expName.get(expId) || '實驗'}（A/B 合併 ${members.length} 組）`,
+        name: L(`🧪 ${expName.get(expId) || '實驗'}（A/B 合併 ${members.length} 組）`, `🧪 ${expName.get(expId) || 'Experiment'} (A/B merged ${members.length})`),
         budget, spent, roas: Number(roas.toFixed(2)), cpa: Math.round(cpa),
         members,
       })
@@ -140,32 +142,32 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
     <div>
       <div className="ads-section-header">
         <Icon name="budget" size={15} color="var(--ad-blue)" />
-        <span className="ads-section-title">預算分配模擬器</span>
+        <span className="ads-section-title">{L('預算分配模擬器', 'Budget Allocation Simulator')}</span>
       </div>
 
       <div className="ads-card ads-card-pad">
         <div className="ads-sim-controls">
           <div style={{ fontSize: 13 }}>
-            模擬總預算：<strong style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 15 }}>{fmtK(totalNew)}</strong>
+            {L('模擬總預算：', 'Simulated total budget: ')}<strong style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 15 }}>{fmtK(totalNew)}</strong>
             <span style={{ marginLeft: 6, fontSize: 12, color: totalNew > totalOrig ? 'var(--ad-orange)' : totalNew < totalOrig ? 'var(--ad-green)' : 'var(--ad-text3)' }}>
-              {totalNew !== totalOrig ? `${totalNew > totalOrig ? '↑' : '↓'} ${fmtK(Math.abs(totalNew - totalOrig))}` : '(原預算)'}
+              {totalNew !== totalOrig ? `${totalNew > totalOrig ? '↑' : '↓'} ${fmtK(Math.abs(totalNew - totalOrig))}` : L('(原預算)', '(original)')}
             </span>
           </div>
           <div style={{ fontWeight: 600, fontSize: 13 }}>
-            {isVideoBased ? '模擬觀看效益：' : isClickBased ? '模擬效益：' : '模擬 ROAS：'}
+            {isVideoBased ? L('模擬觀看效益：', 'Simulated view value: ') : isClickBased ? L('模擬效益：', 'Simulated value: ') : L('模擬 ROAS：', 'Simulated ROAS: ')}
             {hasRoasData
-              ? <span style={{ fontFamily: 'var(--font-dm-mono)', color: roasColor(projRoas), fontSize: 15 }}>{projRoas.toFixed(2)}{isVideoBased || isClickBased ? '次/百元' : 'x'}</span>
-              : <span style={{ fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)', fontSize: 13 }}>無花費數據（過去 30 天尚無記錄）</span>
+              ? <span style={{ fontFamily: 'var(--font-dm-mono)', color: roasColor(projRoas), fontSize: 15 }}>{projRoas.toFixed(2)}{isVideoBased || isClickBased ? L('次/百元', '/NT$100') : 'x'}</span>
+              : <span style={{ fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)', fontSize: 13 }}>{L('無花費數據（過去 30 天尚無記錄）', 'No spend data (none in the last 30 days)')}</span>
             }
           </div>
-          <button className="ads-btn" style={{ marginLeft: 'auto' }} onClick={applyAI}>✨ AI 自動最佳化</button>
-          <button className="ads-btn" onClick={reset}>重置</button>
+          <button className="ads-btn" style={{ marginLeft: 'auto' }} onClick={applyAI}>{L('✨ AI 自動最佳化', '✨ AI auto-optimize')}</button>
+          <button className="ads-btn" onClick={reset}>{L('重置', 'Reset')}</button>
         </div>
 
         <table className="ads-budget-table">
           <thead>
             <tr>
-              <th>廣告組合</th><th>原始預算</th><th>花費進度</th><th>{isVideoBased ? '觀看效益' : isClickBased ? '效益指數' : 'ROAS'}</th><th>{isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'}</th><th>模擬預算</th><th>{isVideoBased ? '模擬觀看效益' : isClickBased ? '模擬效益指數' : '模擬ROAS'}</th><th>{isVideoBased ? '模擬CPV' : isClickBased ? '模擬CPC' : '模擬CPA'}</th>
+              <th>{L('廣告組合', 'Ad set')}</th><th>{L('原始預算', 'Original budget')}</th><th>{L('花費進度', 'Spend progress')}</th><th>{isVideoBased ? L('觀看效益', 'View value') : isClickBased ? L('效益指數', 'Value index') : 'ROAS'}</th><th>{isVideoBased ? 'CPV' : isClickBased ? 'CPC' : 'CPA'}</th><th>{L('模擬預算', 'Sim budget')}</th><th>{isVideoBased ? L('模擬觀看效益', 'Sim view value') : isClickBased ? L('模擬效益指數', 'Sim value index') : L('模擬ROAS', 'Sim ROAS')}</th><th>{isVideoBased ? L('模擬CPV', 'Sim CPV') : isClickBased ? L('模擬CPC', 'Sim CPC') : L('模擬CPA', 'Sim CPA')}</th>
             </tr>
           </thead>
           <tbody>
@@ -181,7 +183,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
                       {isMerged && (
                         <button
                           onClick={() => toggleExpand(rowId)}
-                          title={isOpen ? '收合個別廣告' : '展開個別廣告'}
+                          title={isOpen ? L('收合個別廣告', 'Collapse individual ads') : L('展開個別廣告', 'Expand individual ads')}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ad-text3)', fontSize: 11, marginRight: 4, padding: 0 }}
                         >
                           {isOpen ? '▾' : '▸'}

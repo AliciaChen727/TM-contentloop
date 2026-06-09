@@ -2,12 +2,16 @@
 
 import { signInWithPopup, signOut, linkWithCredential, FacebookAuthProvider, type AuthError } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { auth, googleProvider, facebookProvider } from '@/lib/firebase/client'
 
 export default function LoginPage() {
   const router = useRouter()
   const [error, setError] = useState('')
+  // Pre-auth page has no language context; honor the saved UI language preference.
+  const [en, setEn] = useState(false)
+  useEffect(() => { setEn(localStorage.getItem('cl_dash_lang') === 'en' || localStorage.getItem('cl_lang') === 'en') }, [])
+  const L = (zh: string, eng: string) => (en ? eng : zh)
 
   async function handlePostLogin(idToken: string) {
     await fetch('/api/auth/accept-invite', {
@@ -29,7 +33,7 @@ export default function LoginPage() {
     } else if (hasConnectedMeta) {
       // Connected Meta before but no current authorization on any page.
       await signOut(auth)
-      setError('你沒有取得此粉絲頁的授權，請聯絡管理員取得存取權限。')
+      setError(L('你沒有取得此粉絲頁的授權，請聯絡管理員取得存取權限。', "You don't have access to this Page. Please contact an admin for access."))
     } else {
       // Brand new user — go connect a page.
       router.push('/auth/connect')
@@ -44,7 +48,7 @@ export default function LoginPage() {
       await handlePostLogin(idToken)
     } catch (err) {
       console.error('Login failed:', err)
-      setError('登入失敗，請重試。')
+      setError(L('登入失敗，請重試。', 'Login failed, please try again.'))
     }
   }
 
@@ -60,7 +64,7 @@ export default function LoginPage() {
         const fbCredential = FacebookAuthProvider.credentialFromError(authErr)
         if (fbCredential) {
           try {
-            setError('你的 Email 已有 Google 帳號，正在自動連結，請在 Google 彈窗中確認身份…')
+            setError(L('你的 Email 已有 Google 帳號，正在自動連結，請在 Google 彈窗中確認身份…', 'Your email already has a Google account; linking automatically — please confirm in the Google popup…'))
             const googleResult = await signInWithPopup(auth, googleProvider)
             try {
               await linkWithCredential(googleResult.user, fbCredential)
@@ -68,7 +72,7 @@ export default function LoginPage() {
               const le = linkErr as AuthError
               if (le?.code !== 'auth/provider-already-linked') {
                 console.error('Account linking failed:', linkErr)
-                setError('帳號連結失敗，請重試或聯絡管理員。')
+                setError(L('帳號連結失敗，請重試或聯絡管理員。', 'Account linking failed. Please retry or contact an admin.'))
                 return
               }
             }
@@ -77,12 +81,12 @@ export default function LoginPage() {
             await handlePostLogin(idToken)
           } catch (googleErr) {
             console.error('Google sign-in during linking failed:', googleErr)
-            setError('帳號連結失敗，請重試或聯絡管理員。')
+            setError(L('帳號連結失敗，請重試或聯絡管理員。', 'Account linking failed. Please retry or contact an admin.'))
           }
         }
       } else {
         console.error('Facebook login failed:', err)
-        setError('Facebook 登入目前暫時無法使用，請改用上方的「使用 Google 帳號登入」。')
+        setError(L('Facebook 登入目前暫時無法使用，請改用上方的「使用 Google 帳號登入」。', 'Facebook login is temporarily unavailable — please use "Sign in with Google" above.'))
       }
     }
   }
@@ -91,7 +95,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">ContentLoop</h1>
-        <p className="mb-8 text-sm text-gray-500">登入以管理你的內容成效</p>
+        <p className="mb-8 text-sm text-gray-500">{L('登入以管理你的內容成效', 'Sign in to manage your content performance')}</p>
         {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
         <button
           onClick={handleGoogleLogin}
@@ -103,12 +107,12 @@ export default function LoginPage() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
-          使用 Google 帳號登入
+          {L('使用 Google 帳號登入', 'Sign in with Google')}
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0' }}>
           <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>或</span>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>{L('或', 'or')}</span>
           <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
         </div>
 
@@ -119,11 +123,11 @@ export default function LoginPage() {
           <svg className="h-5 w-5" fill="#1877F2" viewBox="0 0 24 24">
             <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
           </svg>
-          使用 Facebook 帳號登入
+          {L('使用 Facebook 帳號登入', 'Sign in with Facebook')}
         </button>
 
         <p className="mt-2 text-center text-xs text-gray-400">
-          若 Facebook 登入無法使用，請改用 Google 登入
+          {L('若 Facebook 登入無法使用，請改用 Google 登入', 'If Facebook login fails, use Google instead')}
         </p>
       </div>
     </main>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { SvgChart } from '@/components/ads/SvgCharts'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 export interface DailyPoint {
   [key: string]: number | string
@@ -17,16 +18,18 @@ export interface DailyPoint {
 }
 
 const METRICS = [
-  { key: 'reach',          label: '總觸擊',      color: '#3B6FD4', isInt: true,  disabled: false },
-  { key: 'likes',          label: '總按讚',      color: '#2E8B57', isInt: true,  disabled: false },
-  { key: 'comments',       label: '留言',        color: '#C96A1A', isInt: true,  disabled: false },
-  { key: 'engRate',        label: '互動率%',     color: '#7C3AED', isInt: false, disabled: false },
-  { key: 'followers',      label: '追蹤數',      color: '#E91E63', isInt: true,  disabled: false },
-  { key: 'followerGrowth', label: '追蹤成長率%', color: '#FF5722', isInt: false, disabled: false },
+  { key: 'reach',          label: '總觸擊',      en: 'Reach',          color: '#3B6FD4', isInt: true,  disabled: false },
+  { key: 'likes',          label: '總按讚',      en: 'Likes',          color: '#2E8B57', isInt: true,  disabled: false },
+  { key: 'comments',       label: '留言',        en: 'Comments',       color: '#C96A1A', isInt: true,  disabled: false },
+  { key: 'engRate',        label: '互動率%',     en: 'Engagement%',    color: '#7C3AED', isInt: false, disabled: false },
+  { key: 'followers',      label: '追蹤數',      en: 'Followers',      color: '#E91E63', isInt: true,  disabled: false },
+  { key: 'followerGrowth', label: '追蹤成長率%', en: 'Follower growth%', color: '#FF5722', isInt: false, disabled: false },
 ]
 
 // data is already date-filtered by page.tsx
 export function ContentChart({ data }: { data: DailyPoint[] }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [activeKeys, setActiveKeys] = useState<string[]>(['reach', 'likes'])
 
   const toggle = (key: string) => {
@@ -40,14 +43,14 @@ export function ContentChart({ data }: { data: DailyPoint[] }) {
   }
 
   const activeMetas = METRICS.filter(m => activeKeys.includes(m.key))
-  const lines = activeMetas.map(m => ({ key: m.key, label: m.label, color: m.color, isInt: m.isInt }))
+  const lines = activeMetas.map(m => ({ key: m.key, label: en ? m.en : m.label, color: m.color, isInt: m.isInt }))
   const allInt = activeMetas.every(m => m.isInt)
   const yFmt = allInt
     ? (v: number) => Math.round(v) >= 10000 ? `${Math.round(Math.round(v) / 1000)}K` : Math.round(v).toLocaleString('zh-TW')
     : undefined
 
   if (!data.length) {
-    return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ad-text3)', fontSize: 13 }}>此區間無貼文資料</div>
+    return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ad-text3)', fontSize: 13 }}>{L('此區間無貼文資料', 'No post data in this range')}</div>
   }
 
   return (
@@ -60,7 +63,7 @@ export function ContentChart({ data }: { data: DailyPoint[] }) {
             <button
               key={m.key}
               onClick={() => !m.disabled && toggle(m.key)}
-              title={m.disabled ? '即將推出，需串接粉絲頁數據' : undefined}
+              title={m.disabled ? L('即將推出，需串接粉絲頁數據', 'Coming soon — requires Page data') : undefined}
               style={{
                 padding: '3px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 600,
                 cursor: m.disabled ? 'not-allowed' : 'pointer', opacity: m.disabled ? 0.4 : 1,
@@ -71,13 +74,13 @@ export function ContentChart({ data }: { data: DailyPoint[] }) {
               }}
             >
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: on && !m.disabled ? m.color : 'var(--ad-border)', display: 'inline-block', flexShrink: 0 }} />
-              {m.label}
+              {en ? m.en : m.label}
               {m.disabled && <span style={{ fontSize: 9, marginLeft: 2 }}>🔒</span>}
             </button>
           )
         })}
         {activeKeys.includes('engRate') && (
-          <span style={{ fontSize: 10.5, color: 'var(--ad-text3)', marginLeft: 'auto' }}>互動率 = (按讚+留言+分享) ÷ 觸擊</span>
+          <span style={{ fontSize: 10.5, color: 'var(--ad-text3)', marginLeft: 'auto' }}>{L('互動率 = (按讚+留言+分享) ÷ 觸擊', 'Engagement = (likes+comments+shares) ÷ reach')}</span>
         )}
       </div>
 
@@ -86,7 +89,7 @@ export function ContentChart({ data }: { data: DailyPoint[] }) {
         <SvgChart data={data} lines={lines} height={180} yFmt={yFmt} />
       ) : (
         <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ad-text3)', fontSize: 13 }}>
-          資料點不足，請選擇更長的日期區間
+          {L('資料點不足，請選擇更長的日期區間', 'Not enough data points — pick a longer date range')}
         </div>
       )}
     </div>

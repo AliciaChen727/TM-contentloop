@@ -455,13 +455,14 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { message, contextPage, metricsContext, fileAttachments, history, pageId } = body as {
+  const { message, contextPage, metricsContext, fileAttachments, history, pageId, language: bodyLang } = body as {
     message: string
     contextPage: string
     metricsContext?: MetricsContext
     fileAttachments?: { type: 'image' | 'pdf' | 'text' | 'video'; mimeType: string; content: string; name: string; videoUrl?: string }[]
     history?: { role: 'user' | 'assistant'; text: string }[]
     pageId?: string
+    language?: 'zh-TW' | 'en'
   }
 
   if (!message?.trim() && (!fileAttachments || fileAttachments.length === 0)) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
@@ -493,7 +494,12 @@ export async function POST(req: NextRequest) {
   // Retrieve user language preference and organization context
   const prefSnap = await adminDb.collection('users').doc(uid).collection('settings').doc('preferences').get()
   const prefData = prefSnap.data()
-  const lang: 'zh-TW' | 'en' = prefData?.language === 'en' ? 'en' : 'zh-TW'
+  // Prefer the language the user currently has selected in the UI (sent in the
+  // request); fall back to the stored preference. This guarantees the reply
+  // matches what the user sees, even if the Firestore preference lags.
+  const lang: 'zh-TW' | 'en' = bodyLang === 'en' || bodyLang === 'zh-TW'
+    ? bodyLang
+    : (prefData?.language === 'en' ? 'en' : 'zh-TW')
   const orgCtx: OrgCtx | null = prefData?.organizationContext ?? null
 
   // Profile resolution: page-level override → user-level onboarding fallback.

@@ -4,32 +4,43 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../Icon'
 import type { AdData, Variant, LabelEntry, Experiment } from '../types'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}`
-const STATUS_LABEL: Record<string, string> = { top: '🏆 最佳', good: '👍 良好', ok: '一般', bad: '⚠️ 待優' }
+const statusLabel = (s: string, en: boolean): string => en
+  ? ({ top: '🏆 Top', good: '👍 Good', ok: 'OK', bad: '⚠️ Needs work' }[s] ?? s)
+  : ({ top: '🏆 最佳', good: '👍 良好', ok: '一般', bad: '⚠️ 待優' }[s] ?? s)
+const statusLabelText = (s: string, en: boolean): string => en
+  ? ({ top: 'Top', good: 'Good', ok: 'OK', bad: 'Needs work' }[s] ?? s)
+  : ({ top: '最佳', good: '良好', ok: '一般', bad: '待優' }[s] ?? s)
 const TYPES = ['全部', 'Reels', '貼文', 'Stories', '海報']
+const typeLabel = (t: string, en: boolean): string => en
+  ? ({ '全部': 'All', '貼文': 'Post', 'Stories': 'Stories', '海報': 'Poster', 'Reels': 'Reels' }[t] ?? t)
+  : t
 type SortBy = 'roas' | 'spend' | 'cpa'
 type WinnerType = 'pending' | 'A' | 'B' | 'inconclusive'
 
-const WINNER_OPTIONS: { value: WinnerType; label: string }[] = [
-  { value: 'pending', label: '尚未得出結論' },
-  { value: 'A', label: 'A 組勝出' },
-  { value: 'B', label: 'B 組勝出' },
-  { value: 'inconclusive', label: '無顯著差異' },
+const winnerOptions = (en: boolean): { value: WinnerType; label: string }[] => [
+  { value: 'pending', label: en ? 'No conclusion yet' : '尚未得出結論' },
+  { value: 'A', label: en ? 'A wins' : 'A 組勝出' },
+  { value: 'B', label: en ? 'B wins' : 'B 組勝出' },
+  { value: 'inconclusive', label: en ? 'No significant difference' : '無顯著差異' },
 ]
 
-const STATUS_LABEL_TEXT: Record<string, string> = { top: '最佳', good: '良好', ok: '一般', bad: '待優' }
-
-const VARIANT_STYLE: Record<Variant, { bg: string; color: string; label: string }> = {
-  control: { bg: '#f1f5f9', color: '#475569', label: '控制組' },
-  A: { bg: '#dbeafe', color: '#1d4ed8', label: 'A 版' },
-  B: { bg: '#ffedd5', color: '#c2410c', label: 'B 版' },
+const VARIANT_STYLE: Record<Variant, { bg: string; color: string; label: string; labelEn: string }> = {
+  control: { bg: '#f1f5f9', color: '#475569', label: '控制組', labelEn: 'Control' },
+  A: { bg: '#dbeafe', color: '#1d4ed8', label: 'A 版', labelEn: 'A' },
+  B: { bg: '#ffedd5', color: '#c2410c', label: 'B 版', labelEn: 'B' },
 }
+const variantLabel = (v: Variant, en: boolean): string => en ? VARIANT_STYLE[v].labelEn : VARIANT_STYLE[v].label
 
 type ExperimentUpdate = { name?: string; aiDiagnosis?: string; winner?: string; ctrDelta?: number; cpaDelta?: number }
 
-function buildCreativePrompt(c: AdData['creatives'][number]): string {
-  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${STATUS_LABEL_TEXT[c.status] ?? c.status}\nCPC：$${(c.cpc ?? c.cpa).toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
+function buildCreativePrompt(c: AdData['creatives'][number], en: boolean): string {
+  if (en) {
+    return `Please analyze this ad creative:\n"${c.name}"\nType: ${c.type} | Channel: ${c.channel} | Status: ${statusLabelText(c.status, true)}\nCPC: $${(c.cpc ?? c.cpa).toFixed(2)} | Click value: ${c.roas.toFixed(1)}x | Spend: $${c.spend} | CTR: ${Number(c.ctr).toFixed(2)}% | Impressions: ${c.impressions.toLocaleString()}\n\nPlease give a performance diagnosis and specific optimization suggestions for this creative.`
+  }
+  return `請分析這個廣告素材：\n《${c.name}》\n類型：${c.type}｜頻道：${c.channel}｜狀態：${statusLabelText(c.status, false)}\nCPC：$${(c.cpc ?? c.cpa).toFixed(2)}｜點擊效益：${c.roas.toFixed(1)}x｜花費：$${c.spend}｜CTR：${Number(c.ctr).toFixed(2)}%｜曝光：${c.impressions.toLocaleString()}\n\n請給出這個素材的成效診斷和具體優化建議。`
 }
 
 const PlatformIcon = ({ type }: { type: 'IG' | 'FB' }) => (
@@ -80,6 +91,8 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
   onCreateExperiment: (name: string) => Promise<string>
   onExperimentUpdate?: (experimentId: string, update: ExperimentUpdate) => void
 }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [open, setOpen] = useState(false)
   const [selectedExp, setSelectedExp] = useState<string>(label?.experimentId ?? '')
   const [creating, setCreating] = useState(false)
@@ -136,8 +149,8 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
 
   const currentExp = experiments.find(e => e.id === label?.experimentId)
   const badgeText = label
-    ? `${currentExp?.name || '實驗'}·${VARIANT_STYLE[label.variant].label}`
-    : '＋ 標記'
+    ? `${currentExp?.name || (en ? 'Experiment' : '實驗')}·${variantLabel(label.variant, en)}`
+    : (en ? '＋ Tag' : '＋ 標記')
 
   async function handleCreate() {
     const name = newName.trim()
@@ -156,7 +169,7 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         onClick={() => { if (open) { setOpen(false); setCreating(false) } else openMenu() }}
-        title="設定 A/B 測試標籤"
+        title={L('設定 A/B 測試標籤', 'Set A/B test label')}
         style={{
           fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', border: 'none',
           maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -168,9 +181,9 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
       </button>
       {open && createPortal(
         <div ref={menuRef} style={{ position: 'fixed', top: coords.top, left: coords.left, width: 200, maxHeight: coords.maxHeight, overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 1000, padding: '6px 0' }}>
-          <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>實驗</div>
+          <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{L('實驗', 'Experiment')}</div>
           {experiments.length === 0 && !creating && (
-            <div style={{ padding: '4px 12px', fontSize: 11, color: '#cbd5e1' }}>尚無實驗，請新增</div>
+            <div style={{ padding: '4px 12px', fontSize: 11, color: '#cbd5e1' }}>{L('尚無實驗，請新增', 'No experiments yet — add one')}</div>
           )}
           {experiments.map(e => (
             editingId === e.id ? (
@@ -183,7 +196,7 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
                   onBlur={() => saveRename(e.id)}
                   style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '4px 6px', border: '1px solid #bfdbfe', borderRadius: 6, fontFamily: 'inherit' }}
                 />
-                <button onClick={() => saveRename(e.id)} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>確認</button>
+                <button onClick={() => saveRename(e.id)} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>{L('確認', 'OK')}</button>
               </div>
             ) : (
               <div key={e.id} style={{ display: 'flex', alignItems: 'center' }}>
@@ -196,12 +209,12 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
                   }}
                 >
                   <span style={{ width: 8 }}>{selectedExp === e.id ? '✓' : ''}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '(未命名)'}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || L('(未命名)', '(untitled)')}</span>
                 </button>
                 {onExperimentUpdate && (
                   <button
                     onClick={() => { setEditingId(e.id); setEditName(e.name || '') }}
-                    title="重新命名"
+                    title={L('重新命名', 'Rename')}
                     style={{ padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, fontFamily: 'inherit' }}
                   >
                     ✎
@@ -217,22 +230,22 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
-                placeholder="實驗名稱"
+                placeholder={L('實驗名稱', 'Experiment name')}
                 style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '4px 6px', border: '1px solid #bfdbfe', borderRadius: 6, fontFamily: 'inherit' }}
               />
-              <button onClick={handleCreate} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>確認</button>
+              <button onClick={handleCreate} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#1d4ed8', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>{L('確認', 'OK')}</button>
             </div>
           ) : (
             <button
               onClick={() => setCreating(true)}
               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#1d4ed8', fontWeight: 600, fontFamily: 'inherit' }}
             >
-              ＋ 新增實驗
+              {L('＋ 新增實驗', '＋ New experiment')}
             </button>
           )}
 
           <div style={{ borderTop: '1px solid #f1f5f9', margin: '6px 0' }} />
-          <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>版本</div>
+          <div style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{L('版本', 'Variant')}</div>
           {(['control', 'A', 'B'] as Variant[]).map(v => (
             <button
               key={v}
@@ -245,7 +258,7 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
               }}
             >
               <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: VARIANT_STYLE[v].bg, border: `1px solid ${VARIANT_STYLE[v].color}` }} />
-              {VARIANT_STYLE[v].label}
+              {variantLabel(v, en)}
             </button>
           ))}
 
@@ -256,7 +269,7 @@ function ExperimentBadge({ adId, label, experiments, onLabelChange, onCreateExpe
                 onClick={() => { onLabelChange(adId, null); setOpen(false) }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 12px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontFamily: 'inherit' }}
               >
-                清除標籤
+                {L('清除標籤', 'Clear label')}
               </button>
             </>
           )}
@@ -308,74 +321,82 @@ function buildAbDiagnosis(
   testStats: GroupStats,
   testLabel: 'A' | 'B',
   hasControl: boolean,
-  winner: WinnerType
+  winner: WinnerType,
+  en: boolean
 ): AbDiagnosis {
   const ctrDelta = baseStats.ctr > 0 ? (testStats.ctr - baseStats.ctr) / baseStats.ctr : 0
   const roasDelta = baseStats.roas > 0 ? (testStats.roas - baseStats.roas) / baseStats.roas : 0
-  const baseLabel = hasControl ? '控制組' : 'A 版'
+  const baseLabel = en ? (hasControl ? 'Control' : 'A') : (hasControl ? '控制組' : 'A 版')
   const v = testLabel
+  const vl = en ? `${v}` : `${v} 版`
 
-  // 投放條件對等性：曝光或花費落差過大 → 數據量不足以達統計顯著性
   const imprBase = Math.max(baseStats.totalImpr, testStats.totalImpr)
   const spendBase = Math.max(baseStats.totalSpend, testStats.totalSpend)
   const imprGap = imprBase > 0 ? Math.abs(testStats.totalImpr - baseStats.totalImpr) / imprBase : 0
   const spendGap = spendBase > 0 ? Math.abs(testStats.totalSpend - baseStats.totalSpend) / spendBase : 0
   const spendDiff = Math.abs(testStats.totalSpend - baseStats.totalSpend)
   const imbalanced = imprGap > 0.30 || spendGap > 0.25
-  const imbalanceDesc = `曝光差 ${(imprGap * 100).toFixed(0)}%、花費差 ${fmtK(spendDiff)}`
+  const imbalanceDesc = en
+    ? `impressions differ by ${(imprGap * 100).toFixed(0)}%, spend by ${fmtK(spendDiff)}`
+    : `曝光差 ${(imprGap * 100).toFixed(0)}%、花費差 ${fmtK(spendDiff)}`
 
-  // CTR 文字描述（給已結束 / 不顯著的情境用）
   const ctrPct = ctrDelta * 100
   const ctrPhrase = Math.abs(ctrPct) >= 3
-    ? `${v} 版 CTR ${ctrPct >= 0 ? '高出' : '低於'}${baseLabel} ${Math.abs(ctrPct).toFixed(0)}%`
-    : `${v} 版 CTR 與${baseLabel}相近`
+    ? (en
+        ? `${vl} CTR is ${ctrPct >= 0 ? 'higher' : 'lower'} than ${baseLabel} by ${Math.abs(ctrPct).toFixed(0)}%`
+        : `${vl} CTR ${ctrPct >= 0 ? '高出' : '低於'}${baseLabel} ${Math.abs(ctrPct).toFixed(0)}%`)
+    : (en ? `${vl} CTR is close to ${baseLabel}` : `${vl} CTR 與${baseLabel}相近`)
 
-  // 1) 使用者已手動判定勝出組 → 投放已結束，直接宣告結果（最高優先）
+  // 1) Manual winner declared → delivery ended, announce result.
   if (winner === 'A' || winner === 'B') {
-    const wl = `${winner} 版`
-    const roiPhrase = roasDelta > 0.02 ? '點擊效益更佳' : roasDelta < -0.02 ? '點擊效益略低' : '點擊效益與其相當'
-    const balanceNote = imbalanced
-      ? `（兩組投放條件略有落差：${imbalanceDesc}，判讀時宜留意）`
-      : '，且兩組投放條件相近、具參考價值'
+    const wl = en ? `${winner}` : `${winner} 版`
+    const roiPhrase = en
+      ? (roasDelta > 0.02 ? 'with better click value' : roasDelta < -0.02 ? 'with slightly lower click value' : 'with comparable click value')
+      : (roasDelta > 0.02 ? '點擊效益更佳' : roasDelta < -0.02 ? '點擊效益略低' : '點擊效益與其相當')
+    const balanceNote = en
+      ? (imbalanced ? ` (note: the two groups' delivery conditions differ somewhat — ${imbalanceDesc})` : ', and the two groups had similar delivery conditions, so it is reliable')
+      : (imbalanced ? `（兩組投放條件略有落差：${imbalanceDesc}，判讀時宜留意）` : '，且兩組投放條件相近、具參考價值')
     return {
-      pattern: '勝出版本',
+      pattern: en ? 'Winner' : '勝出版本',
       roiWinner: winner,
-      interpretation: `投放已結束，確認由 ${wl}勝出。${ctrPhrase}，${roiPhrase}${balanceNote}。建議將 ${wl}素材作為後續同類廣告的基準版本。`,
-      actions: [
-        `以 ${wl}素材作為後續同類廣告的基準版本`,
-        `記錄 ${wl}相對${baseLabel}的差異（文案、視覺、CTA），沿用到下一檔活動`,
-      ],
+      interpretation: en
+        ? `Delivery has ended; ${wl} is confirmed as the winner. ${ctrPhrase}, ${roiPhrase}${balanceNote}. Use ${wl} as the baseline creative for similar future ads.`
+        : `投放已結束，確認由 ${wl}勝出。${ctrPhrase}，${roiPhrase}${balanceNote}。建議將 ${wl}素材作為後續同類廣告的基準版本。`,
+      actions: en
+        ? [`Use ${wl} as the baseline creative for similar future ads`, `Record how ${wl} differs from ${baseLabel} (copy, visual, CTA) and carry it into the next campaign`]
+        : [`以 ${wl}素材作為後續同類廣告的基準版本`, `記錄 ${wl}相對${baseLabel}的差異（文案、視覺、CTA），沿用到下一檔活動`],
     }
   }
 
-  // 2) 明確判定無顯著差異
+  // 2) Explicitly inconclusive.
   if (winner === 'inconclusive') {
     return {
       pattern: null,
       roiWinner: 'inconclusive',
       interpretation: imbalanced
-        ? `兩組投放條件不對等（${imbalanceDesc}），數據量尚不足以達統計顯著性，因此無法判定勝出版本。`
-        : `兩組投放條件相近，但各項指標差距未達顯著水準，因此判定無明顯勝出版本。`,
+        ? (en ? `The two groups' delivery conditions are unequal (${imbalanceDesc}), so there isn't enough data for statistical significance, and no winner can be determined.` : `兩組投放條件不對等（${imbalanceDesc}），數據量尚不足以達統計顯著性，因此無法判定勝出版本。`)
+        : (en ? `The two groups had similar delivery conditions, but the metric differences are below the significance threshold, so there is no clear winner.` : `兩組投放條件相近，但各項指標差距未達顯著水準，因此判定無明顯勝出版本。`),
       actions: imbalanced
-        ? [`下次實驗請拉齊兩版的預算與投放期間，再行判定`, `先沿用現有主力素材，不貿然汰換`]
-        : [`可結束本次實驗，沿用現有主力素材`, `下次調整更顯著的變數（如完全不同的視覺或 hook）再測`],
+        ? (en ? [`Next time, equalize the budget and delivery period of both versions before judging`, `Keep using the current main creative for now; don't replace it hastily`] : [`下次實驗請拉齊兩版的預算與投放期間，再行判定`, `先沿用現有主力素材，不貿然汰換`])
+        : (en ? [`You can end this experiment and keep the current main creative`, `Next time, test a more pronounced variable (e.g. a completely different visual or hook)`] : [`可結束本次實驗，沿用現有主力素材`, `下次調整更顯著的變數（如完全不同的視覺或 hook）再測`]),
     }
   }
 
-  // 3) winner = pending 且投放條件不對等 → 點出原因，未達顯著
+  // 3) pending + imbalanced.
   if (imbalanced) {
     return {
       pattern: null,
       roiWinner: 'inconclusive',
-      interpretation: `${ctrPhrase}，但兩組投放條件不對等（${imbalanceDesc}），數據量尚不足以達統計顯著性，目前無法判定勝出版本。`,
-      actions: [
-        `拉齊兩版的預算與投放期間後再行判定`,
-        `避免在條件不對等時就汰換素材`,
-      ],
+      interpretation: en
+        ? `${ctrPhrase}, but the two groups' delivery conditions are unequal (${imbalanceDesc}), so there isn't enough data for significance and no winner can be determined yet.`
+        : `${ctrPhrase}，但兩組投放條件不對等（${imbalanceDesc}），數據量尚不足以達統計顯著性，目前無法判定勝出版本。`,
+      actions: en
+        ? [`Equalize the budget and delivery period of both versions, then judge`, `Avoid swapping creatives while conditions are unequal`]
+        : [`拉齊兩版的預算與投放期間後再行判定`, `避免在條件不對等時就汰換素材`],
     }
   }
 
-  // 4) pending 且條件對等 → 沿用原本的 pattern 規則
+  // 4) pending + balanced → pattern rules.
   const ctrUp = ctrDelta > 0.15
   const ctrDown = ctrDelta < -0.05
   const roasUp = roasDelta > 0.10
@@ -383,38 +404,40 @@ function buildAbDiagnosis(
 
   if (ctrUp && roasDown) {
     return {
-      pattern: '好奇點擊',
+      pattern: en ? 'Curiosity clicks' : '好奇點擊',
       roiWinner: hasControl ? 'control' : 'inconclusive',
-      interpretation: `${v} 版 CTR 大幅提升，代表創意 hook 有效、成功引發受眾注意力。但點擊效益大幅下滑是更關鍵的訊號：點進來的用戶沒有後續行動，吸引的可能是「好奇點擊」而非真正有意願的族群。CPC 偏高也顯示 Meta 演算法對 ${v} 版的「品質分」較低。`,
-      actions: [
-        `暫緩停止${baseLabel}——點擊效益 ${baseStats.roas.toFixed(1)} 次/百元 是目前最佳表現，先保留`,
-        `調查 ${v} 版的流量質量：確認點進來的用戶是否完成目標行動`,
-        `${v} 版 hook 有效，試著優化 CTA 或 landing page，讓後段轉換跟上`,
-      ],
+      interpretation: en
+        ? `${vl} CTR jumped sharply, meaning the creative hook works and grabs attention. But the sharp drop in click value is the more important signal: visitors aren't taking follow-up action, so it may be attracting "curiosity clicks" rather than genuinely interested people. The high CPC also suggests Meta's algorithm gives ${vl} a lower "quality score."`
+        : `${vl} CTR 大幅提升，代表創意 hook 有效、成功引發受眾注意力。但點擊效益大幅下滑是更關鍵的訊號：點進來的用戶沒有後續行動，吸引的可能是「好奇點擊」而非真正有意願的族群。CPC 偏高也顯示 Meta 演算法對 ${vl} 的「品質分」較低。`,
+      actions: en
+        ? [`Hold off on stopping ${baseLabel} — click value ${baseStats.roas.toFixed(1)} /NT$100 is the best so far; keep it`, `Investigate ${vl}'s traffic quality: check whether clickers complete the target action`, `${vl}'s hook works; try optimizing the CTA or landing page so back-end conversion keeps up`]
+        : [`暫緩停止${baseLabel}——點擊效益 ${baseStats.roas.toFixed(1)} 次/百元 是目前最佳表現，先保留`, `調查 ${vl} 的流量質量：確認點進來的用戶是否完成目標行動`, `${vl} hook 有效，試著優化 CTA 或 landing page，讓後段轉換跟上`],
     }
   }
 
   if (ctrUp && roasUp) {
     return {
-      pattern: '全面領先',
+      pattern: en ? 'Across-the-board winner' : '全面領先',
       roiWinner: v,
-      interpretation: `${v} 版在點擊率與點擊效益雙雙優於${baseLabel}，是真正有效的素材升級。受眾不只更願意點擊，點進來後的後續行動也更好。`,
-      actions: [
-        `可以逐步增加 ${v} 版預算比例，縮減${baseLabel}份額`,
-        `記錄 ${v} 版與${baseLabel}的差異（文案、視覺、CTA），作為下次素材的設計原則`,
-      ],
+      interpretation: en
+        ? `${vl} beats ${baseLabel} on both CTR and click value — a genuinely effective creative upgrade. The audience is not only more willing to click but also acts more after clicking.`
+        : `${vl} 在點擊率與點擊效益雙雙優於${baseLabel}，是真正有效的素材升級。受眾不只更願意點擊，點進來後的後續行動也更好。`,
+      actions: en
+        ? [`Gradually shift more budget to ${vl} and reduce ${baseLabel}'s share`, `Record how ${vl} differs from ${baseLabel} (copy, visual, CTA) as a design principle for the next creative`]
+        : [`可以逐步增加 ${vl} 預算比例，縮減${baseLabel}份額`, `記錄 ${vl} 與${baseLabel}的差異（文案、視覺、CTA），作為下次素材的設計原則`],
     }
   }
 
   if (ctrDown && roasUp) {
     return {
-      pattern: '精準轉換',
+      pattern: en ? 'Precise conversion' : '精準轉換',
       roiWinner: v,
-      interpretation: `${v} 版 CTR 雖未大幅增加，但點擊效益更高——吸引的是更有意願的受眾，而非廣泛的好奇點擊。這是高品質流量的訊號。`,
-      actions: [
-        `考慮以 ${v} 版取代${baseLabel}作為主力素材`,
-        `這類素材適合搭配再行銷受眾，放大精準轉換優勢`,
-      ],
+      interpretation: en
+        ? `${vl} CTR didn't rise much, but click value is higher — it attracts more intent-driven audiences rather than broad curiosity clicks. That's a sign of high-quality traffic.`
+        : `${vl} CTR 雖未大幅增加，但點擊效益更高——吸引的是更有意願的受眾，而非廣泛的好奇點擊。這是高品質流量的訊號。`,
+      actions: en
+        ? [`Consider replacing ${baseLabel} with ${vl} as the main creative`, `This kind of creative pairs well with retargeting audiences to amplify the precise-conversion advantage`]
+        : [`考慮以 ${vl} 取代${baseLabel}作為主力素材`, `這類素材適合搭配再行銷受眾，放大精準轉換優勢`],
     }
   }
 
@@ -422,22 +445,24 @@ function buildAbDiagnosis(
     return {
       pattern: null,
       roiWinner: hasControl ? 'control' : 'inconclusive',
-      interpretation: `${v} 版各項指標均未優於${baseLabel}，目前${baseLabel}仍是最佳選擇。`,
-      actions: [
-        `暫停或縮減 ${v} 版預算`,
-        `重新審視 ${v} 版素材的差異點，下次實驗調整更顯著的變數`,
-      ],
+      interpretation: en
+        ? `${vl} doesn't beat ${baseLabel} on any metric; ${baseLabel} remains the best choice for now.`
+        : `${vl} 各項指標均未優於${baseLabel}，目前${baseLabel}仍是最佳選擇。`,
+      actions: en
+        ? [`Pause or reduce ${vl}'s budget`, `Re-examine what makes ${vl} different and test a more pronounced variable next time`]
+        : [`暫停或縮減 ${vl} 預算`, `重新審視 ${vl} 素材的差異點，下次實驗調整更顯著的變數`],
     }
   }
 
   return {
     pattern: null,
     roiWinner: 'inconclusive',
-    interpretation: `兩組投放條件相近，但 CTR 與點擊效益差距都還小（未達顯著水準），目前看不出明確的勝出版本，建議再累積一些曝光量後判讀。`,
-    actions: [
-      `維持現狀，等待曝光量增加後再評估`,
-      `若想更快分出高下，下次可調整更顯著的變數（視覺或 hook）`,
-    ],
+    interpretation: en
+      ? `The two groups had similar delivery conditions, but the CTR and click-value gaps are still small (below significance), so there's no clear winner yet — accumulate more impressions before judging.`
+      : `兩組投放條件相近，但 CTR 與點擊效益差距都還小（未達顯著水準），目前看不出明確的勝出版本，建議再累積一些曝光量後判讀。`,
+    actions: en
+      ? [`Hold steady and re-evaluate after impressions increase`, `To decide faster, test a more pronounced variable next time (visual or hook)`]
+      : [`維持現狀，等待曝光量增加後再評估`, `若想更快分出高下，下次可調整更顯著的變數（視覺或 hook）`],
   }
 }
 
@@ -447,6 +472,8 @@ function AbTestPanel({ creatives, labels, experiment, onExperimentUpdate }: {
   experiment: Experiment
   onExperimentUpdate: (experimentId: string, update: ExperimentUpdate) => void
 }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [localDiagnosis, setLocalDiagnosis] = useState(experiment.aiDiagnosis)
   const [localName, setLocalName] = useState(experiment.name ?? '')
 
@@ -485,8 +512,8 @@ function AbTestPanel({ creatives, labels, experiment, onExperimentUpdate }: {
   const tableRows = [
     { label: 'CTR', ctrl: baseStats ? `${baseStats.ctr.toFixed(2)}%` : '—', variant: variantStats ? `${variantStats.ctr.toFixed(2)}%` : '—' },
     { label: 'CPC', ctrl: baseCpc > 0 ? `$${baseCpc.toFixed(2)}` : '—', variant: variantCpc > 0 ? `$${variantCpc.toFixed(2)}` : '—' },
-    { label: '花費', ctrl: baseStats ? fmtK(baseStats.totalSpend) : '—', variant: variantStats ? fmtK(variantStats.totalSpend) : '—' },
-    { label: '連結點擊數', ctrl: baseLinkClicks > 0 ? baseLinkClicks.toLocaleString() : '—', variant: variantLinkClicks > 0 ? variantLinkClicks.toLocaleString() : '—' },
+    { label: L('花費', 'Spend'), ctrl: baseStats ? fmtK(baseStats.totalSpend) : '—', variant: variantStats ? fmtK(variantStats.totalSpend) : '—' },
+    { label: L('連結點擊數', 'Link clicks'), ctrl: baseLinkClicks > 0 ? baseLinkClicks.toLocaleString() : '—', variant: variantLinkClicks > 0 ? variantLinkClicks.toLocaleString() : '—' },
   ]
 
   const ctrDelta = winnerStats && baseStats && baseStats.ctr > 0
@@ -502,22 +529,22 @@ function AbTestPanel({ creatives, labels, experiment, onExperimentUpdate }: {
   return (
     <div style={{ marginTop: 8, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
       <div style={{ marginBottom: 10 }}>
-        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>實驗名稱</label>
+        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>{L('實驗名稱', 'Experiment name')}</label>
         <input
           type="text"
           value={localName}
           onChange={e => setLocalName(e.target.value)}
           onBlur={() => { if (localName !== (experiment.name ?? '')) onExperimentUpdate(experiment.id, { name: localName }) }}
-          placeholder="例：[2026/5/20] 推廣 D67 演講節"
+          placeholder={L('例：[2026/5/20] 推廣 D67 演講節', 'e.g. [2026/5/20] Promote D67 Speech Festival')}
           style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #bfdbfe', borderRadius: 6, background: 'white', color: '#1e293b', fontFamily: 'var(--font-dm-sans)', width: '100%', boxSizing: 'border-box' }}
         />
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 10 }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', paddingBottom: 4, fontWeight: 500, color: '#64748b' }}>指標</th>
-            <th style={{ textAlign: 'right', paddingBottom: 4, fontWeight: 500, color: '#64748b' }}>控制組</th>
-            <th style={{ textAlign: 'right', paddingBottom: 4, fontWeight: 500, color: '#1d4ed8' }}>AI 建議版</th>
+            <th style={{ textAlign: 'left', paddingBottom: 4, fontWeight: 500, color: '#64748b' }}>{L('指標', 'Metric')}</th>
+            <th style={{ textAlign: 'right', paddingBottom: 4, fontWeight: 500, color: '#64748b' }}>{L('控制組', 'Control')}</th>
+            <th style={{ textAlign: 'right', paddingBottom: 4, fontWeight: 500, color: '#1d4ed8' }}>{L('AI 建議版', 'AI version')}</th>
           </tr>
         </thead>
         <tbody>
@@ -532,7 +559,7 @@ function AbTestPanel({ creatives, labels, experiment, onExperimentUpdate }: {
       </table>
 
       <div style={{ marginBottom: 8 }}>
-        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>實驗結果</label>
+        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>{L('實驗結果', 'Result')}</label>
         <select value={winner} onChange={e => {
           const newWinner = e.target.value
           const update: ExperimentUpdate = { winner: newWinner }
@@ -545,26 +572,26 @@ function AbTestPanel({ creatives, labels, experiment, onExperimentUpdate }: {
           }
           onExperimentUpdate(experiment.id, update)
         }} style={{ ...inputStyle, cursor: 'pointer' }}>
-          {WINNER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {winnerOptions(en).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
 
       {winnerStats && baseStats && (ctrDelta !== null || cpaDelta !== null) && (
         <p style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, margin: '0 0 8px' }}>
-          AI 建議版
+          {L('AI 建議版', 'AI version')}
           {ctrDelta !== null && ` CTR ${ctrDelta > 0 ? '+' : ''}${ctrDelta.toFixed(0)}%`}
-          {ctrDelta !== null && cpaDelta !== null && '，'}
-          {cpaDelta !== null && ` CPC ${cpaDelta > 0 ? '降低' : '上升'} ${cpaDelta > 0 ? '-' : '+'}${Math.abs(cpaDelta).toFixed(0)}%`}
+          {ctrDelta !== null && cpaDelta !== null && L('，', ', ')}
+          {cpaDelta !== null && ` CPC ${cpaDelta > 0 ? L('降低', 'down') : L('上升', 'up')} ${cpaDelta > 0 ? '-' : '+'}${Math.abs(cpaDelta).toFixed(0)}%`}
         </p>
       )}
 
       <div>
-        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>AI 當初的診斷說了什麼</label>
+        <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>{L('AI 當初的診斷說了什麼', "What did the AI's diagnosis say?")}</label>
         <textarea
           value={localDiagnosis}
           onChange={e => setLocalDiagnosis(e.target.value)}
           onBlur={() => { if (localDiagnosis !== experiment.aiDiagnosis) onExperimentUpdate(experiment.id, { aiDiagnosis: localDiagnosis }) }}
-          placeholder="貼上 AI Sidekick 給出的建議內容..."
+          placeholder={L('貼上 AI Sidekick 給出的建議內容...', 'Paste the advice AI Sidekick gave…')}
           rows={3}
           style={{ ...inputStyle, resize: 'vertical' }}
         />
@@ -579,6 +606,8 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
   experiment: Experiment
   onDelete?: (experimentId: string) => void
 }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const groups: Record<Variant, AdData['creatives']> = { control: [], A: [], B: [] }
   for (const c of creatives) {
     const v = labels[c.id]?.variant
@@ -603,20 +632,20 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
   const testStats = controlStats ? (aStats ?? bStats) : bStats
   const testLabel: 'A' | 'B' = controlStats ? (aStats ? 'A' : 'B') : 'B'
   const winner = (experiment.winner as WinnerType) ?? 'pending'
-  const diag = testStats ? buildAbDiagnosis(baseStats, testStats, testLabel, hasControl, winner) : null
+  const diag = testStats ? buildAbDiagnosis(baseStats, testStats, testLabel, hasControl, winner, en) : null
 
   return (
     <div style={{ marginBottom: 16, borderRadius: 12, border: '1.5px solid #bfdbfe', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', padding: '14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         <span style={{ fontSize: 14 }}>🧪</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e40af' }}>A/B 實驗結果</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e40af' }}>{L('A/B 實驗結果', 'A/B Test Result')}</span>
         {experiment.name && <span style={{ fontSize: 11, color: '#64748b', background: '#e0e7ff', padding: '2px 8px', borderRadius: 10 }}>{experiment.name}</span>}
         {onDelete && (
           <button
-            onClick={() => { if (window.confirm(`確定要刪除實驗「${experiment.name || '未命名'}」嗎？此實驗的廣告標籤會一併清除。`)) onDelete(experiment.id) }}
+            onClick={() => { if (window.confirm(L(`確定要刪除實驗「${experiment.name || '未命名'}」嗎？此實驗的廣告標籤會一併清除。`, `Delete experiment "${experiment.name || 'untitled'}"? Its ad labels will also be cleared.`))) onDelete(experiment.id) }}
             style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
           >
-            刪除
+            {L('刪除', 'Delete')}
           </button>
         )}
       </div>
@@ -627,7 +656,7 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
           const style = VARIANT_STYLE[variant]
           return (
             <div key={variant} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.7)' }}>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: style.bg, color: style.color, whiteSpace: 'nowrap', minWidth: 52, textAlign: 'center' }}>{style.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: style.bg, color: style.color, whiteSpace: 'nowrap', minWidth: 52, textAlign: 'center' }}>{variantLabel(variant, en)}</span>
               <div style={{ flex: 1, display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12 }}>
                 <div>
                   <span style={{ color: '#64748b' }}>CTR </span>
@@ -640,8 +669,8 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
                   {!isBase && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: pctColor(stats.cpa, baseStats.cpa, false) }}>{pct(stats.cpa, baseStats.cpa)}</span>}
                 </div>
                 <div>
-                  <span style={{ color: '#64748b' }}>點擊效益 </span>
-                  <span style={{ fontWeight: 600 }}>{stats.roas.toFixed(1)}<span style={{ fontSize: 10, fontWeight: 400, color: '#94a3b8' }}> 次/百元</span></span>
+                  <span style={{ color: '#64748b' }}>{L('點擊效益', 'Click value')} </span>
+                  <span style={{ fontWeight: 600 }}>{stats.roas.toFixed(1)}<span style={{ fontSize: 10, fontWeight: 400, color: '#94a3b8' }}>{L(' 次/百元', '/NT$100')}</span></span>
                   {!isBase && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: pctColor(stats.roas, baseStats.roas, true) }}>{pct(stats.roas, baseStats.roas)}</span>}
                 </div>
               </div>
@@ -654,14 +683,14 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
         <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.85)', border: '1px solid #bfdbfe' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <span style={{ fontSize: 11 }}>📌</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e40af' }}>AI Sidekick 診斷</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e40af' }}>{L('AI Sidekick 診斷', 'AI Sidekick Diagnosis')}</span>
             {diag.pattern && (
               <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 8, background: '#fee2e2', color: '#b91c1c', fontWeight: 600 }}>{diag.pattern}</span>
             )}
           </div>
           <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.65, margin: '0 0 8px 0' }}>{diag.interpretation}</p>
           <div style={{ fontSize: 11.5, color: '#475569' }}>
-            <div style={{ fontWeight: 600, marginBottom: 3 }}>建議行動</div>
+            <div style={{ fontWeight: 600, marginBottom: 3 }}>{L('建議行動', 'Recommended actions')}</div>
             {diag.actions.map((a, i) => (
               <div key={i} style={{ display: 'flex', gap: 5, marginBottom: 2 }}>
                 <span style={{ color: '#94a3b8', flexShrink: 0 }}>•</span>
@@ -685,6 +714,8 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
   onExperimentUpdate?: (experimentId: string, update: ExperimentUpdate) => void
   onDeleteExperiment?: (experimentId: string) => void
 }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [sortBy, setSortBy] = useState<SortBy>('roas')
   const [filter, setFilter] = useState('全部')
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
@@ -706,18 +737,18 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
     <div>
       <div className="ads-section-header">
         <Icon name="creative" size={15} color="var(--ad-blue)" />
-        <span className="ads-section-title">素材庫 &amp; 績效排行</span>
+        <span className="ads-section-title">{L('素材庫 & 績效排行', 'Creative Library & Ranking')}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析素材</button>}
+          {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7 }} onClick={() => onAskAI(L('哪支素材表現最好？', 'Which creative performs best?'))}>✨ {L('問 AI 分析素材', 'Ask AI')}</button>}
           <div className="ads-tabs">
-            {TYPES.map(t => <button key={t} className={`ads-tab ${filter === t ? 'active' : ''}`} onClick={() => setFilter(t)}>{t}</button>)}
+            {TYPES.map(t => <button key={t} className={`ads-tab ${filter === t ? 'active' : ''}`} onClick={() => setFilter(t)}>{typeLabel(t, en)}</button>)}
           </div>
           <select
             style={{ fontSize: 12, padding: '5px 10px', border: '1px solid var(--ad-border)', borderRadius: 7, background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
             value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}
           >
-            <option value="roas">點擊效益 ↓</option>
-            <option value="spend">花費 ↓</option>
+            <option value="roas">{L('點擊效益 ↓', 'Click value ↓')}</option>
+            <option value="spend">{L('花費 ↓', 'Spend ↓')}</option>
             <option value="cpa">CPC ↑</option>
           </select>
         </div>
@@ -735,7 +766,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
 
       {sorted.length === 0 && (
         <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
-          尚無廣告素材資料，請先同步廣告數據
+          {L('尚無廣告素材資料，請先同步廣告數據', 'No ad creative data yet — sync ad data first')}
         </p>
       )}
       <div className="ads-creative-grid">
@@ -749,20 +780,20 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
                   <ExperimentBadge adId={c.id} label={label} experiments={exps} onLabelChange={onLabelChange} onCreateExperiment={onCreateExperiment} onExperimentUpdate={onExperimentUpdate} />
                 )}
                 {onAskAI && <button
-                  title="用 AI 分析此素材"
-                  onClick={() => onAskAI(buildCreativePrompt(c), true)}
+                  title={L('用 AI 分析此素材', 'Analyze this creative with AI')}
+                  onClick={() => onAskAI(buildCreativePrompt(c, en), true)}
                   style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
-                >✨ 分析</button>}
+                >✨ {L('分析', 'Analyze')}</button>}
               </div>
               <div className={`ads-creative-thumb ${c.thumb}`}>
                 <div className={`ads-creative-rank ${c.status === 'top' ? 'top' : c.status === 'bad' ? 'bad' : ''}`}>{i + 1}</div>
-                <div className={`ads-creative-status ${c.status}`}>{STATUS_LABEL[c.status]}</div>
+                <div className={`ads-creative-status ${c.status}`}>{statusLabel(c.status, en)}</div>
                 <span style={{ opacity: 0.5 }}>{c.type} · {c.channel}</span>
               </div>
               <div className="ads-creative-info">
                 <div className="ads-creative-name" title={[c.campaignName, c.adName || c.name].filter(Boolean).join(' › ')}>{renderAdName(c.name)}</div>
                 <div className="ads-creative-meta">
-                  {[['點擊效益', c.roas.toFixed(1) + 'x'], ['花費', fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPC', '$' + (c.cpc ?? c.cpa)]].map(([k, v]) => (
+                  {[[L('點擊效益', 'Click value'), c.roas.toFixed(1) + 'x'], [L('花費', 'Spend'), fmtK(c.spend)], ['CTR', Number(c.ctr).toFixed(2) + '%'], ['CPC', '$' + (c.cpc ?? c.cpa)]].map(([k, v]) => (
                     <div key={k} className="ads-creative-kv">
                       <span style={{ color: 'var(--ad-text3)' }}>{k}</span>
                       <span style={{ fontFamily: 'var(--font-dm-mono)', fontWeight: 500 }}>{v}</span>
@@ -776,7 +807,7 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
                     onClick={() => setExpandedCard(prev => prev === c.id ? null : c.id)}
                     style={{ width: '100%', textAlign: 'center', fontSize: 11, color: 'var(--ad-blue)', background: 'none', border: 'none', borderTop: '1px solid var(--ad-border)', padding: '6px 0', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}
                   >
-                    查看 A/B 對比 {expandedCard === c.id ? '↑' : '↓'}
+                    {L('查看 A/B 對比', 'View A/B comparison')} {expandedCard === c.id ? '↑' : '↓'}
                   </button>
                   <div style={{ overflow: 'hidden', maxHeight: expandedCard === c.id ? '600px' : '0', opacity: expandedCard === c.id ? 1 : 0, transition: 'max-height 0.3s ease, opacity 0.25s ease' }}>
                     <div style={{ padding: '0 8px 8px' }}>

@@ -6,6 +6,7 @@ import { uploadVideoForAnalysis } from '@/lib/firebase/storage'
 import { Icon } from './Icon'
 import { CanvaOptimizePanel } from './CanvaOptimizePanel'
 import { fireCreativeSignal } from '@/lib/ai/creativeSignalClient'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 interface CopyVariant { label: string; copy: string; rationale: string }
 
@@ -56,13 +57,29 @@ interface FileAttachment {
 interface HistoryTurn { question: string; summary: string }
 interface HistorySession { sessionId: string; date: string; contextPage: string; turns: HistoryTurn[] }
 
-const SUGGESTIONS_BY_PAGE: Record<string, string[]> = {
-  posts: ['這期間哪類貼文互動率最高？', '我的 Reels 和圖文貼文哪個表現更好？', '貼上文案，幫我優化出 A/B 測試版本', '分享數偏低的原因可能是什麼？'],
-  creative: ['幫我生成一張廣告素材', '根據表現最差的廣告建議新素材方向', '貼上文案，幫我優化出 A/B 測試版本', '如何改善 CTR 偏低的廣告圖？'],
-  default: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '貼上文案，幫我優化出 A/B 測試版本', '幫我生成一張廣告素材'],
+const SUGGESTIONS_BY_PAGE: Record<string, { zh: string[]; en: string[] }> = {
+  posts: {
+    zh: ['這期間哪類貼文互動率最高？', '我的 Reels 和圖文貼文哪個表現更好？', '貼上文案，幫我優化出 A/B 測試版本', '分享數偏低的原因可能是什麼？'],
+    en: ['Which post type had the highest engagement this period?', 'Do my Reels or image posts perform better?', 'Paste copy and help me make A/B test versions', 'What might be causing low shares?'],
+  },
+  creative: {
+    zh: ['幫我生成一張廣告素材', '根據表現最差的廣告建議新素材方向', '貼上文案，幫我優化出 A/B 測試版本', '如何改善 CTR 偏低的廣告圖？'],
+    en: ['Generate an ad creative for me', 'Suggest new creative directions based on my worst ad', 'Paste copy and help me make A/B test versions', 'How do I improve a low-CTR ad image?'],
+  },
+  default: {
+    zh: ['這週廣告表現如何？', '哪個廣告組合應該增加預算？', '貼上文案，幫我優化出 A/B 測試版本', '幫我生成一張廣告素材'],
+    en: ["How did my ads perform this week?", 'Which ad set should I increase budget on?', 'Paste copy and help me make A/B test versions', 'Generate an ad creative for me'],
+  },
 }
 
-const CTX_LABELS: Record<string, string> = { overview: '總覽', diagnosis: '診斷建議', creative: '素材庫', time: '最佳時段', budget: '預算模擬', posts: '內容表現' }
+const CTX_LABELS: Record<string, { zh: string; en: string }> = {
+  overview: { zh: '總覽', en: 'Overview' },
+  diagnosis: { zh: '診斷建議', en: 'Diagnosis' },
+  creative: { zh: '素材庫', en: 'Creatives' },
+  time: { zh: '最佳時段', en: 'Best Time' },
+  budget: { zh: '預算模擬', en: 'Budget' },
+  posts: { zh: '內容表現', en: 'Content' },
+}
 
 const SIZE_LIMITS: Record<string, number> = { image: 4 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1 * 1024 * 1024, video: 30 * 1024 * 1024 }
 const MAX_FILES = 5
@@ -102,6 +119,7 @@ function renderWithLinks(text: string): React.ReactNode {
 }
 
 function CopyVariantCard({ v }: { v: CopyVariant }) {
+  const { L } = useLang()
   const [copied, setCopied] = useState(false)
   const isControl = v.label.includes('控制組') || v.label.toLowerCase().includes('control')
   const isA = v.label.includes('A') || v.label.toLowerCase().includes('test a')
@@ -123,7 +141,7 @@ function CopyVariantCard({ v }: { v: CopyVariant }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 11, color: 'var(--ad-text3)', flex: 1 }}>{v.rationale}</span>
         <button onClick={handleCopy} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: copied ? '#dcfce7' : 'var(--ad-bg)', color: copied ? '#16a34a' : 'var(--ad-text2)', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', fontFamily: 'inherit' }}>
-          {copied ? '✓ 已複製' : '📋 複製'}
+          {copied ? L('✓ 已複製', '✓ Copied') : L('📋 複製', '📋 Copy')}
         </button>
       </div>
     </div>
@@ -131,10 +149,10 @@ function CopyVariantCard({ v }: { v: CopyVariant }) {
 }
 
 const IMPROVE_OPTIONS = [
-  { key: 'too_vague', label: '建議太模糊，不夠具體' },
-  { key: 'wrong_data', label: '數字分析不準確' },
-  { key: 'not_relevant', label: '建議跟我的狀況不符' },
-  { key: 'other', label: '其他' },
+  { key: 'too_vague', zh: '建議太模糊，不夠具體', en: 'Advice too vague, not specific enough' },
+  { key: 'wrong_data', zh: '數字分析不準確', en: 'Inaccurate data analysis' },
+  { key: 'not_relevant', zh: '建議跟我的狀況不符', en: "Advice doesn't fit my situation" },
+  { key: 'other', zh: '其他', en: 'Other' },
 ]
 
 function AiMessageBody({ r, onSend, onFeedback }: {
@@ -151,6 +169,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
   const [improveReason, setImproveReason] = useState<string | null>(null)
   const [improveNote, setImproveNote] = useState('')
   const [feedbackSent, setFeedbackSent] = useState(false)
+  const { L } = useLang()
 
   function toggleChecked(i: number) {
     if (submitted) return
@@ -169,7 +188,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
       parts.push(detail ? `- ${r.actions[i]}：${detail}` : `- ${r.actions[i]}`)
     }
     const other = otherText.trim()
-    if (other) parts.push(`其他補充：${other}`)
+    if (other) parts.push(L(`其他補充：${other}`, `Additional note: ${other}`))
     if (parts.length === 0) return
     setSubmitted(true)
     onSend(parts.join('\n'))
@@ -178,7 +197,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
   function handleForceGenerate() {
     if (submitted) return
     setSubmitted(true)
-    onSend('直接生成（不需澄清，請依目前上下文使用合理預設值直接生成素材）')
+    onSend(L('直接生成（不需澄清，請依目前上下文使用合理預設值直接生成素材）', 'Generate directly (no clarification needed; use sensible defaults from the current context to generate the creative)'))
   }
 
   const submitCount = checked.size + (otherText.trim() ? 1 : 0)
@@ -186,7 +205,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
   const isVideoContext = /影片|Reels|動態素材|短片/i.test(contextText)
   const isImageContext = /素材|廣告圖|廣告素材|圖片|廣告創意|生圖|做.*圖/i.test(contextText)
   const generationContext = isImageContext || isVideoContext
-  const forceLabel = isVideoContext && !isImageContext ? '⚡ 生成影片' : '⚡ 生成圖片'
+  const forceLabel = isVideoContext && !isImageContext ? L('⚡ 生成影片', '⚡ Generate video') : L('⚡ 生成圖片', '⚡ Generate image')
 
   return (
     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
@@ -223,7 +242,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
                     onChange={e => setInputs(p => ({ ...p, [i]: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSubmit() } }}
                     onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 100) + 'px' }}
-                    placeholder="請輸入詳細內容…"
+                    placeholder={L('請輸入詳細內容…', 'Enter details…')}
                     style={{ width: 'calc(100% - 24px)', fontSize: 12, padding: '6px 10px', marginTop: 4, marginLeft: 24, borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'none', minHeight: 32, boxSizing: 'border-box', fontFamily: 'inherit', background: 'var(--ad-bg)', color: 'var(--ad-text)', outline: 'none' }} />
                 )}
               </div>
@@ -232,11 +251,11 @@ function AiMessageBody({ r, onSend, onFeedback }: {
           {!submitted && (
             <div style={{ marginTop: 6 }}>
               <textarea rows={1} value={otherText} onChange={e => setOtherText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSubmit() } }} placeholder="其他補充（選填）…"
+                onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSubmit() } }} placeholder={L('其他補充（選填）…', 'Additional notes (optional)…')}
                 onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px' }}
                 style={{ width: '100%', fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', outline: 'none', background: 'var(--ad-bg)', color: 'var(--ad-text)', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 6, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 10, color: 'var(--ad-text3)' }}>Enter 換行　Shift+Enter 送出</div>
+                <div style={{ fontSize: 10, color: 'var(--ad-text3)' }}>{L('Enter 換行　Shift+Enter 送出', 'Enter for newline · Shift+Enter to send')}</div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {generationContext && (
                     <button onClick={handleForceGenerate}
@@ -246,19 +265,19 @@ function AiMessageBody({ r, onSend, onFeedback }: {
                   )}
                   <button onClick={handleSubmit} disabled={submitCount === 0}
                     style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: 'var(--ad-blue)', color: '#fff', border: 'none', cursor: submitCount === 0 ? 'default' : 'pointer', opacity: submitCount === 0 ? 0.4 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    送出{submitCount > 0 ? ` (${submitCount} 項)` : ''}
+                    {L('送出', 'Send')}{submitCount > 0 ? L(` (${submitCount} 項)`, ` (${submitCount})`) : ''}
                   </button>
                 </div>
               </div>
             </div>
           )}
           {submitted && (
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ad-text3)' }}>✓ 已送出回覆</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ad-text3)' }}>{L('✓ 已送出回覆', '✓ Reply sent')}</div>
           )}
         </div>
       )}
       {feedbackSent ? (
-        <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginTop: 8 }}>✓ 謝謝你的回饋</div>
+        <div style={{ fontSize: 11, color: 'var(--ad-text3)', marginTop: 8 }}>{L('✓ 謝謝你的回饋', '✓ Thanks for your feedback')}</div>
       ) : (
         <div>
           <div className="ads-sk-feedback">
@@ -271,7 +290,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
                 onFeedback?.({ rating: 'helpful' })
                 setFeedbackSent(true)
               }}
-            ><Icon name="thumb_up" size={12} /> 有幫助</button>
+            ><Icon name="thumb_up" size={12} /> {L('有幫助', 'Helpful')}</button>
             <button
               className={`ads-sk-fb-btn ${feedback === 'down' ? 'disliked' : ''}`}
               onClick={() => {
@@ -279,27 +298,27 @@ function AiMessageBody({ r, onSend, onFeedback }: {
                 setFeedback('down')
                 setImprovePanel(true)
               }}
-            ><Icon name="thumb_down" size={12} /> 改進</button>
+            ><Icon name="thumb_down" size={12} /> {L('改進', 'Improve')}</button>
           </div>
           {improvePanel && (
             <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
-              <div style={{ fontWeight: 500, marginBottom: 8, color: 'var(--ad-text)' }}>你覺得哪裡可以更好？</div>
+              <div style={{ fontWeight: 500, marginBottom: 8, color: 'var(--ad-text)' }}>{L('你覺得哪裡可以更好？', 'What could be better?')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {IMPROVE_OPTIONS.map(opt => (
                   <button key={opt.key} onClick={() => setImproveReason(improveReason === opt.key ? null : opt.key)}
                     style={{ fontSize: 11, padding: '4px 10px', borderRadius: 12, border: `1px solid ${improveReason === opt.key ? 'var(--ad-blue)' : 'var(--ad-border)'}`, background: improveReason === opt.key ? '#dbeafe' : 'var(--ad-bg)', color: improveReason === opt.key ? '#1d4ed8' : 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {opt.label}
+                    {L(opt.zh, opt.en)}
                   </button>
                 ))}
               </div>
               {improveReason === 'other' && (
                 <textarea rows={2} value={improveNote} onChange={e => setImproveNote(e.target.value)}
-                  placeholder="請說明可以怎麼改進…"
+                  placeholder={L('請說明可以怎麼改進…', 'Tell us how to improve…')}
                   style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'none', boxSizing: 'border-box', fontFamily: 'inherit', background: 'var(--ad-bg)', color: 'var(--ad-text)', outline: 'none', marginBottom: 8 }} />
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
                 <button onClick={() => { setImprovePanel(false); setFeedback(null) }}
-                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>取消</button>
+                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>{L('取消', 'Cancel')}</button>
                 <button onClick={() => {
                   if (!improveReason) return
                   onFeedback?.({ rating: 'improve', improveReason, improveNote: improveNote.trim() || undefined })
@@ -307,7 +326,7 @@ function AiMessageBody({ r, onSend, onFeedback }: {
                   setFeedbackSent(true)
                 }} disabled={!improveReason}
                   style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: 'none', background: improveReason ? 'var(--ad-blue)' : 'var(--ad-border)', color: improveReason ? '#fff' : 'var(--ad-text3)', cursor: improveReason ? 'pointer' : 'default', fontFamily: 'inherit' }}>
-                  送出回饋
+                  {L('送出回饋', 'Send feedback')}
                 </button>
               </div>
             </div>
@@ -327,12 +346,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   metricsContext?: MetricsContext
   pageId?: string
 }) {
+  const { L, lang } = useLang()
   const initMsg = useCallback((): Message => ({
     id: 'm0', role: 'ai', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
     text: contextPage === 'posts'
-      ? '你好！我是你的 AI 內容顧問。我已載入你的貼文成效數據，可以幫你診斷問題、找出高互動內容特徵、或給下一篇貼文的優化建議。'
-      : '你好！我是你的 AI 廣告助手。我已同步載入帳戶數據，可以幫你分析數據、診斷問題、或提供操作建議。',
-  }), [contextPage])
+      ? L('你好！我是你的 AI 內容顧問。我已載入你的貼文成效數據，可以幫你診斷問題、找出高互動內容特徵、或給下一篇貼文的優化建議。', "Hi! I'm your AI content advisor. I've loaded your post performance data and can help diagnose issues, spot high-engagement content patterns, or suggest improvements for your next post.")
+      : L('你好！我是你的 AI 廣告助手。我已同步載入帳戶數據，可以幫你分析數據、診斷問題、或提供操作建議。', "Hi! I'm your AI ad assistant. I've synced your account data and can help analyze metrics, diagnose issues, or suggest actions."),
+  }), [contextPage, L])
 
   const [messages, setMessages] = useState<Message[]>(() => [initMsg()])
   const [input, setInput] = useState('')
@@ -342,7 +362,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   const [editedVideoPrompts, setEditedVideoPrompts] = useState<Record<string, string>>({})
   const [editedDurations, setEditedDurations] = useState<Record<string, number>>({})
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([])
-  const [typingLabel, setTypingLabel] = useState('正在載入數據⋯')
+  const [typingLabel, setTypingLabel] = useState(L('正在載入數據⋯', 'Loading data…'))
   const [imageEngine, setImageEngine] = useState('fal-grok-image')
   const [videoEngine, setVideoEngine] = useState('fal-hailuo')
   const [canvaConnected, setCanvaConnected] = useState(false)
@@ -381,7 +401,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const data = await res.json()
       if (!res.ok || !data.imageData) {
         setMessages(p => p.map(m => m.id === msgId
-          ? { ...m, imageLoading: false, imageError: data.error ?? '圖片生成失敗，請重試' }
+          ? { ...m, imageLoading: false, imageError: data.error ?? L('圖片生成失敗，請重試', 'Image generation failed, please retry') }
           : m))
         return
       }
@@ -389,7 +409,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         ? { ...m, imageLoading: false, imageUrl: `data:${data.mimeType};base64,${data.imageData}` }
         : m))
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : '網路錯誤'
+      const errMsg = e instanceof Error ? e.message : L('網路錯誤', 'Network error')
       setMessages(p => p.map(m => m.id === msgId ? { ...m, imageLoading: false, imageError: errMsg } : m))
     }
   }, [])
@@ -404,16 +424,16 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/canva/create-design', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ imageData: base64, title: 'AI Sidekick 廣告素材' }),
+        body: JSON.stringify({ imageData: base64, title: L('AI Sidekick 廣告素材', 'AI Sidekick ad creative') }),
       })
       const data = await res.json()
       if (!res.ok || !data.editUrl) {
-        alert(data.error === 'CANVA_NOT_CONNECTED' ? 'Canva 授權已失效，請到設定頁重新連接。' : '推送 Canva 失敗，請稍後再試。')
+        alert(data.error === 'CANVA_NOT_CONNECTED' ? L('Canva 授權已失效，請到設定頁重新連接。', 'Canva authorization expired. Please reconnect in Settings.') : L('推送 Canva 失敗，請稍後再試。', 'Failed to push to Canva, please try again later.'))
         return
       }
       window.open(data.editUrl, '_blank')
     } catch {
-      alert('推送 Canva 失敗，請稍後再試。')
+      alert(L('推送 Canva 失敗，請稍後再試。', 'Failed to push to Canva, please try again later.'))
     } finally {
       setCanvaPushing(null)
     }
@@ -437,7 +457,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       if (!submitRes.ok || !pollUrl) {
         setMessages(p => p.map(m => m.id === msgId ? {
           ...m, videoLoading: false,
-          videoError: submitData.error ?? '影片生成失敗',
+          videoError: submitData.error ?? L('影片生成失敗', 'Video generation failed'),
         } : m))
         return
       }
@@ -446,7 +466,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         attempts++
         if (attempts > 120) { // ~20 min max (video can take several minutes on high load)
           clearInterval(interval)
-          setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: '影片生成逾時，請重試' } : m))
+          setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: L('影片生成逾時，請重試', 'Video generation timed out, please retry') } : m))
           return
         }
         try {
@@ -459,7 +479,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
             setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoUrl: url } : m))
           } else if (!pollRes.ok) {
             clearInterval(interval)
-            setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: pollData.error ?? '影片生成失敗' } : m))
+            setMessages(p => p.map(m => m.id === msgId ? { ...m, videoLoading: false, videoError: pollData.error ?? L('影片生成失敗', 'Video generation failed') } : m))
           }
         } catch { /* continue polling */ }
       }, 10000)
@@ -508,7 +528,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const res = await fetch('/api/ai/sidekick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachments: atts.length > 0 ? atts : undefined, history, pageId }),
+        body: JSON.stringify({ message: t, contextPage, metricsContext, fileAttachments: atts.length > 0 ? atts : undefined, history, pageId, language: lang }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -516,11 +536,11 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         if (data.error === 'NO_API_KEY') {
           setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '', time: now, noApiKey: true }])
         } else {
-          setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: data.error ?? `伺服器錯誤 (${res.status})`, time: now }])
+          setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: data.error ?? L(`伺服器錯誤 (${res.status})`, `Server error (${res.status})`), time: now }])
         }
         return
       }
-      const raw = data.response ?? { type: 'general', summary: '抱歉，無法取得回應，請稍後再試。', bullets: [], stats: [], actions: [] }
+      const raw = data.response ?? { type: 'general', summary: L('抱歉，無法取得回應，請稍後再試。', 'Sorry, no response available. Please try again later.'), bullets: [], stats: [], actions: [] }
       const r: AiResponse = { ...raw, bullets: Array.isArray(raw.bullets) ? raw.bullets : [], stats: Array.isArray(raw.stats) ? raw.stats : [], actions: Array.isArray(raw.actions) ? raw.actions : [] }
       const aiMsgId = String(Date.now()) + 'a'
       setMessages(p => [...p, { id: aiMsgId, role: 'ai', text: '', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), response: r, imageLoading: false, videoLoading: false, videoDuration: r.videoDuration }])
@@ -547,7 +567,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
         }).catch(() => {})
       }
     } catch {
-      setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: '網路錯誤，請稍後再試。', time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
+      setMessages(p => [...p, { id: Date.now() + 'e', role: 'ai', text: L('網路錯誤，請稍後再試。', 'Network error, please try again later.'), time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) }])
     } finally {
       setTyping(false)
     }
@@ -653,7 +673,9 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
 
   useEffect(() => {
     if (!typing) return
-    const labels = ['正在載入數據⋯', '分析 A/B 測試結果⋯', '生成建議中⋯']
+    const labels = lang === 'en'
+      ? ['Loading data…', 'Analyzing A/B test results…', 'Generating advice…']
+      : ['正在載入數據⋯', '分析 A/B 測試結果⋯', '生成建議中⋯']
     let i = 0
     setTypingLabel(labels[0])
     const interval = setInterval(() => { i = (i + 1) % labels.length; setTypingLabel(labels[i]) }, 1800)
@@ -680,8 +702,8 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     e.preventDefault()
     const file = imageItem.getAsFile()
     if (!file) return
-    if (file.size > SIZE_LIMITS.image) { alert('圖片不能超過 4MB'); return }
-    if (fileAttachments.length >= MAX_FILES) { alert(`最多同時附加 ${MAX_FILES} 個檔案`); return }
+    if (file.size > SIZE_LIMITS.image) { alert(L('圖片不能超過 4MB', 'Image must be under 4MB')); return }
+    if (fileAttachments.length >= MAX_FILES) { alert(L(`最多同時附加 ${MAX_FILES} 個檔案`, `Up to ${MAX_FILES} files at a time`)); return }
     const reader = new FileReader()
     reader.onload = ev => {
       const dataUrl = ev.target?.result as string
@@ -696,9 +718,9 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
     if (files.length === 0) return
 
     const remaining = MAX_FILES - fileAttachments.length
-    if (remaining <= 0) { alert(`最多同時附加 ${MAX_FILES} 個檔案`); return }
+    if (remaining <= 0) { alert(L(`最多同時附加 ${MAX_FILES} 個檔案`, `Up to ${MAX_FILES} files at a time`)); return }
     const toProcess = files.slice(0, remaining)
-    if (files.length > remaining) alert(`已選 ${files.length} 個，只取前 ${remaining} 個（最多 ${MAX_FILES} 個）`)
+    if (files.length > remaining) alert(L(`已選 ${files.length} 個，只取前 ${remaining} 個（最多 ${MAX_FILES} 個）`, `Selected ${files.length}, taking first ${remaining} (max ${MAX_FILES})`))
 
     for (const file of toProcess) {
       const isImage = file.type.startsWith('image/')
@@ -706,21 +728,21 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       const isText = file.type === 'text/csv' || file.type === 'application/json' || file.name.endsWith('.csv') || file.name.endsWith('.json')
       const isVideo = file.type.startsWith('video/') || file.name.endsWith('.mp4') || file.name.endsWith('.mov') || file.name.endsWith('.webm')
 
-      if (!isImage && !isPdf && !isText && !isVideo) { alert(`「${file.name}」格式不支援，只接受 PNG/JPG/PDF/CSV/JSON/MP4/MOV/WEBM`); continue }
+      if (!isImage && !isPdf && !isText && !isVideo) { alert(L(`「${file.name}」格式不支援，只接受 PNG/JPG/PDF/CSV/JSON/MP4/MOV/WEBM`, `"${file.name}" format not supported. Only PNG/JPG/PDF/CSV/JSON/MP4/MOV/WEBM`)); continue }
 
       const attType: FileAttachment['type'] = isImage ? 'image' : isPdf ? 'pdf' : isText ? 'text' : 'video'
-      if (file.size > SIZE_LIMITS[attType]) { alert(`「${file.name}」過大（上限 ${SIZE_LIMITS[attType] / 1024 / 1024}MB）`); continue }
+      if (file.size > SIZE_LIMITS[attType]) { alert(L(`「${file.name}」過大（上限 ${SIZE_LIMITS[attType] / 1024 / 1024}MB）`, `"${file.name}" too large (limit ${SIZE_LIMITS[attType] / 1024 / 1024}MB)`)); continue }
 
       if (isVideo) {
         const user = auth.currentUser
-        if (!user) { alert('請先登入'); continue }
+        if (!user) { alert(L('請先登入', 'Please log in first')); continue }
         setVideoUploading(true)
         setVideoUploadPct(0)
         try {
           const url = await uploadVideoForAnalysis(user.uid, file, pct => setVideoUploadPct(Math.round(pct)))
           setFileAttachments(prev => [...prev, { type: 'video', mimeType: file.type || 'video/mp4', content: '', name: file.name, videoUrl: url }])
         } catch {
-          alert(`「${file.name}」上傳失敗，請重試`)
+          alert(L(`「${file.name}」上傳失敗，請重試`, `"${file.name}" upload failed, please retry`))
         } finally {
           setVideoUploading(false)
         }
@@ -762,7 +784,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       if (exportRange === '30d') { const d = new Date(now); d.setDate(d.getDate() - 30); startDate = d.toISOString().slice(0, 10) }
       else if (exportRange === '90d') { const d = new Date(now); d.setDate(d.getDate() - 90); startDate = d.toISOString().slice(0, 10) }
       else if (exportRange === 'custom') {
-        if (!exportCustomStart) { alert('請選擇開始日期'); return }
+        if (!exportCustomStart) { alert(L('請選擇開始日期', 'Please select a start date')); return }
         startDate = exportCustomStart
         endDate = exportCustomEnd || endDate
       }
@@ -770,7 +792,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       if (startDate) params.set('startDate', startDate)
       params.set('endDate', endDate)
       const res = await fetch(`/api/ai/conversation?${params}`, { headers: { Authorization: `Bearer ${idToken}` } })
-      if (!res.ok) { alert('匯出失敗，請確認你有管理員權限'); return }
+      if (!res.ok) { alert(L('匯出失敗，請確認你有管理員權限', 'Export failed. Please confirm you have admin permission.')); return }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -781,11 +803,11 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
       a.click()
       URL.revokeObjectURL(url)
       setShowExportModal(false)
-    } catch { alert('匯出失敗，請稍後再試') }
+    } catch { alert(L('匯出失敗，請稍後再試', 'Export failed, please try again later')) }
     finally { setExporting(false) }
   }
 
-  const suggestions = SUGGESTIONS_BY_PAGE[contextPage] ?? SUGGESTIONS_BY_PAGE.default
+  const suggestions = (SUGGESTIONS_BY_PAGE[contextPage] ?? SUGGESTIONS_BY_PAGE.default)[lang === 'en' ? 'en' : 'zh']
 
   return (
     <div className={`ads-sk-drawer ${open ? 'open' : ''}`}>
@@ -796,20 +818,20 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
             <div className="ads-sk-header-avatar">✨</div>
             <div>
               <div className="ads-sk-header-name">AI Sidekick</div>
-              <div className="ads-sk-header-sub">{contextPage === 'posts' ? '內容優化顧問' : '廣告投手助手'}</div>
+              <div className="ads-sk-header-sub">{contextPage === 'posts' ? L('內容優化顧問', 'Content advisor') : L('廣告投手助手', 'Ad assistant')}</div>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
               <button
-                title="對話歷史"
+                title={L('對話歷史', 'Chat history')}
                 onClick={() => setShowHistory(v => !v)}
                 style={{ background: showHistory ? 'var(--ad-blue)' : 'none', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: showHistory ? '#fff' : 'var(--ad-text2)' }}
-              >🕐 歷史</button>
+              >🕐 {L('歷史', 'History')}</button>
               {!showHistory && (
                 <button
-                  title="新對話"
+                  title={L('新對話', 'New chat')}
                   onClick={() => { setMessages([initMsg()]); setInput(''); setFileAttachments([]) }}
                   style={{ background: 'none', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: 'var(--ad-text2)' }}
-                >+ 新對話</button>
+                >+ {L('新對話', 'New chat')}</button>
               )}
               <button className="ads-sk-close-btn" onClick={onClose}><Icon name="close" size={14} /></button>
             </div>
@@ -819,14 +841,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
           {showExportModal && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'inherit' }}>
               <div style={{ background: 'var(--ad-bg)', borderRadius: 12, padding: '20px 24px', width: 280, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>📥 匯出對話紀錄</div>
-                <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>時間範圍</div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>📥 {L('匯出對話紀錄', 'Export chat history')}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>{L('時間範圍', 'Time range')}</div>
                 <select value={exportRange} onChange={e => setExportRange(e.target.value as '30d'|'90d'|'all'|'custom')}
                   style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: exportRange === 'custom' ? 8 : 12, fontFamily: 'inherit' }}>
-                  <option value="30d">最近 30 天</option>
-                  <option value="90d">最近 90 天</option>
-                  <option value="all">全部</option>
-                  <option value="custom">自訂日期</option>
+                  <option value="30d">{L('最近 30 天', 'Last 30 days')}</option>
+                  <option value="90d">{L('最近 90 天', 'Last 90 days')}</option>
+                  <option value="all">{L('全部', 'All')}</option>
+                  <option value="custom">{L('自訂日期', 'Custom dates')}</option>
                 </select>
                 {exportRange === 'custom' && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
@@ -837,19 +859,19 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                       style={{ flex: 1, fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', fontFamily: 'inherit' }} />
                   </div>
                 )}
-                <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>篩選條件</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text2)', marginBottom: 6 }}>{L('篩選條件', 'Filter')}</div>
                 <select value={exportFeedbackFilter} onChange={e => setExportFeedbackFilter(e.target.value as 'all'|'has_feedback'|'improve_only')}
                   style={{ width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', marginBottom: 16, fontFamily: 'inherit' }}>
-                  <option value="all">全部對話</option>
-                  <option value="has_feedback">只匯出有評分的</option>
-                  <option value="improve_only">只匯出「改進」評分</option>
+                  <option value="all">{L('全部對話', 'All chats')}</option>
+                  <option value="has_feedback">{L('只匯出有評分的', 'Only rated')}</option>
+                  <option value="improve_only">{L('只匯出「改進」評分', 'Only "Improve" rated')}</option>
                 </select>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setShowExportModal(false)}
-                    style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>取消</button>
+                    style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-bg)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit' }}>{L('取消', 'Cancel')}</button>
                   <button onClick={handleExport} disabled={exporting}
                     style={{ fontSize: 12, padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--ad-blue)', color: '#fff', cursor: exporting ? 'default' : 'pointer', opacity: exporting ? 0.6 : 1, fontFamily: 'inherit' }}>
-                    {exporting ? '匯出中⋯' : '確認匯出'}
+                    {exporting ? L('匯出中⋯', 'Exporting…') : L('確認匯出', 'Confirm export')}
                   </button>
                 </div>
               </div>
@@ -860,27 +882,27 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
           {showHistory ? (
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <p style={{ fontSize: 12, color: 'var(--ad-text3)', margin: 0 }}>點擊任一紀錄可還原對話</p>
+                <p style={{ fontSize: 12, color: 'var(--ad-text3)', margin: 0 }}>{L('點擊任一紀錄可還原對話', 'Click any record to restore the chat')}</p>
                 {isOwner && pageId && (
                   <button onClick={() => setShowExportModal(true)}
                     style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    📥 匯出
+                    📥 {L('匯出', 'Export')}
                   </button>
                 )}
               </div>
-              {historyLoading && <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>載入中⋯</p>}
+              {historyLoading && <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>{L('載入中⋯', 'Loading…')}</p>}
               {!historyLoading && historySessions.length === 0 && (
-                <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>尚無歷史紀錄</p>
+                <p style={{ fontSize: 13, color: 'var(--ad-text3)', textAlign: 'center', padding: 24 }}>{L('尚無歷史紀錄', 'No history yet')}</p>
               )}
               {historySessions.map(session => (
                 <button key={session.sessionId} onClick={() => loadHistorySession(session)}
                   style={{ textAlign: 'left', background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ad-text3)' }}>
-                    <span>{CTX_LABELS[session.contextPage] ?? session.contextPage}</span>
+                    <span>{CTX_LABELS[session.contextPage]?.[lang === 'en' ? 'en' : 'zh'] ?? session.contextPage}</span>
                     <span>{session.date}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--ad-text)', fontWeight: 500 }}>{session.turns[0]?.question.slice(0, 50) ?? '（無內容）'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--ad-text3)' }}>{session.turns.length} 則對話</div>
+                  <div style={{ fontSize: 13, color: 'var(--ad-text)', fontWeight: 500 }}>{session.turns[0]?.question.slice(0, 50) ?? L('（無內容）', '(empty)')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ad-text3)' }}>{L(`${session.turns.length} 則對話`, `${session.turns.length} turns`)}</div>
                 </button>
               ))}
             </div>
@@ -889,7 +911,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               {showCtx && (
                 <div className="ads-sk-ctx-banner">
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ad-blue)', flexShrink: 0, display: 'inline-block' }} />
-                  <span>已載入真實數據 · 當前頁面：{CTX_LABELS[contextPage] ?? '總覽'}</span>
+                  <span>{L('已載入真實數據 · 當前頁面：', 'Live data loaded · Current page: ')}{CTX_LABELS[contextPage]?.[lang === 'en' ? 'en' : 'zh'] ?? L('總覽', 'Overview')}</span>
                   <span style={{ marginLeft: 'auto', cursor: 'pointer', opacity: 0.5 }} onClick={() => setShowCtx(false)}>×</span>
                 </div>
               )}
@@ -898,7 +920,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               <div className="ads-sk-messages">
                 {messages.map(msg => (
                   <div key={msg.id} className={`ads-sk-msg ${msg.role}`}>
-                    <div className="ads-sk-msg-avatar">{msg.role === 'ai' ? '✨' : '我'}</div>
+                    <div className="ads-sk-msg-avatar">{msg.role === 'ai' ? '✨' : L('我', 'Me')}</div>
                     <div className="ads-sk-msg-bubble">
                       <div className="ads-sk-msg-text">
                         {msg.filePreviews && msg.filePreviews.length > 0 && (
@@ -923,13 +945,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                         )}
                         {msg.noApiKey && (
                           <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-                            <p style={{ marginBottom: 6 }}>⚠️ 請先到「設定」頁面輸入你的 Claude API Key 才能使用 AI Sidekick。</p>
+                            <p style={{ marginBottom: 6 }}>{L('⚠️ 請先到「設定」頁面輸入你的 Claude API Key 才能使用 AI Sidekick。', '⚠️ Please enter your Claude API Key in Settings to use AI Sidekick.')}</p>
                             <p style={{ color: 'var(--ad-text2)', fontSize: 12 }}>
-                              前往頭像 → 設定 → API Keys（
+                              {L('前往頭像 → 設定 → API Keys（', 'Go to avatar → Settings → API Keys (')}
                               <a href="https://tm-contentloop.vercel.app/dashboard/settings" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ad-blue)', textDecoration: 'underline' }}>
                                 https://tm-contentloop.vercel.app/dashboard/settings
                               </a>
-                              ）
+                              {L('）', ')')}
                             </p>
                           </div>
                         )}
@@ -944,7 +966,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           }
                           return (
                             <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
-                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>🖼️ 待生成圖片 — 可編輯提示詞後再生成</div>
+                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>{L('🖼️ 待生成圖片 — 可編輯提示詞後再生成', '🖼️ Image to generate — edit the prompt first if you like')}</div>
                               <textarea value={editedPrompts[msg.id] ?? msg.response.imagePrompt}
                                 onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireImage() } }}
@@ -952,16 +974,16 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                                 <select value={imageEngine}
                                   onChange={e => setImageEngine(e.target.value)}
-                                  title="圖片模型"
+                                  title={L("圖片模型","Image model")}
                                   style={{ flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                  <option value="fal-grok-image">Grok Imagine（預設・便宜美感）</option>
-                                  <option value="fal-gpt-image-2">GPT Image 2（文字最強・含中文）</option>
-                                  <option value="fal-recraft">Recraft V3（廣告/品牌風格）</option>
-                                  <option value="fal-flux">FLUX dev（快速通用）</option>
+                                  <option value="fal-grok-image">{L('Grok Imagine（預設・便宜美感）', 'Grok Imagine (default · cheap & pretty)')}</option>
+                                  <option value="fal-gpt-image-2">{L('GPT Image 2（文字最強・含中文）', 'GPT Image 2 (best text · incl. Chinese)')}</option>
+                                  <option value="fal-recraft">{L('Recraft V3（廣告/品牌風格）', 'Recraft V3 (ad / brand style)')}</option>
+                                  <option value="fal-flux">{L('FLUX dev（快速通用）', 'FLUX dev (fast & general)')}</option>
                                 </select>
                               </div>
-                              <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={fireImage}>✨ 生成圖片</button>
-                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>Enter 換行　Shift+Enter 送出</div>
+                              <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={fireImage}>{L('✨ 生成圖片', '✨ Generate image')}</button>
+                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>{L('Enter 換行　Shift+Enter 送出', 'Enter for newline · Shift+Enter to send')}</div>
                             </div>
                           )
                         })()}
@@ -975,7 +997,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           }
                           return (
                             <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', fontSize: 12 }}>
-                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>🎬 待生成 Reels — 可編輯提示詞、選模型後再生成</div>
+                              <div style={{ color: 'var(--ad-text3)', marginBottom: 6 }}>{L('🎬 待生成 Reels — 可編輯提示詞、選模型後再生成', '🎬 Reels to generate — edit the prompt and pick a model first')}</div>
                               <textarea value={editedVideoPrompts[msg.id] ?? msg.response.videoPrompt}
                                 onChange={e => setEditedVideoPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); fireVideo() } }}
@@ -983,26 +1005,26 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                                 <select value={videoEngine}
                                   onChange={e => setVideoEngine(e.target.value)}
-                                  title="影片模型"
+                                  title={L("影片模型","Video model")}
                                   style={{ flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                  <option value="fal-hailuo">Hailuo（最省）</option>
-                                  <option value="fal-grok-video">Grok（含音訊）</option>
-                                  <option value="fal-kling-26">Kling 2.6（高品質）</option>
+                                  <option value="fal-hailuo">{L('Hailuo（最省）', 'Hailuo (cheapest)')}</option>
+                                  <option value="fal-grok-video">{L('Grok（含音訊）', 'Grok (with audio)')}</option>
+                                  <option value="fal-kling-26">{L('Kling 2.6（高品質）', 'Kling 2.6 (high quality)')}</option>
                                 </select>
                                 <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 6)}
                                   onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
-                                  title="影片長度"
+                                  title={L("影片長度","Video length")}
                                   style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                  <option value={6}>短（~6 秒）</option>
-                                  <option value={10}>長（~10 秒）</option>
+                                  <option value={6}>{L('短（~6 秒）', 'Short (~6s)')}</option>
+                                  <option value={10}>{L('長（~10 秒）', 'Long (~10s)')}</option>
                                 </select>
                               </div>
-                              <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={fireVideo}>🎬 生成 Reels 影片</button>
-                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>Enter 換行　Shift+Enter 送出</div>
+                              <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={fireVideo}>{L('🎬 生成 Reels 影片', '🎬 Generate Reels video')}</button>
+                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4 }}>{L('Enter 換行　Shift+Enter 送出', 'Enter for newline · Shift+Enter to send')}</div>
                             </div>
                           )
                         })()}
-                        {msg.imageLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎨 生成圖片中⋯</div>}
+                        {msg.imageLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>{L('🎨 生成圖片中⋯', '🎨 Generating image…')}</div>}
                         {msg.imageError && (() => {
                           const retryImage = () => {
                             const prompt = editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? ''
@@ -1023,14 +1045,14 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                   />
                                   <select value={imageEngine}
                                     onChange={e => setImageEngine(e.target.value)}
-                                    title="圖片模型"
+                                    title={L("圖片模型","Image model")}
                                     style={{ width: '100%', marginBottom: 6, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                    <option value="fal-grok-image">Grok Imagine（預設・便宜美感）</option>
-                                    <option value="fal-gpt-image-2">GPT Image 2（文字最強・含中文）</option>
-                                    <option value="fal-recraft">Recraft V3（廣告/品牌風格）</option>
-                                    <option value="fal-flux">FLUX dev（快速通用）</option>
+                                    <option value="fal-grok-image">{L("Grok Imagine（預設・便宜美感）", "Grok Imagine (default · cheap & pretty)")}</option>
+                                    <option value="fal-gpt-image-2">{L("GPT Image 2（文字最強・含中文）", "GPT Image 2 (best text · incl. Chinese)")}</option>
+                                    <option value="fal-recraft">{L("Recraft V3（廣告/品牌風格）", "Recraft V3 (ad / brand style)")}</option>
+                                    <option value="fal-flux">{L("FLUX dev（快速通用）", "FLUX dev (fast & general)")}</option>
                                   </select>
-                                  <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={retryImage}>↻ 重新生成</button>
+                                  <button className="ads-btn" style={{ fontSize: 12, width: '100%' }} onClick={retryImage}>{L("↻ 重新生成","↻ Regenerate")}</button>
                                 </>
                               )}
                             </div>
@@ -1046,26 +1068,26 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                           return (
                             <div style={{ marginTop: 8 }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={msg.imageUrl} alt="生成的廣告素材" style={{ width: '100%', borderRadius: 8 }} />
+                              <img src={msg.imageUrl} alt={L('生成的廣告素材', 'Generated ad creative')} style={{ width: '100%', borderRadius: 8 }} />
                               <textarea value={editedPrompts[msg.id] ?? (msg.response?.imagePrompt ?? '')}
                                 onChange={e => setEditedPrompts(p => ({ ...p, [msg.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); regenImage() } }}
                                 style={{ width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', resize: 'vertical', minHeight: 52, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                               <select value={imageEngine}
                                 onChange={e => setImageEngine(e.target.value)}
-                                title="圖片模型"
+                                title={L("圖片模型","Image model")}
                                 style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                <option value="fal-grok-image">Grok Imagine（預設・便宜美感）</option>
-                                <option value="fal-gpt-image-2">GPT Image 2（文字最強・含中文）</option>
-                                <option value="fal-recraft">Recraft V3（廣告/品牌風格）</option>
-                                <option value="fal-flux">FLUX dev（快速通用）</option>
+                                <option value="fal-grok-image">{L("Grok Imagine（預設・便宜美感）", "Grok Imagine (default · cheap & pretty)")}</option>
+                                <option value="fal-gpt-image-2">{L("GPT Image 2（文字最強・含中文）", "GPT Image 2 (best text · incl. Chinese)")}</option>
+                                <option value="fal-recraft">{L("Recraft V3（廣告/品牌風格）", "Recraft V3 (ad / brand style)")}</option>
+                                <option value="fal-flux">{L("FLUX dev（快速通用）", "FLUX dev (fast & general)")}</option>
                               </select>
                               <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                                <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenImage}>↻ 重新生成</button>
+                                <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenImage}>{L("↻ 重新生成","↻ Regenerate")}</button>
                                 <a href={msg.imageUrl} download="ad-creative.jpg"
                                   onClick={() => fireCreativeSignal(pageId, editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? '', 'download')}
                                   style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', color: 'var(--ad-text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                                  ⬇ 下載圖片
+                                  {L('⬇ 下載圖片', '⬇ Download image')}
                                 </a>
                               </div>
                               {canvaConnected && (
@@ -1073,13 +1095,13 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                                   onClick={() => { fireCreativeSignal(pageId, editedPrompts[msg.id] ?? msg.response?.imagePrompt ?? '', 'canva_import'); pushToCanva(msg.id, msg.imageUrl!) }}
                                   disabled={canvaPushing === msg.id}
                                   style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '7px 0', borderRadius: 8, border: 'none', background: canvaPushing === msg.id ? '#b2dfdb' : '#4dd0c4', color: '#fff', cursor: canvaPushing === msg.id ? 'default' : 'pointer', fontWeight: 500 }}>
-                                  {canvaPushing === msg.id ? '推送中⋯' : '🎨 推到 Canva 建立設計稿'}
+                                  {canvaPushing === msg.id ? L('推送中⋯', 'Pushing…') : L('🎨 推到 Canva 建立設計稿', '🎨 Push to Canva as a design')}
                                 </button>
                               )}
                             </div>
                           )
                         })()}
-                        {msg.videoLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>🎬 生成 Reels 中⋯ 預計需要 1–3 分鐘</div>}
+                        {msg.videoLoading && <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--ad-text3)' }}>{L('🎬 生成 Reels 中⋯ 預計需要 1–3 分鐘', '🎬 Generating Reels… takes about 1–3 min')}</div>}
                         {msg.videoError && (
                           <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>
                             <div style={{ color: '#ef4444' }}>❌ {msg.videoError}</div>
@@ -1104,12 +1126,12 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                               <select value={editedDurations[msg.id] ?? (msg.videoDuration ?? 5)}
                                 onChange={e => setEditedDurations(p => ({ ...p, [msg.id]: Number(e.target.value) }))}
                                 style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text)', cursor: 'pointer' }}>
-                                {[5,6,7,8].map(s => <option key={s} value={s}>{s} 秒</option>)}
+                                {[5,6,7,8].map(s => <option key={s} value={s}>{s}{L(' 秒', 's')}</option>)}
                               </select>
-                              <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenVideo}>↻ 重新生成</button>
+                              <button className="ads-btn" style={{ fontSize: 12, flex: 1 }} onClick={regenVideo}>{L("↻ 重新生成","↻ Regenerate")}</button>
                               <a href={msg.videoUrl} download="reels.mp4"
                                 style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: 'var(--ad-surface)', border: '1px solid var(--ad-border)', color: 'var(--ad-text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                                ⬇ 下載 MP4
+                                {L('⬇ 下載 MP4', '⬇ Download MP4')}
                               </a>
                             </div>
                           </div>
@@ -1139,7 +1161,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                   style={{ background: 'linear-gradient(135deg,#7c3aed22,#3b82f622)', borderColor: '#7c3aed44', fontWeight: 600 }}
                   onClick={() => setShowCanvaPanel(true)}
                 >
-                  ✨ 優化廣告素材
+                  {L('✨ 優化廣告素材', '✨ Optimize creative')}
                 </div>
                 {suggestions.map((s, i) => <div key={i} className="ads-sk-sug" onClick={() => send(s)}>{s}</div>)}
               </div>
@@ -1148,7 +1170,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
               <div className="ads-sk-input-area">
                 {videoUploading && (
                   <div style={{ marginBottom: 6, padding: '5px 10px', background: 'var(--ad-surface)', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text2)' }}>
-                    🎬 上傳影片中⋯ {videoUploadPct}%
+                    {L('🎬 上傳影片中⋯', '🎬 Uploading video…')} {videoUploadPct}%
                     <div style={{ marginTop: 4, height: 3, background: 'var(--ad-border)', borderRadius: 2 }}>
                       <div style={{ height: '100%', width: `${videoUploadPct}%`, background: 'var(--ad-blue)', borderRadius: 2, transition: 'width 0.2s' }} />
                     </div>
@@ -1167,9 +1189,9 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                 )}
                 <div className="ads-sk-input-box">
                   <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.pdf,.csv,.json,.mp4,.mov,.webm" multiple style={{ display: 'none' }} onChange={handleFileSelect} />
-                  <button title="上傳檔案" onClick={() => fileInputRef.current?.click()}
+                  <button title={L("上傳檔案","Upload file")} onClick={() => fileInputRef.current?.click()}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 6px', color: 'var(--ad-text3)', fontSize: 16, flexShrink: 0 }}>📎</button>
-                  <textarea ref={textareaRef} className="ads-sk-textarea" rows={1} placeholder="問我任何問題…"
+                  <textarea ref={textareaRef} className="ads-sk-textarea" rows={1} placeholder={L('問我任何問題…', 'Ask me anything…')}
                     value={input} onChange={e => setInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); send() } }}
                     onPaste={handlePaste}
@@ -1178,7 +1200,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                     <Icon name="send" size={15} color="white" />
                   </button>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4, paddingRight: 2 }}>Enter 換行　Shift+Enter 送出</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text3)', textAlign: 'right', marginTop: 4, paddingRight: 2 }}>{L('Enter 換行　Shift+Enter 送出', 'Enter for newline · Shift+Enter to send')}</div>
               </div>
             </>
           )}

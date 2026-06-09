@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 interface IgPost {
   id: string
@@ -24,9 +25,9 @@ interface IgPost {
 
 type SortKey = 'timestamp' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'views'
 
-const MEDIA_LABEL: Record<IgPost['mediaType'], string> = {
-  IMAGE: '圖片', VIDEO: '影片', CAROUSEL_ALBUM: '輪播', REELS: 'Reels',
-}
+const mediaLabel = (t: string, en: boolean): string => en
+  ? ({ IMAGE: 'Image', VIDEO: 'Video', CAROUSEL_ALBUM: 'Carousel', REELS: 'Reels' }[t] ?? t)
+  : ({ IMAGE: '圖片', VIDEO: '影片', CAROUSEL_ALBUM: '輪播', REELS: 'Reels' }[t] ?? t)
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 
@@ -50,17 +51,19 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: {
   )
 }
 
-function buildIgPrompt(post: IgPost): string {
-  const MEDIA_LABEL: Record<IgPost['mediaType'], string> = { IMAGE: '圖片', VIDEO: '影片', CAROUSEL_ALBUM: '輪播', REELS: 'Reels' }
-  return `請分析這篇 Instagram 貼文：\n日期：${post.timestamp.slice(0, 10)}｜類型：${MEDIA_LABEL[post.mediaType] ?? post.mediaType}\n內容：${(post.caption || '（無文字內容）').slice(0, 100)}\n觸及：${post.insights.reach}｜按讚：${post.insights.likes}｜留言：${post.insights.comments}｜收藏：${post.insights.saved}｜分享：${post.insights.shares}｜播放：${post.insights.views}\n\n請給出成效診斷和具體優化建議。`
+function buildIgPrompt(post: IgPost, en: boolean): string {
+  if (en) return `Please analyze this Instagram post:\nDate: ${post.timestamp.slice(0, 10)} | Type: ${mediaLabel(post.mediaType, true)}\nContent: ${(post.caption || '(no text)').slice(0, 100)}\nReach: ${post.insights.reach} | Likes: ${post.insights.likes} | Comments: ${post.insights.comments} | Saves: ${post.insights.saved} | Shares: ${post.insights.shares} | Plays: ${post.insights.views}\n\nPlease give a performance diagnosis and specific optimization suggestions.`
+  return `請分析這篇 Instagram 貼文：\n日期：${post.timestamp.slice(0, 10)}｜類型：${mediaLabel(post.mediaType, false)}\n內容：${(post.caption || '（無文字內容）').slice(0, 100)}\n觸及：${post.insights.reach}｜按讚：${post.insights.likes}｜留言：${post.insights.comments}｜收藏：${post.insights.saved}｜分享：${post.insights.shares}｜播放：${post.insights.views}\n\n請給出成效診斷和具體優化建議。`
 }
 
 export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [sortKey, setSortKey] = useState<SortKey>('timestamp')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   if (!posts.length) {
-    return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>尚無 IG 貼文資料</p>
+    return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>{L('尚無 IG 貼文資料', 'No IG post data yet')}</p>
   }
 
   function handleSort(key: SortKey) {
@@ -85,16 +88,16 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
       <table className="ads-posts-table">
         <thead>
           <tr>
-            <SortTh k="timestamp" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <th style={{ textAlign: 'left' }}>類型</th>
-            <th style={{ textAlign: 'left' }}>內容</th>
-            <SortTh k="reach" label="觸及" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="likes" label="按讚" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="comments" label="留言" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="saved" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>花費</th>
+            <SortTh k="timestamp" label={L('日期', 'Date')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'left' }}>{L('類型', 'Type')}</th>
+            <th style={{ textAlign: 'left' }}>{L('內容', 'Content')}</th>
+            <SortTh k="reach" label={L('觸及', 'Reach')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="likes" label={L('按讚', 'Likes')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="comments" label={L('留言', 'Comments')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="saved" label={L('收藏', 'Saves')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="shares" label={L('分享', 'Shares')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="views" label={L('播放', 'Plays')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>{L('花費', 'Spend')}</th>
             <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>CPL</th>
             <th style={{ textAlign: 'right', color: 'var(--ad-text3)', fontSize: 11 }}>CTR</th>
             {onAskAI && <th style={{ width: 60 }} />}
@@ -108,7 +111,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
                 <td className="ads-posts-date">{fullDate(post.timestamp)}</td>
                 <td>
                   <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: isReels ? '#FFF3E0' : 'var(--ad-surface2)', color: isReels ? '#E65100' : 'var(--ad-text3)', whiteSpace: 'nowrap' }}>
-                    {isReels ? '▶ Reels' : MEDIA_LABEL[post.mediaType] ?? post.mediaType}
+                    {isReels ? '▶ Reels' : mediaLabel(post.mediaType, en)}
                   </span>
                 </td>
                 <td style={{ maxWidth: 260 }}>
@@ -118,7 +121,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
                     rel="noopener noreferrer"
                     style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
                   >
-                    {post.caption || '（無文字內容）'}
+                    {post.caption || L('（無文字內容）', '(no text)')}
                   </a>
                 </td>
                 <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: post.insights.reach > 200 ? 'var(--ad-green)' : undefined }}>
@@ -143,10 +146,10 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
                 {onAskAI && (
                   <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
                     <button
-                      title="用 AI 分析此貼文"
-                      onClick={() => onAskAI(buildIgPrompt(post), true)}
+                      title={L('用 AI 分析此貼文', 'Analyze this post with AI')}
+                      onClick={() => onAskAI(buildIgPrompt(post, en), true)}
                       style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
-                    >✨ 分析</button>
+                    >✨ {L('分析', 'Analyze')}</button>
                   </td>
                 )}
               </tr>
@@ -155,7 +158,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
         </tbody>
       </table>
       <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)' }}>
-        共 {posts.length} 筆記錄
+        {L(`共 ${posts.length} 筆記錄`, `${posts.length} records`)}
       </div>
     </div>
   )

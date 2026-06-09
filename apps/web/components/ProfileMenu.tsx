@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
   userName: string
@@ -8,6 +9,7 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
   isOwner?: boolean
   onSignOut: () => void
 }) {
+  const { L } = useLang()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -68,7 +70,7 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
                 onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
-                <span>成員管理</span>
+                <span>{L('成員管理', 'Members')}</span>
                 <span style={{ color: '#9CA3AF', fontSize: 11 }}>→</span>
               </button>
             </div>
@@ -87,7 +89,7 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
                 onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
-                <span>用量成本報表</span>
+                <span>{L('用量成本報表', 'Usage & cost')}</span>
                 <span style={{ color: '#9CA3AF', fontSize: 11 }}>→</span>
               </button>
             </div>
@@ -105,7 +107,7 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
               onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}
             >
-              <span>設定</span>
+              <span>{L('設定', 'Settings')}</span>
               <span style={{ color: '#9CA3AF', fontSize: 11 }}>→</span>
             </button>
           </div>
@@ -121,7 +123,7 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
               onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}
             >
-              登出
+              {L('登出', 'Sign out')}
             </button>
           </div>
         </div>

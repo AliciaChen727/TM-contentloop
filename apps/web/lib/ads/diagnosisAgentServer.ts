@@ -63,14 +63,14 @@ async function evaluateAndStore(
 
 // One Haiku call → enforced cards (or null on failure / bad output).
 export async function runDiagnosisAgent(
-  items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string,
+  items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false,
 ): Promise<AiDiagCard[] | null> {
   try {
     const anthropic = new Anthropic({ apiKey })
     const res = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1600,
-      system: [{ type: 'text', text: agentSystemPrompt(), cache_control: { type: 'ephemeral' } }],
+      system: [{ type: 'text', text: agentSystemPrompt(en), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: agentUserMessage(items, summary, fewShot) }],
     })
     const raw = res.content[0]?.type === 'text' ? res.content[0].text : ''
@@ -83,7 +83,7 @@ export async function runDiagnosisAgent(
 // Read the fingerprint cache; regenerate + store on miss. Returns null when there
 // is nothing to diagnose or generation failed (callers fall back to rule text).
 export async function getOrGenerateDiagnosisCards(
-  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, evalKeys?: EvalKeys,
+  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, evalKeys?: EvalKeys, en = false,
 ): Promise<AiDiagCard[] | null> {
   if (selectItemsForAgent(items).length === 0) return null
   const fingerprint = computeDiagFingerprint(items)
@@ -98,7 +98,7 @@ export async function getOrGenerateDiagnosisCards(
   const fewShot = formatFewShot(
     await getFewShotExamples(pageId, { source: 'diagnosis', goal: typeof summary.goal === 'string' ? summary.goal : null }),
   )
-  let cards = await runDiagnosisAgent(items, summary, apiKey, fewShot)
+  let cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en)
   if (!cards) return null
 
   // Quality evaluator (Slice 11): score → retry-once-if-low → store evalScore.

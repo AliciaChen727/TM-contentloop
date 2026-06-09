@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { auth } from '@/lib/firebase/client'
 import { parseFbInsightsMarkdown, type ParseResult } from '@/lib/parsers/fbInsightsMarkdown'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 interface Props {
   pageId: string
@@ -12,6 +13,7 @@ interface Props {
 type Status = 'idle' | 'preview' | 'importing' | 'done' | 'error'
 
 export function FbMdImport({ pageId, onImported }: Props) {
+  const { L } = useLang()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<Status>('idle')
   const [markdown, setMarkdown] = useState('')
@@ -48,12 +50,12 @@ export function FbMdImport({ pageId, onImported }: Props) {
         body: JSON.stringify({ markdown, pageId }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? '匯入失敗'); setStatus('error'); return }
+      if (!res.ok) { setError(data.error ?? L('匯入失敗', 'Import failed')); setStatus('error'); return }
       setResult(data)
       setStatus('done')
       onImported()
     } catch {
-      setError('網路錯誤，請重試')
+      setError(L('網路錯誤，請重試', 'Network error, please retry'))
       setStatus('error')
     }
   }
@@ -76,7 +78,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
           color: 'var(--ad-text2)', display: 'flex', alignItems: 'center', gap: 5,
         }}
       >
-        📋 匯入 FB 洞察 Markdown
+        📋 {L('匯入 FB 洞察 Markdown', 'Import FB Insights Markdown')}
       </button>
 
       {open && (
@@ -93,10 +95,10 @@ export function FbMdImport({ pageId, onImported }: Props) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>匯入 FB 洞察報告（Markdown）</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{L('匯入 FB 洞察報告（Markdown）', 'Import FB Insights Report (Markdown)')}</div>
                 <div style={{ fontSize: 12, color: '#888', marginTop: 3, lineHeight: 1.5 }}>
-                  用瀏覽器外掛把 FB 專業主控板「洞察報告」存成 Markdown，貼入下方。<br />
-                  支援：粉絲頁整體指標 + 貼文觸及人數
+                  {L('用瀏覽器外掛把 FB 專業主控板「洞察報告」存成 Markdown，貼入下方。', 'Use a browser extension to save the FB Professional Dashboard "Insights" as Markdown, then paste it below.')}<br />
+                  {L('支援：粉絲頁整體指標 + 貼文觸及人數', 'Supports: Page-level metrics + per-post reach')}
                 </div>
               </div>
               <button
@@ -112,7 +114,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
                 <textarea
                   value={markdown}
                   onChange={e => setMarkdown(e.target.value)}
-                  placeholder={'把 Markdown 貼到這裡…\n\n範例：\n瀏覽次數\n4,402\nReel\n55.9%\n非追蹤者\n63.2%'}
+                  placeholder={L('把 Markdown 貼到這裡…\n\n範例：\n瀏覽次數\n4,402\nReel\n55.9%\n非追蹤者\n63.2%', 'Paste Markdown here…\n\nExample:\nViews\n4,402\nReel\n55.9%\nNon-followers\n63.2%')}
                   style={{
                     width: '100%', height: 220, fontFamily: 'monospace', fontSize: 12,
                     border: '1px solid #d1d5db', borderRadius: 8, padding: 12,
@@ -130,7 +132,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
                       cursor: markdown.trim() ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    解析預覽
+                    {L('解析預覽', 'Parse preview')}
                   </button>
                 </div>
               </>
@@ -144,13 +146,13 @@ export function FbMdImport({ pageId, onImported }: Props) {
                     onClick={reset}
                     style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#374151' }}
                   >
-                    重新貼入
+                    {L('重新貼入', 'Paste again')}
                   </button>
                   <button
                     onClick={handleImport}
                     style={{ padding: '7px 20px', borderRadius: 8, border: 'none', background: '#1877F2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                   >
-                    確認寫入 Firebase
+                    {L('確認寫入 Firebase', 'Confirm & write to Firebase')}
                   </button>
                 </div>
               </>
@@ -158,27 +160,27 @@ export function FbMdImport({ pageId, onImported }: Props) {
 
             {status === 'importing' && (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#6b7280', fontSize: 13 }}>
-                寫入中，請稍候…
+                {L('寫入中，請稍候…', 'Writing, please wait…')}
               </div>
             )}
 
             {status === 'done' && result && (
               <div style={{ textAlign: 'center', padding: '24px 0' }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>匯入完成</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>{L('匯入完成', 'Import complete')}</div>
                 <div style={{ fontSize: 13, color: '#6b7280', marginTop: 8, lineHeight: 1.8 }}>
-                  {result.pageInsightsSaved && <div>粉絲頁整體洞察已儲存</div>}
+                  {result.pageInsightsSaved && <div>{L('粉絲頁整體洞察已儲存', 'Page-level insights saved')}</div>}
                   {result.postReachUpdated > 0 && (
                     <div>
-                      貼文觸及更新 <strong>{result.postReachUpdated}</strong> 筆
-                      {result.postReachSkipped > 0 && `，略過 ${result.postReachSkipped} 筆`}
+                      {L('貼文觸及更新 ', 'Post reach updated ')}<strong>{result.postReachUpdated}</strong>{L(' 筆', '')}
+                      {result.postReachSkipped > 0 && L(`，略過 ${result.postReachSkipped} 筆`, `, skipped ${result.postReachSkipped}`)}
                     </div>
                   )}
                   {(result.bizUpdated > 0 || result.bizCreated > 0) && (
                     <div>
-                      Business Suite 貼文更新 <strong>{result.bizUpdated}</strong> 筆
-                      {result.bizCreated > 0 && `，新建 ${result.bizCreated} 筆`}
-                      {result.bizSkipped > 0 && `，略過 ${result.bizSkipped} 筆（無日期）`}
+                      {L('Business Suite 貼文更新 ', 'Business Suite posts updated ')}<strong>{result.bizUpdated}</strong>{L(' 筆', '')}
+                      {result.bizCreated > 0 && L(`，新建 ${result.bizCreated} 筆`, `, created ${result.bizCreated}`)}
+                      {result.bizSkipped > 0 && L(`，略過 ${result.bizSkipped} 筆（無日期）`, `, skipped ${result.bizSkipped} (no date)`)}
                     </div>
                   )}
                   {result.warnings.map((w, i) => (
@@ -189,7 +191,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
                   onClick={() => { setOpen(false); reset() }}
                   style={{ marginTop: 20, padding: '8px 24px', borderRadius: 8, border: 'none', background: '#1877F2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                 >
-                  關閉
+                  {L('關閉', 'Close')}
                 </button>
               </div>
             )}
@@ -202,7 +204,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
                   onClick={reset}
                   style={{ marginTop: 16, padding: '7px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, cursor: 'pointer' }}
                 >
-                  重試
+                  {L('重試', 'Retry')}
                 </button>
               </div>
             )}
@@ -214,6 +216,7 @@ export function FbMdImport({ pageId, onImported }: Props) {
 }
 
 function PreviewPanel({ preview }: { preview: ParseResult }) {
+  const { L } = useLang()
   const { pageInsights, postReachRows, bizSuiteRows, warnings } = preview
 
   return (
@@ -229,18 +232,18 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
 
       {pageInsights && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, color: '#111' }}>粉絲頁整體洞察</div>
+          <div style={{ fontWeight: 700, marginBottom: 8, color: '#111' }}>{L('粉絲頁整體洞察', 'Page-level insights')}</div>
           {pageInsights.periodLabel && (
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>期間：{pageInsights.periodLabel}</div>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>{L('期間：', 'Period: ')}{pageInsights.periodLabel}</div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
             {[
-              { label: '瀏覽次數', value: pageInsights.pageViews },
-              { label: '影片觀看（3秒+）', value: pageInsights.videoViews3s },
-              { label: '影片觀看（1分鐘+）', value: pageInsights.videoViews1m },
-              { label: '觀看時間（分鐘）', value: pageInsights.watchTimeMin },
-              { label: '追蹤者 %', value: pageInsights.followerPct ? `${pageInsights.followerPct}%` : '—' },
-              { label: '非追蹤者 %', value: pageInsights.nonFollowerPct ? `${pageInsights.nonFollowerPct}%` : '—' },
+              { label: L('瀏覽次數', 'Views'), value: pageInsights.pageViews },
+              { label: L('影片觀看（3秒+）', 'Video views (3s+)'), value: pageInsights.videoViews3s },
+              { label: L('影片觀看（1分鐘+）', 'Video views (1min+)'), value: pageInsights.videoViews1m },
+              { label: L('觀看時間（分鐘）', 'Watch time (min)'), value: pageInsights.watchTimeMin },
+              { label: L('追蹤者 %', 'Followers %'), value: pageInsights.followerPct ? `${pageInsights.followerPct}%` : '—' },
+              { label: L('非追蹤者 %', 'Non-followers %'), value: pageInsights.nonFollowerPct ? `${pageInsights.nonFollowerPct}%` : '—' },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: '#f9fafb', borderRadius: 6, padding: '8px 10px' }}>
                 <div style={{ fontSize: 11, color: '#888' }}>{label}</div>
@@ -250,7 +253,7 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
           </div>
           {Object.keys(pageInsights.contentType).length > 0 && (
             <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>內容類型分布</div>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>{L('內容類型分布', 'Content type distribution')}</div>
               {Object.entries(pageInsights.contentType).map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ width: 56, fontSize: 11, color: '#374151', flexShrink: 0 }}>{k}</div>
@@ -268,15 +271,15 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
       {postReachRows.length > 0 && (
         <div>
           <div style={{ fontWeight: 700, marginBottom: 8, color: '#111' }}>
-            貼文觸及（{postReachRows.length} 筆）
+            {L('貼文觸及（', 'Post reach (')}{postReachRows.length}{L(' 筆）', ')')}
           </div>
           <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
             <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
-                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>連結</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>觸及</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>曝光</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{L('連結', 'Link')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('觸及', 'Reach')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('曝光', 'Impr.')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,7 +293,7 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
                   </tr>
                 ))}
                 {postReachRows.length > 10 && (
-                  <tr><td colSpan={3} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>…還有 {postReachRows.length - 10} 筆</td></tr>
+                  <tr><td colSpan={3} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>{L(`…還有 ${postReachRows.length - 10} 筆`, `…and ${postReachRows.length - 10} more`)}</td></tr>
                 )}
               </tbody>
             </table>
@@ -301,19 +304,19 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
       {bizSuiteRows.length > 0 && (
         <div style={{ marginTop: postReachRows.length > 0 ? 16 : 0 }}>
           <div style={{ fontWeight: 700, marginBottom: 8, color: '#111' }}>
-            Business Suite 貼文（{bizSuiteRows.length} 筆）
+            {L('Business Suite 貼文（', 'Business Suite posts (')}{bizSuiteRows.length}{L(' 筆）', ')')}
           </div>
           <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
             <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
-                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>日期</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>內容</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>觸及</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>按讚</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>留言</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>分享</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>觀看(3s)</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{L('日期', 'Date')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{L('內容', 'Content')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('觸及', 'Reach')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('按讚', 'Likes')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('留言', 'Comments')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('分享', 'Shares')}</th>
+                  <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{L('觀看(3s)', 'Views(3s)')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -321,7 +324,7 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
                   <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
                     <td style={{ padding: '5px 10px', color: '#6b7280', whiteSpace: 'nowrap' }}>{row.publishDateLabel}</td>
                     <td style={{ padding: '5px 10px', color: row.content ? '#374151' : '#9ca3af', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: row.content ? 'normal' : 'italic' }}>
-                      {row.content ?? '（無文字內容）'}
+                      {row.content ?? L('（無文字內容）', '(no text)')}
                     </td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#111', fontWeight: 600 }}>{row.reach.toLocaleString()}</td>
                     <td style={{ padding: '5px 10px', textAlign: 'right', color: '#6b7280' }}>{row.likes}</td>
@@ -331,19 +334,19 @@ function PreviewPanel({ preview }: { preview: ParseResult }) {
                   </tr>
                 ))}
                 {bizSuiteRows.length > 10 && (
-                  <tr><td colSpan={7} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>…還有 {bizSuiteRows.length - 10} 筆</td></tr>
+                  <tr><td colSpan={7} style={{ padding: '4px 10px', color: '#9ca3af', fontSize: 11 }}>{L(`…還有 ${bizSuiteRows.length - 10} 筆`, `…and ${bizSuiteRows.length - 10} more`)}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-            將依發佈時間（±5分鐘）對應現有 fbPosts 並補齊欄位
+            {L('將依發佈時間（±5分鐘）對應現有 fbPosts 並補齊欄位', 'Will match existing fbPosts by publish time (±5 min) and fill in fields')}
           </div>
         </div>
       )}
 
       {!pageInsights && postReachRows.length === 0 && bizSuiteRows.length === 0 && (
-        <div style={{ color: '#dc2626', fontSize: 13 }}>未能解析任何資料，請重新貼入內容。</div>
+        <div style={{ color: '#dc2626', fontSize: 13 }}>{L('未能解析任何資料，請重新貼入內容。', "Couldn't parse any data — please paste the content again.")}</div>
       )}
     </div>
   )

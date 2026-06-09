@@ -79,75 +79,74 @@ export function mapRawAdCreative(c: any, idx: number) {
   }
 }
 
-export function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof mapRawAdCreative>[], budget: number): DiagItem[] {
+export function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<typeof mapRawAdCreative>[], budget: number, en = false): DiagItem[] {
   const items: DiagItem[] = []
+  // `adset` is an identity field (feeds diagnosisCardKey + post matching), NOT shown
+  // to the user — keep it a stable token so card status/idempotency match across langs.
+  const acct = '整體帳戶'
 
   if ((s.frequency ?? 0) > 3.5) {
-    items.push({ id: 'd1', severity: 'critical', type: 'audience_fatigue', title: '受眾疲乏警告',
-      desc: `整體帳戶頻率已達 ${(s.frequency).toFixed(2)}，建議暫停或更換素材。`,
-      adset: '整體帳戶', metric: `Frequency ${(s.frequency).toFixed(2)}`, threshold: '> 3.5', action: '更換素材 / 擴大受眾' })
+    items.push({ id: 'd1', severity: 'critical', type: 'audience_fatigue', title: en ? 'Audience fatigue warning' : '受眾疲乏警告',
+      desc: en ? `Account-wide frequency has reached ${(s.frequency).toFixed(2)}; consider pausing or refreshing creatives.` : `整體帳戶頻率已達 ${(s.frequency).toFixed(2)}，建議暫停或更換素材。`,
+      adset: acct, metric: `Frequency ${(s.frequency).toFixed(2)}`, threshold: '> 3.5', action: en ? 'Refresh creatives / expand audience' : '更換素材 / 擴大受眾' })
   }
 
   // For non-profit accounts (no revenue): skip ROAS warning entirely.
   // Instead, warn if CPL (cost per link click) is high (> $10 per click).
   const cpl = (s.conversions ?? 0) > 0 ? (s.spend ?? 0) / (s.conversions ?? 1) : 0
   if ((s.spend ?? 0) > 0 && (s.conversions ?? 0) === 0) {
-    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: '尚無點擊轉換數據',
-      desc: '目前未偵測到報名連結點擊數據，建議確認廣告目標是否設為「流量」或「互動」。',
-      adset: '整體帳戶', metric: '轉換數 0', threshold: '需 > 0', action: '檢查廣告目標設定 / 確認連結正確' })
+    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: en ? 'No click-conversion data yet' : '尚無點擊轉換數據',
+      desc: en ? 'No sign-up link clicks detected yet. Check whether the ad objective is set to "Traffic" or "Engagement".' : '目前未偵測到報名連結點擊數據，建議確認廣告目標是否設為「流量」或「互動」。',
+      adset: acct, metric: en ? 'Conversions 0' : '轉換數 0', threshold: en ? 'needs > 0' : '需 > 0', action: en ? 'Check ad objective / verify the link' : '檢查廣告目標設定 / 確認連結正確' })
   } else if (cpl > 10 && (s.spend ?? 0) > 0) {
-    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: 'CPL 偏高',
-      desc: `每次點擊報名連結成本為 $${cpl.toFixed(2)}，建議優化素材或縮小受眾。`,
-      adset: '整體帳戶', metric: `CPL $${cpl.toFixed(2)}`, threshold: '建議 < $10', action: '優化 CTA 文案 / 縮小受眾' })
+    items.push({ id: 'd2', severity: 'warning', type: 'low_roas', title: en ? 'High CPL' : 'CPL 偏高',
+      desc: en ? `Cost per sign-up link click is $${cpl.toFixed(2)}; optimize creative or narrow the audience.` : `每次點擊報名連結成本為 $${cpl.toFixed(2)}，建議優化素材或縮小受眾。`,
+      adset: acct, metric: `CPL $${cpl.toFixed(2)}`, threshold: en ? 'recommend < $10' : '建議 < $10', action: en ? 'Optimize CTA copy / narrow audience' : '優化 CTA 文案 / 縮小受眾' })
   }
 
   const budgetPct = budget > 0 ? (s.spend / budget) * 100 : 0
   if (budgetPct > 80) {
-    items.push({ id: 'd3', severity: budgetPct > 95 ? 'critical' : 'warning', type: 'budget', title: '預算超支風險',
-      desc: `目前花費進度 ${budgetPct.toFixed(1)}%，需注意月底前燒速。`,
-      adset: '整體帳戶', metric: `已花 $${Math.round(s.spend).toLocaleString('zh-TW')}`,
-      threshold: `預算 $${Math.round(budget).toLocaleString('zh-TW')}`, action: budgetPct > 95 ? '立即暫停低效組合' : '維持現況，每日監控' })
+    items.push({ id: 'd3', severity: budgetPct > 95 ? 'critical' : 'warning', type: 'budget', title: en ? 'Budget overspend risk' : '預算超支風險',
+      desc: en ? `Spend is at ${budgetPct.toFixed(1)}% of budget; watch the burn rate before month-end.` : `目前花費進度 ${budgetPct.toFixed(1)}%，需注意月底前燒速。`,
+      adset: acct, metric: en ? `Spent $${Math.round(s.spend).toLocaleString('en-US')}` : `已花 $${Math.round(s.spend).toLocaleString('zh-TW')}`,
+      threshold: en ? `Budget $${Math.round(budget).toLocaleString('en-US')}` : `預算 $${Math.round(budget).toLocaleString('zh-TW')}`, action: budgetPct > 95 ? (en ? 'Pause low-performing sets now' : '立即暫停低效組合') : (en ? 'Hold steady, monitor daily' : '維持現況，每日監控') })
   }
 
   const lowCtr = creatives.find(c => c.ctr > 0 && c.ctr < 1.5 && c.spend > 0)
   if (lowCtr) {
-    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: 'CTR 偏低素材',
-      desc: `素材「${lowCtr.name.slice(0, 25)}」CTR 僅 ${lowCtr.ctr.toFixed(2)}%，低於建議值 1.5%。`,
-      adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: '更換廣告文案或素材',
+    items.push({ id: 'd4', severity: 'warning', type: 'low_ctr', title: en ? 'Low-CTR creative' : 'CTR 偏低素材',
+      desc: en ? `Creative "${lowCtr.name.slice(0, 25)}" has only ${lowCtr.ctr.toFixed(2)}% CTR, below the 1.5% recommendation.` : `素材「${lowCtr.name.slice(0, 25)}」CTR 僅 ${lowCtr.ctr.toFixed(2)}%，低於建議值 1.5%。`,
+      adset: lowCtr.name.slice(0, 30), metric: `CTR ${lowCtr.ctr.toFixed(2)}%`, threshold: '< 1.5%', action: en ? 'Replace ad copy or creative' : '更換廣告文案或素材',
       thumbnailUrl: lowCtr.thumbnailUrl, storyId: lowCtr.storyId })
   } else if ((s.impressions ?? 0) > 0 && (s.ctr ?? 0) < 1.5) {
-    // Has impressions but low/zero CTR. CTR===0 = real "no clicks at all" problem,
-    // NOT "good" — the old `ctr > 0` guard wrongly let it fall through to 帳戶表現良好.
     const c = s.ctr ?? 0
     items.push({ id: 'd4', severity: 'warning', type: 'low_ctr',
-      title: c === 0 ? '廣告完全沒有點擊' : 'CTR 偏低',
+      title: c === 0 ? (en ? 'Ads got no clicks at all' : '廣告完全沒有點擊') : (en ? 'Low CTR' : 'CTR 偏低'),
       desc: c === 0
-        ? `這段期間廣告有 ${Math.round(s.impressions).toLocaleString('zh-TW')} 次曝光，但完全沒有人點擊（CTR 0%）。建議檢查廣告文案／CTA 與連結是否正常。`
-        : `整體 CTR 僅 ${c.toFixed(2)}%，低於建議值 1.5%。`,
-      adset: '整體帳戶', metric: `CTR ${c.toFixed(2)}%`, threshold: '< 1.5%',
-      action: c === 0 ? '檢查 CTA 文案 / 連結是否有效' : '更換廣告文案或素材' })
+        ? (en ? `Ads had ${Math.round(s.impressions).toLocaleString('en-US')} impressions this period but zero clicks (0% CTR). Check the ad copy / CTA and that the link works.` : `這段期間廣告有 ${Math.round(s.impressions).toLocaleString('zh-TW')} 次曝光，但完全沒有人點擊（CTR 0%）。建議檢查廣告文案／CTA 與連結是否正常。`)
+        : (en ? `Overall CTR is only ${c.toFixed(2)}%, below the 1.5% recommendation.` : `整體 CTR 僅 ${c.toFixed(2)}%，低於建議值 1.5%。`),
+      adset: acct, metric: `CTR ${c.toFixed(2)}%`, threshold: '< 1.5%',
+      action: c === 0 ? (en ? 'Check CTA copy / link validity' : '檢查 CTA 文案 / 連結是否有效') : (en ? 'Replace ad copy or creative' : '更換廣告文案或素材') })
   }
 
   const top = [...creatives].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas)[0]
   if (top && top.roas >= 5) {
-    items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: '最佳點擊效率素材',
-      desc: `素材「${top.name.slice(0, 25)}」點擊效率達 ${top.roas.toFixed(1)}x，建議增加預算。`,
-      adset: top.name.slice(0, 30), metric: `點擊效率 ${top.roas.toFixed(1)}`, threshold: '目標 > 5', action: `增加預算 20-30%`,
+    items.push({ id: 'd5', severity: 'good', type: 'top_performer', title: en ? 'Top click-efficiency creative' : '最佳點擊效率素材',
+      desc: en ? `Creative "${top.name.slice(0, 25)}" reached ${top.roas.toFixed(1)}x click efficiency; consider increasing budget.` : `素材「${top.name.slice(0, 25)}」點擊效率達 ${top.roas.toFixed(1)}x，建議增加預算。`,
+      adset: top.name.slice(0, 30), metric: en ? `Click eff. ${top.roas.toFixed(1)}` : `點擊效率 ${top.roas.toFixed(1)}`, threshold: en ? 'target > 5' : '目標 > 5', action: en ? 'Increase budget 20-30%' : `增加預算 20-30%`,
       thumbnailUrl: top.thumbnailUrl, storyId: top.storyId })
   }
 
   if (items.length === 0) {
-    // No rule fired. Distinguish "no ad activity at all" from "genuinely healthy" —
-    // CTR 0% with zero spend/impressions means there's just no data, not good news.
     const noActivity = (s.spend ?? 0) <= 0 && (s.impressions ?? 0) <= 0
     if (noActivity) {
-      items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '尚無廣告數據',
-        desc: '這個區間沒有偵測到廣告投放（花費與曝光皆為 0）。若有投放中的廣告，請確認已連結 Meta 廣告帳號，或切換到有投放的日期區間再看診斷。',
-        adset: '整體帳戶', metric: '無投放數據', threshold: '—', action: '確認廣告帳號連結 / 調整日期區間' })
+      items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: en ? 'No ad data yet' : '尚無廣告數據',
+        desc: en ? 'No ad delivery detected in this range (spend and impressions are both 0). If you have active ads, confirm your Meta ad account is linked, or switch to a date range with delivery.' : '這個區間沒有偵測到廣告投放（花費與曝光皆為 0）。若有投放中的廣告，請確認已連結 Meta 廣告帳號，或切換到有投放的日期區間再看診斷。',
+        adset: acct, metric: en ? 'No delivery data' : '無投放數據', threshold: '—', action: en ? 'Confirm ad account link / adjust date range' : '確認廣告帳號連結 / 調整日期區間' })
     } else {
-      items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: '帳戶表現良好',
-        desc: `CTR ${(s.ctr ?? 0).toFixed(2)}%，點擊效益正常，各項指標正常。`,
-        adset: '整體帳戶', metric: `CTR ${(s.ctr ?? 0).toFixed(2)}%`, threshold: '正常', action: '持續監控，維持現況' })
+      items.push({ id: 'd0', severity: 'good', type: 'top_performer', title: en ? 'Account is healthy' : '帳戶表現良好',
+        desc: en ? `CTR ${(s.ctr ?? 0).toFixed(2)}%, click value normal, all metrics look fine.` : `CTR ${(s.ctr ?? 0).toFixed(2)}%，點擊效益正常，各項指標正常。`,
+        adset: acct, metric: `CTR ${(s.ctr ?? 0).toFixed(2)}%`, threshold: en ? 'Normal' : '正常', action: en ? 'Keep monitoring, hold steady' : '持續監控，維持現況' })
     }
   }
 
@@ -159,12 +158,13 @@ export function buildDiagnosis(s: Record<string, number>, creatives: ReturnType<
 // client feeds buildDiagnosis — so the result matches the 診斷建議 page's rules.
 export function computeDiagnosisFromSnapshot(
   snap: Record<string, unknown> | undefined | null,
+  en = false,
 ): { items: DiagItem[]; criticalCount: number; warningCount: number } {
   const summary = ((snap?.summary ?? {}) as Record<string, number>)
   const rawCreatives = Array.isArray(snap?.adCreatives) ? (snap!.adCreatives as unknown[]) : []
   const creatives = rawCreatives.map((c, i) => mapRawAdCreative(c, i))
   const budget = typeof summary.budget === 'number' ? summary.budget : 0
-  const items = buildDiagnosis(summary, creatives, budget)
+  const items = buildDiagnosis(summary, creatives, budget, en)
   return {
     items,
     criticalCount: items.filter(d => d.severity === 'critical').length,

@@ -3,22 +3,23 @@
 import { useState, useMemo } from 'react'
 import type { CreativeTrend, CreativeTrendDaily, Experiment, LabelEntry, Variant } from '../types'
 import { SvgChart } from '../SvgCharts'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 // Color palette for per-creative lines (reused for legend dots).
 const COLORS = ['#3B6FD4', '#C96A1A', '#2E9E6B', '#B5179E', '#E0A800', '#7048E8', '#E5484D', '#0CA5B0']
 
 type MetricKey = 'spend' | 'reach' | 'impressions' | 'clicks' | 'ctr' | 'cpc' | 'cpm' | 'roas'
-interface MetricDef { label: string; kind: 'currency' | 'int' | 'percent' | 'ratio'; perDay: (d: CreativeTrendDaily) => number }
+interface MetricDef { label: string; en: string; kind: 'currency' | 'int' | 'percent' | 'ratio'; perDay: (d: CreativeTrendDaily) => number }
 
 const METRICS: Record<MetricKey, MetricDef> = {
-  spend: { label: '花費', kind: 'currency', perDay: d => d.spend },
-  reach: { label: '觸及', kind: 'int', perDay: d => d.reach },
-  impressions: { label: '曝光', kind: 'int', perDay: d => d.impressions },
-  clicks: { label: '點擊', kind: 'int', perDay: d => d.clicks },
-  ctr: { label: 'CTR', kind: 'percent', perDay: d => d.ctr },
-  cpc: { label: 'CPC', kind: 'currency', perDay: d => (d.clicks > 0 ? d.spend / d.clicks : 0) },
-  cpm: { label: 'CPM', kind: 'currency', perDay: d => (d.impressions > 0 ? d.spend / d.impressions * 1000 : 0) },
-  roas: { label: '點擊效益', kind: 'ratio', perDay: d => d.roas },
+  spend: { label: '花費', en: 'Spend', kind: 'currency', perDay: d => d.spend },
+  reach: { label: '觸及', en: 'Reach', kind: 'int', perDay: d => d.reach },
+  impressions: { label: '曝光', en: 'Impressions', kind: 'int', perDay: d => d.impressions },
+  clicks: { label: '點擊', en: 'Clicks', kind: 'int', perDay: d => d.clicks },
+  ctr: { label: 'CTR', en: 'CTR', kind: 'percent', perDay: d => d.ctr },
+  cpc: { label: 'CPC', en: 'CPC', kind: 'currency', perDay: d => (d.clicks > 0 ? d.spend / d.clicks : 0) },
+  cpm: { label: 'CPM', en: 'CPM', kind: 'currency', perDay: d => (d.impressions > 0 ? d.spend / d.impressions * 1000 : 0) },
+  roas: { label: '點擊效益', en: 'Click value', kind: 'ratio', perDay: d => d.roas },
 }
 const METRIC_ORDER: MetricKey[] = ['spend', 'reach', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'roas']
 
@@ -55,6 +56,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
   experiments?: Experiment[]
   creativeLabels?: Record<string, LabelEntry>
 }) {
+  const { L } = useLang()
   const hasPurchase = conversionType === 'purchase'
   const [metric, setMetric] = useState<MetricKey>('spend')
   const [expId, setExpId] = useState<string>('')
@@ -148,7 +150,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
   }
 
   const VARIANTS: Variant[] = ['A', 'B', 'control']
-  const VARIANT_LABEL: Record<Variant, string> = { A: 'A', B: 'B', control: '控制組' }
+  const VARIANT_LABEL: Record<Variant, string> = { A: 'A', B: 'B', control: L('控制組', 'Control') }
   const abData = useMemo(() => {
     if (!expId) return null
     const groups: Record<Variant, string[]> = { A: [], B: [], control: [] }
@@ -170,22 +172,22 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
   if (trends.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: '#9A9490', fontSize: 13 }}>
-        此粉專在所選區間內沒有廣告素材資料。<br />請選擇有投放廣告的日期區間，並按「同步廣告資料」。
+        {L('此粉專在所選區間內沒有廣告素材資料。', 'No ad creative data for this page in the selected range.')}<br />{L('請選擇有投放廣告的日期區間，並按「同步廣告資料」。', 'Pick a date range with ad delivery and click "Sync ad data".')}
       </div>
     )
   }
 
   const ROWS: { key: MetricKey | 'conversions' | 'revenue' | 'roasReal'; label: string; kind: MetricDef['kind']; reserved?: boolean; naDash?: boolean; note?: string }[] = [
     { key: 'ctr', label: 'CTR', kind: 'percent' },
-    { key: 'roas', label: '點擊效益', kind: 'ratio' },
-    { key: 'roasReal', label: 'ROAS', kind: 'ratio', reserved: true, naDash: true, note: '需購買追蹤' },
-    { key: 'clicks', label: '點擊數', kind: 'int' },
-    { key: 'impressions', label: '曝光', kind: 'int' },
-    { key: 'reach', label: '觸及', kind: 'int' },
+    { key: 'roas', label: L('點擊效益', 'Click value'), kind: 'ratio' },
+    { key: 'roasReal', label: 'ROAS', kind: 'ratio', reserved: true, naDash: true, note: L('需購買追蹤', 'needs purchase tracking') },
+    { key: 'clicks', label: L('點擊數', 'Clicks'), kind: 'int' },
+    { key: 'impressions', label: L('曝光', 'Impressions'), kind: 'int' },
+    { key: 'reach', label: L('觸及', 'Reach'), kind: 'int' },
     { key: 'cpc', label: 'CPC', kind: 'currency' },
     { key: 'cpm', label: 'CPM', kind: 'currency' },
-    { key: 'spend', label: '花費', kind: 'currency' },
-    { key: 'conversions', label: '轉換', kind: 'int', reserved: true },
+    { key: 'spend', label: L('花費', 'Spend'), kind: 'currency' },
+    { key: 'conversions', label: L('轉換', 'Conversions'), kind: 'int', reserved: true },
     { key: 'revenue', label: 'Revenue', kind: 'currency', reserved: true },
   ]
 
@@ -193,23 +195,23 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
     <div className="ads-trends">
       {/* Header: title + metric selector */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>素材成效趨勢</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>{L('素材成效趨勢', 'Creative Performance Trend')}</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           {labeledExperiments.length > 0 && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#5C5750' }}>
-              A/B 實驗
+              {L('A/B 實驗', 'A/B test')}
               <select value={expId} onChange={e => setExpId(e.target.value)}
                 style={{ padding: '6px 10px', fontSize: 13, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, background: 'white', cursor: 'pointer', maxWidth: 200 }}>
-                <option value="">— 不比較 —</option>
+                <option value="">{L('— 不比較 —', '— No comparison —')}</option>
                 {labeledExperiments.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
               </select>
             </label>
           )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#5C5750' }}>
-            指標
+            {L('指標', 'Metric')}
             <select value={metric} onChange={e => setMetric(e.target.value as MetricKey)}
               style={{ padding: '6px 10px', fontSize: 13, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, background: 'white', cursor: 'pointer' }}>
-              {METRIC_ORDER.map(k => <option key={k} value={k}>{METRICS[k].label}</option>)}
+              {METRIC_ORDER.map(k => <option key={k} value={k}>{L(METRICS[k].label, METRICS[k].en)}</option>)}
             </select>
           </label>
         </div>
@@ -220,29 +222,29 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
         <div style={{ marginBottom: 20, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12, padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#2A2722' }}>
-              A/B 實驗比較：{selectedExp.name}
+              {L('A/B 實驗比較：', 'A/B comparison: ')}{selectedExp.name}
               {selectedExp.winner && selectedExp.winner !== 'pending' && (
-                <span style={{ marginLeft: 10, fontSize: 11.5, color: '#2E9E6B', background: '#E7F5EE', padding: '2px 8px', borderRadius: 999 }}>勝出：{selectedExp.winner}</span>
+                <span style={{ marginLeft: 10, fontSize: 11.5, color: '#2E9E6B', background: '#E7F5EE', padding: '2px 8px', borderRadius: 999 }}>{L('勝出：', 'Winner: ')}{selectedExp.winner}</span>
               )}
             </div>
             <button onClick={() => setSelected(new Set(abData.flatMap(g => g.adIds)))}
               style={{ background: 'none', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 8, padding: '5px 10px', fontSize: 12, color: '#3B6FD4', cursor: 'pointer' }}>
-              在圖表中比較這些素材
+              {L('在圖表中比較這些素材', 'Compare these creatives in the chart')}
             </button>
           </div>
           {abData.length === 0
-            ? <div style={{ color: '#9A9490', fontSize: 12.5 }}>此實驗在所選區間內沒有素材資料。</div>
+            ? <div style={{ color: '#9A9490', fontSize: 12.5 }}>{L('此實驗在所選區間內沒有素材資料。', 'This experiment has no creative data in the selected range.')}</div>
             : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #E2DED8', color: '#9A9490', fontSize: 11.5 }}>
                     <th style={{ textAlign: 'left', padding: '8px 12px' }}>Variant</th>
-                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>素材數</th>
-                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>花費</th>
-                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>點擊</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>{L('素材數', 'Creatives')}</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>{L('花費', 'Spend')}</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>{L('點擊', 'Clicks')}</th>
                     <th style={{ textAlign: 'right', padding: '8px 12px' }}>CTR</th>
                     <th style={{ textAlign: 'right', padding: '8px 12px' }}>CPC</th>
-                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>點擊效益</th>
+                    <th style={{ textAlign: 'right', padding: '8px 12px' }}>{L('點擊效益', 'Click value')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -269,21 +271,21 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
       {/* Chart + legend */}
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 480px', minWidth: 320, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12, padding: 16 }}>
-          <div style={{ fontSize: 12.5, color: '#9A9490', marginBottom: 8 }}>{def.label}（每日，依所選素材）</div>
+          <div style={{ fontSize: 12.5, color: '#9A9490', marginBottom: 8 }}>{L(def.label, def.en)}{L('（每日，依所選素材）', ' (daily, by selected creatives)')}</div>
           {selectedTrends.length === 0
-            ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9A9490', fontSize: 12 }}>請從右側勾選至少一個素材</div>
+            ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9A9490', fontSize: 12 }}>{L('請從右側勾選至少一個素材', 'Select at least one creative on the right')}</div>
             : <SvgChart data={chartData} lines={lines} height={220} yFmt={v => fmtVal(v, def.kind)} />}
         </div>
 
         {/* Creative legend with thumbnails — scrollable so many creatives stay usable */}
         <div style={{ flex: '0 0 250px', minWidth: 230, border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12, overflow: 'hidden', background: 'white' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid #F0EDE8', fontSize: 11.5 }}>
-            <span style={{ color: '#5C5750' }}>素材（{selected.size}/{trends.length}）</span>
+            <span style={{ color: '#5C5750' }}>{L('素材', 'Creatives')}（{selected.size}/{trends.length}）</span>
             <span style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setSelected(new Set(trends.map(t => t.adId)))}
-                style={{ background: 'none', border: 'none', color: '#3B6FD4', cursor: 'pointer', fontSize: 11.5 }}>全選</button>
+                style={{ background: 'none', border: 'none', color: '#3B6FD4', cursor: 'pointer', fontSize: 11.5 }}>{L('全選', 'Select all')}</button>
               <button onClick={() => setSelected(new Set())}
-                style={{ background: 'none', border: 'none', color: '#9A9490', cursor: 'pointer', fontSize: 11.5 }}>清除</button>
+                style={{ background: 'none', border: 'none', color: '#9A9490', cursor: 'pointer', fontSize: 11.5 }}>{L('清除', 'Clear')}</button>
             </span>
           </div>
           <div style={{ maxHeight: 300, overflowY: 'auto' }}>
@@ -311,7 +313,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #E2DED8' }}>
-              <th style={{ textAlign: 'left', padding: '12px 16px', color: '#5C5750', fontWeight: 600 }}>每週指標</th>
+              <th style={{ textAlign: 'left', padding: '12px 16px', color: '#5C5750', fontWeight: 600 }}>{L('每週指標', 'Weekly metrics')}</th>
               {weeks.map(w => (
                 <th key={w.label} style={{ textAlign: 'center', padding: '12px 16px', color: '#2A2722', fontWeight: 700 }}>
                   {w.label}<div style={{ fontSize: 10, color: '#9A9490', fontWeight: 400 }}>{w.start.slice(5)}~{w.end.slice(5)}</div>
@@ -323,7 +325,7 @@ export function CreativeTrendsSection({ trends, dateFrom, dateTo, conversionType
             {ROWS.map((r, ri) => (
               <tr key={r.key} style={{ borderBottom: ri < ROWS.length - 1 ? '1px solid #F0EDE8' : 'none', background: ri % 2 ? '#FAF8F5' : 'white' }}>
                 <td style={{ padding: '10px 16px', color: r.reserved ? '#B8B2AA' : '#5C5750' }}>
-                  {r.label}{r.reserved && <span style={{ fontSize: 10, marginLeft: 4 }}>({r.note ?? '待接 GA'})</span>}
+                  {r.label}{r.reserved && <span style={{ fontSize: 10, marginLeft: 4 }}>({r.note ?? L('待接 GA', 'pending GA')})</span>}
                 </td>
                 {weeks.map((w, wi) => (
                   <td key={w.label} style={{ padding: '10px 16px', textAlign: 'center', fontFamily: 'var(--font-dm-mono)', color: r.reserved ? '#B8B2AA' : '#2A2722' }}>

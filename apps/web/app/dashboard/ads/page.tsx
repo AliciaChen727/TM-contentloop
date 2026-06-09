@@ -20,23 +20,33 @@ import { BestTimeSection } from '@/components/ads/sections/BestTimeSection'
 import { BudgetSection } from '@/components/ads/sections/BudgetSection'
 import { InsightsSection } from '@/components/ads/sections/InsightsSection'
 import type { NavId, Post, AdData, LabelEntry, Experiment, DiagItem, AiDiagCard } from '@/components/ads/types'
+import { useLang, type Lang } from '@/lib/i18n/LanguageProvider'
+import { DateField } from '@/components/ui/DateField'
 
-const NAV: { id: NavId; label: string; icon: string; badge?: string }[] = [
-  { id: 'overview', label: '總覽', icon: 'chart' },
-  { id: 'insights', label: '洞察報告', icon: 'chart' },
-  { id: 'diagnosis', label: '診斷建議', icon: 'alert' },
-  { id: 'creative', label: '素材績效排行', icon: 'creative' },
-  { id: 'brand', label: '品牌素材庫', icon: 'creative' },
-  { id: 'trends', label: '成效趨勢', icon: 'chart' },
-  { id: 'audience', label: '受眾分析', icon: 'chart' },
-  { id: 'posts', label: '內容表現', icon: 'calendar' },
-  { id: 'time', label: '最佳時段', icon: 'clock' },
-  { id: 'budget', label: '預算模擬', icon: 'budget' },
+const NAV: { id: NavId; icon: string; badge?: string }[] = [
+  { id: 'overview', icon: 'chart' },
+  { id: 'insights', icon: 'chart' },
+  { id: 'diagnosis', icon: 'alert' },
+  { id: 'creative', icon: 'creative' },
+  { id: 'brand', icon: 'creative' },
+  { id: 'trends', icon: 'chart' },
+  { id: 'audience', icon: 'chart' },
+  { id: 'posts', icon: 'calendar' },
+  { id: 'time', icon: 'clock' },
+  { id: 'budget', icon: 'budget' },
 ]
 
-const NAV_LABELS: Record<NavId, string> = {
-  overview: '總覽', insights: '洞察報告', diagnosis: '診斷建議', creative: '素材績效排行', brand: '品牌素材庫', trends: '成效趨勢',
-  audience: '受眾分析', posts: '內容表現', time: '最佳時段', budget: '預算模擬',
+const NAV_LABELS: Record<NavId, { zh: string; en: string }> = {
+  overview: { zh: '總覽', en: 'Overview' },
+  insights: { zh: '洞察報告', en: 'Insights' },
+  diagnosis: { zh: '診斷建議', en: 'Diagnosis' },
+  creative: { zh: '素材績效排行', en: 'Creative Ranking' },
+  brand: { zh: '品牌素材庫', en: 'Brand Assets' },
+  trends: { zh: '成效趨勢', en: 'Trends' },
+  audience: { zh: '受眾分析', en: 'Audience' },
+  posts: { zh: '內容表現', en: 'Content' },
+  time: { zh: '最佳時段', en: 'Best Time' },
+  budget: { zh: '預算模擬', en: 'Budget' },
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +58,7 @@ function mapFbPost(p: any, adPostIds: Set<string>, adPostMetrics?: Record<string
     id: p.id,
     date: p.createdTime?.slice(0, 10) ?? '',
     platform: 'FB',
-    title: p.message || '（無文字內容）',
+    title: p.message || '(no text)',
     reach: (p.insights?.reach ?? 0) > 0 ? p.insights.reach : null,
     likes: p.insights?.reactions ?? 0,
     comments: p.insights?.comments ?? 0,
@@ -76,7 +86,7 @@ function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<strin
     id: p.id,
     date: p.timestamp?.slice(0, 10) ?? '',
     platform: 'IG',
-    title: p.caption || '（無文字內容）',
+    title: p.caption || '(no text)',
     reach: p.insights?.reach ?? 0,
     likes: p.insights?.likes ?? 0,
     comments: p.insights?.comments ?? 0,
@@ -95,7 +105,7 @@ function mapIgPost(p: any, igPostIds?: Set<string>, igPostMetrics?: Record<strin
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildAdData(raw: any): AdData {
+function buildAdData(raw: any, lang: Lang = 'zh-TW'): AdData {
   const s = raw.summary ?? {}
   const from = raw.dateRange?.from ?? ''
   const to = raw.dateRange?.to ?? ''
@@ -108,7 +118,7 @@ function buildAdData(raw: any): AdData {
   // comparing real spend against a fake mock budget (which was misleading).
   const realBudget = typeof s.budget === 'number' ? s.budget : 0
   const realCreatives = creatives.length > 0
-  const diagnosis = buildDiagnosis(s as Record<string, number>, realCreatives ? creatives : [], realBudget)
+  const diagnosis = buildDiagnosis(s as Record<string, number>, realCreatives ? creatives : [], realBudget, lang === 'en')
 
   // Real adsets from per-creative data
   const realAdsets = realCreatives
@@ -125,7 +135,9 @@ function buildAdData(raw: any): AdData {
     : []
 
   // Real weekly ROAS from daily data
-  const DAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
+  const DAY_NAMES = lang === 'en'
+    ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    : ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dayMap: Record<number, { sum: number; count: number }> = {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -197,20 +209,22 @@ function buildAdData(raw: any): AdData {
   }
 }
 
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(isoString: string, lang: Lang = 'zh-TW'): string {
+  const en = lang === 'en'
   const diff = Date.now() - new Date(isoString).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return '剛剛'
-  if (mins < 60) return `${mins} 分鐘前`
+  if (mins < 1) return en ? 'just now' : '剛剛'
+  if (mins < 60) return en ? `${mins} min ago` : `${mins} 分鐘前`
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs} 小時前`
-  return `${Math.floor(hrs / 24)} 天前`
+  if (hrs < 24) return en ? `${hrs} hr ago` : `${hrs} 小時前`
+  return en ? `${Math.floor(hrs / 24)} d ago` : `${Math.floor(hrs / 24)} 天前`
 }
 
 const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000
 
 export default function AdsPage() {
   const router = useRouter()
+  const { L, lang } = useLang()
   const [authed, setAuthed] = useState(false)
   const [active, setActive] = useState<NavId>('overview')
   // Deep link: ?section=diagnosis opens that nav section directly (from the alert
@@ -278,7 +292,7 @@ export default function AdsPage() {
   // Agent fetch effect and the render share one stable array.
   const diagnosisItems = useMemo<DiagItem[]>(() => {
     const filteredPosts = (realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo)
-    const contentDiag = buildContentDiagnosis(filteredPosts, { cpm: adData.overview.summary.cpm })
+    const contentDiag = buildContentDiagnosis(filteredPosts, { cpm: adData.overview.summary.cpm }, lang === 'en')
     const adDiag = contentDiag.length > 0 ? adData.diagnosis.filter(d => d.id !== 'd0') : adData.diagnosis
     return [...adDiag, ...contentDiag]
   }, [adData, realPosts, dateFrom, dateTo])
@@ -301,7 +315,7 @@ export default function AdsPage() {
         const res = await fetch('/api/ai/diagnosis', {
           method: 'POST',
           headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pageId: selectedPageId, items: diagnosisItems, summary: adData.overview.summary }),
+          body: JSON.stringify({ pageId: selectedPageId, items: diagnosisItems, summary: adData.overview.summary, language: lang }),
         })
         const json = await res.json()
         if (!cancelled && Array.isArray(json.cards)) setAiDiagCards(json.cards)
@@ -337,7 +351,7 @@ export default function AdsPage() {
     if (!res.ok) return { adPostIds: new Set(), adPostMetrics: {}, igPostIds: new Set(), igPostMetrics: {} }
     const json = await res.json()
     if (json.data) {
-      setAdData(buildAdData(json.data))
+      setAdData(buildAdData(json.data, lang))
       setLastSync(json.data.syncedAt ?? null)
       return {
         adPostIds: new Set<string>(json.data.adPostIds ?? []),
@@ -416,7 +430,7 @@ export default function AdsPage() {
         const initialIgPostIds = new Set<string>(adJson?.data?.igPostIds ?? [])
         const initialIgPostMetrics: Record<string, { spend: number; roas: number; cpa: number; ctr: number; reach?: number }> = adJson?.data?.igPostMetrics ?? {}
         if (adJson?.data) {
-          setAdData(buildAdData(adJson.data))
+          setAdData(buildAdData(adJson.data, lang))
           setLastSync(adJson.data.syncedAt ?? null)
         }
 
@@ -482,7 +496,7 @@ export default function AdsPage() {
       })
       const json = await res.json()
       if (json._debug) console.log('[ads sync debug]', json._debug)
-      if (!res.ok) { setSyncError(json.error ?? '同步失敗'); return }
+      if (!res.ok) { setSyncError(json.error ?? L('同步失敗', 'Sync failed')); return }
       // Await IG sync so errors are surfaced to the user
       if (selectedPageId) {
         try {
@@ -499,9 +513,9 @@ export default function AdsPage() {
             }),
           ])
           const igJson = await igSyncRes.json()
-          if (!igSyncRes.ok) console.warn('[ig sync]', igJson.error ?? '未知錯誤')
+          if (!igSyncRes.ok) console.warn('[ig sync]', igJson.error ?? 'unknown error')
           const fbSyncJson = await fbSyncRes.json()
-          if (!fbSyncRes.ok) console.warn('[fb sync]', fbSyncJson.error ?? '未知錯誤')
+          if (!fbSyncRes.ok) console.warn('[fb sync]', fbSyncJson.error ?? 'unknown error')
         } catch { /* ignore */ }
       }
       const { adPostIds: newIds, adPostMetrics: newMetrics, igPostIds: newIgIds, igPostMetrics: newIgMetrics } = await fetchAdData(idToken, selectedPageId)
@@ -551,7 +565,7 @@ export default function AdsPage() {
         setRealPosts([...fbPosts2, ...igPosts2].sort((a, b) => b.date.localeCompare(a.date)))
       }
     } catch (e) {
-      setSyncError(e instanceof Error ? e.message : '同步失敗')
+      setSyncError(e instanceof Error ? e.message : L('同步失敗', 'Sync failed'))
     } finally {
       setSyncing(false)
     }
@@ -610,7 +624,7 @@ export default function AdsPage() {
     const igPostIdsSwitch = new Set<string>(adJson?.data?.igPostIds ?? [])
     const igPostMetricsSwitch: Record<string, { spend: number; roas: number; cpa: number; ctr: number }> = adJson?.data?.igPostMetrics ?? {}
     if (adJson?.data) {
-      setAdData(buildAdData(adJson.data))
+      setAdData(buildAdData(adJson.data, lang))
       setLastSync(adJson.data.syncedAt ?? null)
     } else {
       setAdData(MOCK_DATA)
@@ -700,39 +714,39 @@ export default function AdsPage() {
     const row = (...cols: (string | number | undefined)[]) =>
       lines.push(cols.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
 
-    row('整體指標', '')
-    row('指標', '數值')
-    row('日期範圍', `${dateFrom} ~ ${dateTo}`)
-    row('總花費', s.spend ?? 0)
-    row('CPL (點擊成本)', s.cpa ?? 0)
+    row(L('整體指標', 'Overall metrics'), '')
+    row(L('指標', 'Metric'), L('數值', 'Value'))
+    row(L('日期範圍', 'Date range'), `${dateFrom} ~ ${dateTo}`)
+    row(L('總花費', 'Total spend'), s.spend ?? 0)
+    row(L('CPL (點擊成本)', 'CPL (cost per link click)'), s.cpa ?? 0)
     row('CTR (%)', s.ctr ?? 0)
     row('CPA', s.cpa ?? 0)
-    row('總觸及', s.reach ?? 0)
-    row('頻率', s.frequency ?? 0)
+    row(L('總觸及', 'Total reach'), s.reach ?? 0)
+    row(L('頻率', 'Frequency'), s.frequency ?? 0)
     lines.push('')
 
-    row('素材績效', '', '', '', '', '')
-    row('名稱', '花費', '點擊效益', 'CTR(%)', 'CPL', '狀態')
+    row(L('素材績效', 'Creative performance'), '', '', '', '', '')
+    row(L('名稱', 'Name'), L('花費', 'Spend'), L('點擊效益', 'Click value'), 'CTR(%)', 'CPL', L('狀態', 'Status'))
     adData.creatives.forEach(c => row(c.name, c.spend, c.roas, c.ctr, c.cpa, c.status))
     lines.push('')
 
-    row('每日花費', '', '', '')
-    row('日期', '花費', '點擊數', '點擊效益')
+    row(L('每日花費', 'Daily spend'), '', '', '')
+    row(L('日期', 'Date'), L('花費', 'Spend'), L('點擊數', 'Clicks'), L('點擊效益', 'Click value'))
     adData.overview.dailySpend?.forEach(d => row(d.date, d.spend, d.revenue, d.roas))
     lines.push('')
 
-    row('診斷項目', '', '', '')
-    row('嚴重度', '標題', '描述', '建議行動')
+    row(L('診斷項目', 'Diagnosis items'), '', '', '')
+    row(L('嚴重度', 'Severity'), L('標題', 'Title'), L('描述', 'Description'), L('建議行動', 'Recommended action'))
     adData.diagnosis.forEach(d => row(d.severity, d.title, d.desc, d.action))
     lines.push('')
 
-    row('內容表現', '', '', '', '', '', '', '', '', '', '', '', '')
-    row('日期', '平台', '類型', '標題', '觸及', '自然觸及', '付費觸及', '按讚', '留言', '收藏', '分享', '播放', '互動率(%)', '有廣告', '廣告花費', '廣告CPL', '廣告CTR(%)')
+    row(L('內容表現', 'Content performance'), '', '', '', '', '', '', '', '', '', '', '', '')
+    row(L('日期', 'Date'), L('平台', 'Platform'), L('類型', 'Type'), L('標題', 'Title'), L('觸及', 'Reach'), L('自然觸及', 'Organic reach'), L('付費觸及', 'Paid reach'), L('按讚', 'Likes'), L('留言', 'Comments'), L('收藏', 'Saves'), L('分享', 'Shares'), L('播放', 'Plays'), L('互動率(%)', 'Engagement(%)'), L('有廣告', 'Has ad'), L('廣告花費', 'Ad spend'), L('廣告CPL', 'Ad CPL'), L('廣告CTR(%)', 'Ad CTR(%)'))
     ;(realPosts ?? []).filter(p => p.date >= dateFrom && p.date <= dateTo).forEach(p => {
       const er = (p.reach && p.reach > 0)
         ? ((p.likes + p.comments + p.shares) / p.reach * 100).toFixed(2)
         : ''
-      row(p.date, p.platform, p.type, p.title, p.reach ?? '', p.organicReach ?? '', p.paidReach ?? '', p.likes, p.comments, p.saves ?? '', p.shares, p.plays ?? '', er, p.hasAd ? '是' : '否', p.adSpend ?? '', p.adRoas ?? '', p.adCpa ?? '', p.adCtr ?? '')
+      row(p.date, p.platform, p.type, p.title, p.reach ?? '', p.organicReach ?? '', p.paidReach ?? '', p.likes, p.comments, p.saves ?? '', p.shares, p.plays ?? '', er, p.hasAd ? L('是', 'Yes') : L('否', 'No'), p.adSpend ?? '', p.adRoas ?? '', p.adCpa ?? '', p.adCtr ?? '')
     })
 
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
@@ -748,7 +762,7 @@ export default function AdsPage() {
   if (!authed) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-400">載入中⋯⋯</p>
+        <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
       </main>
     )
   }
@@ -768,12 +782,12 @@ export default function AdsPage() {
                 {selectedPageName || 'ContentLoop'}
                 <span style={{ fontSize: 10, color: 'var(--ad-text3)' }}>▾</span>
               </div>
-              <div className="sub">廣告儀表板</div>
+              <div className="sub">{L('廣告儀表板', 'Ad Dashboard')}</div>
             </button>
           ) : (
             <>
               <div className="brand" style={{ fontSize: 13 }}>{selectedPageName || 'ContentLoop'}</div>
-              <div className="sub">廣告儀表板</div>
+              <div className="sub">{L('廣告儀表板', 'Ad Dashboard')}</div>
             </>
           )}
           {showPageMenu && (
@@ -796,15 +810,15 @@ export default function AdsPage() {
           )}
         </div>
         <div style={{ flex: 1, overflow: 'auto', paddingTop: 8 }}>
-          <div className="ads-nav-section">主要功能</div>
+          <div className="ads-nav-section">{L('主要功能', 'Main')}</div>
           {NAV.map(item => (
             <div key={item.id} className={`ads-nav-item ${active === item.id ? 'active' : ''}`} onClick={() => setActive(item.id)}>
               <Icon name={item.icon} size={15} color={active === item.id ? 'var(--ad-blue)' : 'var(--ad-text3)'} />
-              {item.label}
+              {NAV_LABELS[item.id][lang === 'en' ? 'en' : 'zh']}
               {item.badge && <span className="ads-nav-badge">{item.badge}</span>}
             </div>
           ))}
-          <div className="ads-nav-section" style={{ marginTop: 8 }}>頻道</div>
+          <div className="ads-nav-section" style={{ marginTop: 8 }}>{L('頻道', 'Channels')}</div>
           {[['Meta', '#888'], ['Facebook', '#1877F2'], ['Instagram', '#E1306C']].map(([l, c]) => (
             <div key={l} className="ads-nav-item" style={{ paddingLeft: 14, cursor: 'default' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: c, width: 16, display: 'inline-block' }}>{l[0]}</span>
@@ -813,26 +827,26 @@ export default function AdsPage() {
           ))}
           {canSidekick && (
             <>
-              <div className="ads-nav-section" style={{ marginTop: 8 }}>AI 助手</div>
+              <div className="ads-nav-section" style={{ marginTop: 8 }}>{L('AI 助手', 'AI Assistant')}</div>
               <div className="ads-nav-sk-btn" onClick={() => openSidekick()}>
                 <span style={{ fontSize: 18 }}>✨</span>
                 <div>
                   <div className="sk-label">AI Sidekick</div>
-                  <div className="sk-sub">問我任何廣告問題</div>
+                  <div className="sk-sub">{L('問我任何廣告問題', 'Ask me anything about ads')}</div>
                 </div>
               </div>
             </>
           )}
-          <div className="ads-nav-section" style={{ marginTop: 8 }}>導覽</div>
+          <div className="ads-nav-section" style={{ marginTop: 8 }}>{L('導覽', 'Navigation')}</div>
           <div className="ads-nav-item" onClick={() => router.push('/dashboard')}>
             <Icon name="ads" size={15} color="var(--ad-text3)" />
-            ← 回內容儀表板
+            {L('← 回內容儀表板', '← Back to content')}
           </div>
         </div>
         <div className="ads-nav-footer">
-          <div>最後更新</div>
+          <div>{L('最後更新', 'Last updated')}</div>
           <div style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 11 }}>
-            {lastSync ? formatRelativeTime(lastSync) : '— 尚未同步'}
+            {lastSync ? formatRelativeTime(lastSync, lang) : L('— 尚未同步', '— not synced')}
           </div>
         </div>
       </nav>
@@ -840,7 +854,7 @@ export default function AdsPage() {
       {/* Main area */}
       <div className={`ads-main ${skOpen ? 'sk-open' : ''}`}>
         <header className="ads-topbar">
-          <span className="ads-topbar-title">{NAV_LABELS[active]}</span>
+          <span className="ads-topbar-title">{NAV_LABELS[active][lang === 'en' ? 'en' : 'zh']}</span>
           <div className="ads-channel-badge">
             <Icon name="meta" size={13} color="var(--ad-blue)" />Meta Ads
           </div>
@@ -852,16 +866,16 @@ export default function AdsPage() {
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowDatePicker(false)} />
                 <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, background: 'white', border: '1px solid var(--ad-border)', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, padding: '14px 16px', minWidth: 260 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-text2)', marginBottom: 10 }}>自訂日期範圍</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-text2)', marginBottom: 10 }}>{L('自訂日期範圍', 'Custom date range')}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                    <input type="date" value={dateFrom} max={dateTo} onChange={e => setDateFrom(e.target.value)}
-                      style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)', outline: 'none' }} />
-                    <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>至</span>
-                    <input type="date" value={dateTo} min={dateFrom} max={new Date().toISOString().slice(0, 10)} onChange={e => setDateTo(e.target.value)}
-                      style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)', outline: 'none' }} />
+                    <DateField value={dateFrom} max={dateTo} onChange={setDateFrom}
+                      style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)' }} />
+                    <span style={{ fontSize: 12, color: 'var(--ad-text3)' }}>{L('至', 'to')}</span>
+                    <DateField value={dateTo} min={dateFrom} max={new Date().toISOString().slice(0, 10)} onChange={setDateTo}
+                      style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: '1px solid var(--ad-border)', borderRadius: 6, fontFamily: 'var(--font-dm-mono)' }} />
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                    {([['近 7 天', 7], ['近 14 天', 14], ['近 30 天', 30]] as [string, number][]).map(([label, days]) => (
+                    {([[L('近 7 天', 'Last 7d'), 7], [L('近 14 天', 'Last 14d'), 14], [L('近 30 天', 'Last 30d'), 30]] as [string, number][]).map(([label, days]) => (
                       <button key={label} style={{ flex: 1, padding: '5px 0', fontSize: 11.5, border: '1px solid var(--ad-border)', borderRadius: 6, background: 'var(--ad-surface)', cursor: 'pointer', color: 'var(--ad-text2)' }}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -878,7 +892,7 @@ export default function AdsPage() {
                   </div>
                   <button className="ads-btn primary" style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
                     onClick={(e) => { e.stopPropagation(); setShowDatePicker(false); handleSync() }}>
-                    套用並同步資料
+                    {L('套用並同步資料', 'Apply & sync')}
                   </button>
                 </div>
               </>
@@ -890,18 +904,18 @@ export default function AdsPage() {
             </button>
           )}
           {canSync && <button className="ads-btn" onClick={() => handleSync()} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
-            {syncing ? '同步中⋯' : syncError ? `⚠ ${syncError}` : '↻ 同步廣告資料'}
+            {syncing ? L('同步中⋯', 'Syncing…') : syncError ? `⚠ ${syncError}` : L('↻ 同步廣告資料', '↻ Sync ad data')}
           </button>}
           <div style={{ position: 'relative' }}>
             <button className="ads-btn primary" onClick={() => setShowExportMenu(p => !p)}>
-              <Icon name="download" size={13} color="white" />匯出報告 ▾
+              <Icon name="download" size={13} color="white" />{L('匯出報告 ▾', 'Export ▾')}
             </button>
             {showExportMenu && (
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowExportMenu(false)} />
                 <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', border: '1px solid var(--ad-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 148, overflow: 'hidden' }}>
-                  <button style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }} onClick={exportJSON}>📦 匯出 JSON</button>
-                  <button style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }} onClick={exportCSV}>📊 匯出 CSV</button>
+                  <button style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }} onClick={exportJSON}>📦 {L('匯出 JSON', 'Export JSON')}</button>
+                  <button style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }} onClick={exportCSV}>📊 {L('匯出 CSV', 'Export CSV')}</button>
                 </div>
               </>
             )}
@@ -911,7 +925,7 @@ export default function AdsPage() {
         <main className="ads-content">
           {!dataLoaded ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-              <p style={{ fontSize: 14, color: 'var(--ad-text3)' }}>載入中⋯⋯</p>
+              <p style={{ fontSize: 14, color: 'var(--ad-text3)' }}>{L('載入中⋯⋯', 'Loading…')}</p>
             </div>
           ) : (
             <>

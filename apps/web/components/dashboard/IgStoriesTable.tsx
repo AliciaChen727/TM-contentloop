@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 export interface IgStory {
   id: string
@@ -53,19 +54,22 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: {
   )
 }
 
-function buildStoryPrompt(s: IgStory): string {
+function buildStoryPrompt(s: IgStory, en: boolean): string {
   const rate = skipRate(s)
+  if (en) return `Please analyze this Instagram Story:\nDate: ${s.timestamp.slice(0, 10)} | Type: Story ${s.mediaSubType === 'VIDEO' ? 'video' : 'image'}\nContent: ${s.caption || '(no text)'}\nViews: ${s.insights.views} | Reach: ${s.insights.reach} | Replies: ${s.insights.replies} | Skip rate: ${rate != null ? (rate * 100).toFixed(1) + '%' : 'no data'}\n\nPlease assess this Story's appeal and retention, and give specific optimization suggestions.`
   return `請分析這則 Instagram 限動：\n日期：${s.timestamp.slice(0, 10)}｜類型：限動${s.mediaSubType === 'VIDEO' ? '影片' : '圖片'}\n內容：${s.caption || '（無文字內容）'}\n觀看：${s.insights.views}｜觸及：${s.insights.reach}｜回覆：${s.insights.replies}｜略過率：${rate != null ? (rate * 100).toFixed(1) + '%' : '無資料'}\n\n請判斷這則限動的吸引力與留存表現，並給出具體優化建議。`
 }
 
 export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [sortKey, setSortKey] = useState<SortKey>('timestamp')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   if (!stories.length) {
     return (
       <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>
-        尚無限動資料。IG 限動需在發布後 24 小時內、限動還在線時按同步收集。（FB 粉專限動目前 Meta API 無法讀取手動發布的限動，請改用「上傳圖片」分析。）
+        {L('尚無限動資料。IG 限動需在發布後 24 小時內、限動還在線時按同步收集。（FB 粉專限動目前 Meta API 無法讀取手動發布的限動，請改用「上傳圖片」分析。）', 'No Story data yet. IG Stories must be synced within 24 hours of posting while they are still live. (Meta API currently cannot read manually-posted FB Page Stories — use "Upload image" to analyze instead.)')}
       </p>
     )
   }
@@ -95,14 +99,14 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
       <table className="ads-posts-table">
         <thead>
           <tr>
-            <SortTh k="timestamp" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <th style={{ textAlign: 'left' }}>內容</th>
-            <th style={{ textAlign: 'left' }}>類型</th>
-            <th style={{ textAlign: 'left' }}>限動</th>
-            <SortTh k="views" label="觀看" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="reach" label="觸及" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="replies" label="回覆" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="skipRate" label="略過率" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="timestamp" label={L('日期', 'Date')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'left' }}>{L('內容', 'Content')}</th>
+            <th style={{ textAlign: 'left' }}>{L('類型', 'Type')}</th>
+            <th style={{ textAlign: 'left' }}>{L('限動', 'Story')}</th>
+            <SortTh k="views" label={L('觀看', 'Views')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="reach" label={L('觸及', 'Reach')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="replies" label={L('回覆', 'Replies')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="skipRate" label={L('略過率', 'Skip rate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             {onAskAI && <th style={{ width: 60 }} />}
           </tr>
         </thead>
@@ -121,19 +125,19 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
                       s.permalink ? (
                         <a href={s.permalink} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={s.thumbnailUrl} alt="限動截圖" width={36} height={48}
+                          <img src={s.thumbnailUrl} alt={L('限動截圖', 'Story screenshot')} width={36} height={48}
                             style={{ borderRadius: 6, objectFit: 'cover', background: '#f3f4f6', border: '1px solid var(--ad-border)' }}
                             onError={e => { e.currentTarget.style.display = 'none' }} />
                         </a>
                       ) : (
                         /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={s.thumbnailUrl} alt="限動截圖" width={36} height={48}
+                        <img src={s.thumbnailUrl} alt={L('限動截圖', 'Story screenshot')} width={36} height={48}
                           style={{ borderRadius: 6, objectFit: 'cover', flexShrink: 0, background: '#f3f4f6', border: '1px solid var(--ad-border)' }}
                           onError={e => { e.currentTarget.style.display = 'none' }} />
                       )
                     ) : null}
-                    <div style={{ fontSize: 13, color: 'var(--ad-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.caption || '（影音內容，文字在畫面中）'}>
-                      {s.caption ? s.caption : <span style={{ color: 'var(--ad-text3)' }}>{s.thumbnailUrl ? '（影音內容）' : '（無文字內容）'}</span>}
+                    <div style={{ fontSize: 13, color: 'var(--ad-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.caption || L('（影音內容，文字在畫面中）', '(media content; text is in the image)')}>
+                      {s.caption ? s.caption : <span style={{ color: 'var(--ad-text3)' }}>{s.thumbnailUrl ? L('（影音內容）', '(media content)') : L('（無文字內容）', '(no text)')}</span>}
                     </div>
                   </div>
                 </td>
@@ -143,7 +147,7 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
                       {s.platform === 'FB' ? 'FB' : 'IG'}
                     </span>
                     <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#F3E5F5', color: '#6A1B9A' }}>
-                      {isVideo ? '◐ 限動影片' : '◐ 限動圖片'}
+                      {isVideo ? L('◐ 限動影片', '◐ Story video') : L('◐ 限動圖片', '◐ Story image')}
                     </span>
                   </span>
                 </td>
@@ -154,9 +158,9 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-blue)', textDecoration: 'none' }}
-                    >查看限動 ↗</a>
+                    >{L('查看限動 ↗', 'View Story ↗')}</a>
                   ) : (
-                    <span style={{ fontSize: 12.5, color: 'var(--ad-text3)' }}>（已過期）</span>
+                    <span style={{ fontSize: 12.5, color: 'var(--ad-text3)' }}>{L('（已過期）', '(expired)')}</span>
                   )}
                 </td>
                 <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600 }}>
@@ -170,10 +174,10 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
                 {onAskAI && (
                   <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
                     <button
-                      title="用 AI 分析此限動"
-                      onClick={() => onAskAI(buildStoryPrompt(s), true)}
+                      title={L('用 AI 分析此限動', 'Analyze this Story with AI')}
+                      onClick={() => onAskAI(buildStoryPrompt(s, en), true)}
                       style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
-                    >✨ 分析</button>
+                    >✨ {L('分析', 'Analyze')}</button>
                   </td>
                 )}
               </tr>
@@ -182,7 +186,7 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
         </tbody>
       </table>
       <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)' }}>
-        共 {stories.length} 則限動 · 略過率為導航行為近似值，非逐秒完播率
+        {L(`共 ${stories.length} 則限動 · 略過率為導航行為近似值，非逐秒完播率`, `${stories.length} Stories · skip rate is a navigation-behavior approximation, not a per-second completion rate`)}
       </div>
     </div>
   )

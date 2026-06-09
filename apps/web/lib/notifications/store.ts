@@ -33,12 +33,14 @@ export function buildAdAnomalyNotification(
   alerts: AlertItem[],
   dateStr: string,
   cards?: AiDiagCard[] | null,
+  en = false,
 ): NotificationInput {
   const useCards = !!(cards && cards.length > 0)
   const count = useCards ? cards!.length : alerts.length
+  const sep = en ? ': ' : '：'
   const body = useCards
-    ? cards!.map((c) => `${c.emoji} ${c.title}：${c.why[0] ?? ''}`).join('\n')
-    : alerts.map((a) => `${a.emoji} ${a.title}：${a.message}`).join('\n')
+    ? cards!.map((c) => `${c.emoji} ${c.title}${sep}${c.why[0] ?? ''}`).join('\n')
+    : alerts.map((a) => `${a.emoji} ${a.title}${sep}${a.message}`).join('\n')
   const advice = useCards
     ? Array.from(new Set(cards!.map((c) => c.cta.label).filter(Boolean))).join('\n')
     : Array.from(new Set(alerts.map((a) => a.advice).filter(Boolean))).join('\n')
@@ -46,7 +48,7 @@ export function buildAdAnomalyNotification(
     type: 'ad_anomaly',
     pageId,
     pageName,
-    title: `${pageName}：${count} 項成效診斷優化建議`,
+    title: en ? `${pageName}: ${count} performance optimization tip${count === 1 ? '' : 's'}` : `${pageName}：${count} 項成效診斷優化建議`,
     body,
     advice,
     actionPrompt: null,

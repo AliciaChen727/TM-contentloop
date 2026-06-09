@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Icon } from '../Icon'
 import type { AdData, Post, AiDiagCard } from '../types'
 import { diagnosisCardKey, severityRank } from '@/lib/ads/diagnosisCardKey'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 export type CardStatus = 'completed' | 'dismissed'
 
@@ -53,6 +54,7 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
   onCardAction?: (cardKey: string, status: CardStatus | 'open', meta?: { severityRank?: number; output?: string; context?: string; alertType?: string }) => void
   onAskAI?: (q: string) => void
 }) {
+  const { L } = useLang()
   const postList = posts ?? []
   const cardMap = new Map((aiCards ?? []).map(c => [c.refId, c]))
   const statuses = cardStatuses ?? {}
@@ -60,16 +62,16 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
     statuses[diagnosisCardKey(d)] ?? 'open'
   const [tab, setTab] = useState<'open' | 'completed' | 'dismissed'>('open')
   const icons: Record<string, string> = { critical: '🚨', warning: '⚠️', good: '✅' }
-  const labels: Record<string, string> = { critical: '嚴重', warning: '警告', good: '優化機會' }
+  const labels: Record<string, string> = { critical: L('嚴重', 'Critical'), warning: L('警告', 'Warning'), good: L('優化機會', 'Opportunity') }
   const lc: Record<string, [string, string]> = {
     critical: ['var(--ad-red-light)', 'var(--ad-red)'],
     warning: ['var(--ad-orange-light)', 'var(--ad-orange)'],
     good: ['var(--ad-green-light)', 'var(--ad-green)'],
   }
   const askQ: Record<string, string> = {
-    d1: '我的受眾是否疲乏了？', d2: 'CPA 為什麼偏高？',
-    d3: '預算怎麼分配最划算？', d4: '哪支素材表現最好？', d5: '哪個廣告組合應該增加預算？',
-    c1: '這篇貼文要怎麼投廣告加碼推廣？', c2: '為什麼我的貼文互動下滑了？', c3: '我應該多久發一次文？',
+    d1: L('我的受眾是否疲乏了？', 'Is my audience fatiguing?'), d2: L('CPA 為什麼偏高？', 'Why is CPA high?'),
+    d3: L('預算怎麼分配最划算？', "What's the most cost-effective budget split?"), d4: L('哪支素材表現最好？', 'Which creative performs best?'), d5: L('哪個廣告組合應該增加預算？', 'Which ad set should get more budget?'),
+    c1: L('這篇貼文要怎麼投廣告加碼推廣？', 'How should I boost this post with ads?'), c2: L('為什麼我的貼文互動下滑了？', 'Why is my post engagement dropping?'), c3: L('我應該多久發一次文？', 'How often should I post?'),
   }
   const criticalCount = data.diagnosis.filter(d => d.severity === 'critical').length
   const warningCount = data.diagnosis.filter(d => d.severity === 'warning').length
@@ -78,14 +80,15 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
     const criticals = data.diagnosis.filter(d => d.severity === 'critical')
     const warnings = data.diagnosis.filter(d => d.severity === 'warning')
     const goods = data.diagnosis.filter(d => d.severity === 'good')
+    const sep = L('建議：', ' Suggestion: ')
     const parts: string[] = [
-      ...criticals.map(d => `${d.desc}建議：${d.action}。`),
-      ...warnings.map(d => `${d.desc}建議：${d.action}。`),
+      ...criticals.map(d => `${d.desc}${sep}${d.action}。`),
+      ...warnings.map(d => `${d.desc}${sep}${d.action}。`),
       ...goods.map(d => d.desc),
     ]
     return parts.length > 0
-      ? `根據目前帳戶狀況：${parts.join('同時，')}`
-      : '帳戶整體運作正常，暫無需緊急處理的問題，請持續監控每日成效。'
+      ? L(`根據目前帳戶狀況：${parts.join('同時，')}`, `Based on the current account state: ${parts.join(' Also, ')}`)
+      : L('帳戶整體運作正常，暫無需緊急處理的問題，請持續監控每日成效。', 'The account is running normally with no urgent issues. Keep monitoring daily performance.')
   })()
 
   // Prefer the Agent's narrative (first `why` of each card) when available;
@@ -99,26 +102,26 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
   for (const d of data.diagnosis) counts[statusOf(d)]++
   const visibleItems = data.diagnosis.filter(d => statusOf(d) === tab)
   const tabs: { id: 'open' | 'completed' | 'dismissed'; label: string }[] = [
-    { id: 'open', label: '待處理' }, { id: 'completed', label: '已完成' }, { id: 'dismissed', label: '已略過' },
+    { id: 'open', label: L('待處理', 'Open') }, { id: 'completed', label: L('已完成', 'Done') }, { id: 'dismissed', label: L('已略過', 'Dismissed') },
   ]
 
   return (
     <div>
       <div className="ads-section-header">
         <Icon name="alert" size={15} color="var(--ad-orange)" />
-        <span className="ads-section-title">診斷 &amp; 智慧建議</span>
-        <span style={{ background: 'var(--ad-red-light)', color: 'var(--ad-red)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5 }}>{criticalCount} 嚴重</span>
-        <span style={{ background: 'var(--ad-orange-light)', color: 'var(--ad-orange)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5 }}>{warningCount} 警告</span>
+        <span className="ads-section-title">{L('診斷 & 智慧建議', 'Diagnosis & Smart Tips')}</span>
+        <span style={{ background: 'var(--ad-red-light)', color: 'var(--ad-red)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5 }}>{criticalCount} {L('嚴重', 'critical')}</span>
+        <span style={{ background: 'var(--ad-orange-light)', color: 'var(--ad-orange)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5 }}>{warningCount} {L('警告', 'warning')}</span>
       </div>
 
       <div className="ads-ai-box">
         <div style={{ fontSize: 20, flexShrink: 0 }}>✨</div>
         <div style={{ flex: 1 }}>
-          <div className="ads-ai-label">AI 投手建議</div>
+          <div className="ads-ai-label">{L('AI 投手建議', 'AI Coach Tips')}</div>
           <div className="ads-ai-text">{summaryText}</div>
         </div>
-        {onAskAI && <button className="ads-diag-ask-btn" style={{ alignSelf: 'flex-start', flexShrink: 0 }} onClick={() => onAskAI('建議我本週的操作清單')}>
-          問 AI ›
+        {onAskAI && <button className="ads-diag-ask-btn" style={{ alignSelf: 'flex-start', flexShrink: 0 }} onClick={() => onAskAI(L('建議我本週的操作清單', "Suggest this week's action list"))}>
+          {L('問 AI ›', 'Ask AI ›')}
         </button>}
       </div>
 
@@ -137,7 +140,7 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
       <div className="ads-diag-list">
         {visibleItems.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--ad-text3)', padding: '20px 4px' }}>
-            {tab === 'open' ? '目前沒有待處理的建議 🎉' : tab === 'completed' ? '尚無已完成的建議。' : '尚無已略過的建議。'}
+            {tab === 'open' ? L('目前沒有待處理的建議 🎉', 'No open recommendations 🎉') : tab === 'completed' ? L('尚無已完成的建議。', 'No completed recommendations yet.') : L('尚無已略過的建議。', 'No dismissed recommendations yet.')}
           </div>
         )}
         {visibleItems.map(d => {
@@ -164,17 +167,17 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
                     postUrl ? (
                       <a href={postUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={d.thumbnailUrl} alt="貼文預覽" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--ad-border)' }} />
+                        <img src={d.thumbnailUrl} alt={L('貼文預覽', 'Post preview')} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--ad-border)' }} />
                       </a>
                     ) : (
                       /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={d.thumbnailUrl} alt="貼文預覽" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--ad-border)' }} />
+                      <img src={d.thumbnailUrl} alt={L('貼文預覽', 'Post preview')} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--ad-border)' }} />
                     )
                   )}
                   {postUrl && (
                     <a href={postUrl} target="_blank" rel="noopener noreferrer"
                       style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      查看貼文 ↗
+                      {L('查看貼文 ↗', 'View post ↗')}
                     </a>
                   )}
                 </div>
@@ -192,10 +195,10 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
               )}
               <div className="ads-diag-footer">
                 <span className="ads-diag-chip metric">{d.metric}</span>
-                <span className="ads-diag-chip metric">門檻 {d.threshold}</span>
-                <span className="ads-diag-chip action">建議：{card?.cta.label ?? d.action}</span>
-                {onAskAI && <button className="ads-diag-ask-btn" onClick={() => onAskAI(card?.cta.askAi ?? askQ[d.id] ?? '建議我本週的操作清單')}>
-                  ✨ 問 AI
+                <span className="ads-diag-chip metric">{L('門檻', 'Threshold')} {d.threshold}</span>
+                <span className="ads-diag-chip action">{L('建議：', 'Suggestion: ')}{card?.cta.label ?? d.action}</span>
+                {onAskAI && <button className="ads-diag-ask-btn" onClick={() => onAskAI(card?.cta.askAi ?? askQ[d.id] ?? L('建議我本週的操作清單', "Suggest this week's action list"))}>
+                  {L('✨ 問 AI', '✨ Ask AI')}
                 </button>}
               </div>
 
@@ -214,19 +217,19 @@ export function DiagnosisSection({ data, posts, aiCards, cardStatuses, canManage
                       <button onClick={() => onCardAction(cardKey, 'completed', { ...fbMeta, severityRank: severityRank(d.severity) })}
                         style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                           border: '1px solid var(--ad-green, #22a06b)', background: 'var(--ad-green, #22a06b)', color: '#fff' }}>
-                        ✓ 標記完成
+                        {L('✓ 標記完成', '✓ Mark done')}
                       </button>
                       <button onClick={() => onCardAction(cardKey, 'dismissed', fbMeta)}
                         style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                           border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)' }}>
-                        略過
+                        {L('略過', 'Skip')}
                       </button>
                     </>
                   ) : (
                     <button onClick={() => onCardAction(cardKey, 'open', fbMeta)}
                       style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
                         border: '1px solid var(--ad-border)', background: 'var(--ad-surface)', color: 'var(--ad-text2)' }}>
-                      ↩ 重新開啟
+                      {L('↩ 重新開啟', '↩ Reopen')}
                     </button>
                   )}
                 </div>

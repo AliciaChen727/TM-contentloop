@@ -41,7 +41,7 @@ const round = (n: number, step: number) => Math.round(n / step) * step
 // the headline (CPM-driven, fairly reliable); engagement is a conservative rough
 // estimate (paid audiences engage less than organic, so we halve the organic ER).
 // Returns null when there's no CPM to reason from → caller shows a test-range hint.
-export function computeBoostProjection(reach: number, er: number, cpm: number): string | null {
+export function computeBoostProjection(reach: number, er: number, cpm: number, en = false): string | null {
   if (!(cpm > 0) || !(reach > 0)) return null
   const FREQ = 1.5            // assumed impressions-per-person for a short boost
   const PAID_ER_DISCOUNT = 0.5
@@ -51,19 +51,31 @@ export function computeBoostProjection(reach: number, er: number, cpm: number): 
   const daily = round(budget / 7, 10)
   const extraReach = round(reach, 100)          // ≈ matches organic reach by design
   const extraEngage = Math.round(extraReach * (er * PAID_ER_DISCOUNT) / 100)
-  const nt = (n: number) => `NT$${n.toLocaleString('zh-TW')}`
+  const loc = en ? 'en-US' : 'zh-TW'
+  const nt = (n: number) => `NT$${n.toLocaleString(loc)}`
+  if (en) {
+    const engagePart = extraEngage > 0
+      ? `; engagements roughly +${extraEngage.toLocaleString(loc)} (paid audiences engage less than organic — rough estimate)`
+      : ''
+    return `Suggest about ${nt(budget)} (≈${nt(daily)}/day over 7 days). Based on your current CPM, expect to reach ~${extraReach.toLocaleString(loc)} more people${engagePart}.`
+  }
   const engagePart = extraEngage > 0
-    ? `；互動數粗估約 +${extraEngage.toLocaleString('zh-TW')} 次（付費受眾互動通常低於自然，僅供參考）`
+    ? `；互動數粗估約 +${extraEngage.toLocaleString(loc)} 次（付費受眾互動通常低於自然，僅供參考）`
     : ''
-  return `建議用約 ${nt(budget)}（每日約 ${nt(daily)}、投 7 天）。以你目前 CPM 推估，預期可多觸及約 ${extraReach.toLocaleString('zh-TW')} 人${engagePart}。`
+  return `建議用約 ${nt(budget)}（每日約 ${nt(daily)}、投 7 天）。以你目前 CPM 推估，預期可多觸及約 ${extraReach.toLocaleString(loc)} 人${engagePart}。`
 }
 
-const TEST_RANGE_HINT = '建議先用每日約 NT$100–150、投 5–7 天小額測試。'
+const testRangeHint = (en: boolean) => en
+  ? 'Start with a small test of about NT$100–150/day over 5–7 days.'
+  : '建議先用每日約 NT$100–150、投 5–7 天小額測試。'
 
 // Build content diagnosis items from a page-scoped, date-filtered post list.
 // `summary` carries account-level metrics (e.g. cpm) used for the boost projection.
-export function buildContentDiagnosis(posts: Post[], summary?: { cpm?: number }): DiagItem[] {
+export function buildContentDiagnosis(posts: Post[], summary?: { cpm?: number }, en = false): DiagItem[] {
   const items: DiagItem[] = []
+  // `adset` is an identity field (feeds diagnosisCardKey), NOT shown to the user —
+  // keep it a stable token so card status/idempotency match across languages.
+  const allContent = '整體內容'
   const scored: ScoredPost[] = posts
     .map((post) => ({ post, er: postEngagementRate(post) }))
     .filter((s): s is ScoredPost => s.er !== null)
@@ -83,12 +95,14 @@ export function buildContentDiagnosis(posts: Post[], summary?: { cpm?: number })
   if (boostCandidates.length > 0) {
     const { post, er } = boostCandidates[0]
     const beats = Math.round((ers.filter((e) => e <= er).length / ers.length) * 100)
-    const projection = computeBoostProjection(post.reach ?? 0, er, summary?.cpm ?? 0) ?? TEST_RANGE_HINT
+    const projection = computeBoostProjection(post.reach ?? 0, er, summary?.cpm ?? 0, en) ?? testRangeHint(en)
     items.push({
-      id: 'c1', severity: 'good', type: 'content_boost', title: '最佳貼文值得加碼推廣',
-      desc: `「${post.title.slice(0, 25)}」自然互動率 ${er.toFixed(2)}%，是你近期最佳（贏過 ${beats}% 貼文），但還沒投過廣告。建議 boost 這篇，把已驗證的好內容推給更多人。${projection}`,
-      adset: post.title.slice(0, 30), metric: `互動率 ${er.toFixed(2)}%`,
-      threshold: `贏過 ${beats}% 貼文`, action: '對這篇貼文投放廣告（加碼推廣）',
+      id: 'c1', severity: 'good', type: 'content_boost', title: en ? 'Your best post is worth boosting' : '最佳貼文值得加碼推廣',
+      desc: en
+        ? `"${post.title.slice(0, 25)}" has a ${er.toFixed(2)}% organic engagement rate — your best lately (beats ${beats}% of posts) — but hasn't been advertised. Boost it to push proven content to more people. ${projection}`
+        : `「${post.title.slice(0, 25)}」自然互動率 ${er.toFixed(2)}%，是你近期最佳（贏過 ${beats}% 貼文），但還沒投過廣告。建議 boost 這篇，把已驗證的好內容推給更多人。${projection}`,
+      adset: post.title.slice(0, 30), metric: en ? `Engagement ${er.toFixed(2)}%` : `互動率 ${er.toFixed(2)}%`,
+      threshold: en ? `beats ${beats}% of posts` : `贏過 ${beats}% 貼文`, action: en ? 'Run ads on this post (boost it)' : '對這篇貼文投放廣告（加碼推廣）',
       storyId: post.id, projection,
     })
   }
@@ -103,10 +117,12 @@ export function buildContentDiagnosis(posts: Post[], summary?: { cpm?: number })
     if (olderMed > 0 && recentMed < olderMed * 0.7) {
       const drop = Math.round((1 - recentMed / olderMed) * 100)
       items.push({
-        id: 'c2', severity: 'warning', type: 'content_low_engagement', title: '近期貼文互動下滑',
-        desc: `近期貼文自然互動率中位數 ${recentMed.toFixed(2)}%，比先前的 ${olderMed.toFixed(2)}% 下滑約 ${drop}%。建議檢視近期內容主題與形式，回到先前表現較好的方向。`,
-        adset: '整體內容', metric: `中位數 ${recentMed.toFixed(2)}%`,
-        threshold: `較先前 -${drop}%`, action: '檢視近期內容主題 / 參考過往高互動貼文',
+        id: 'c2', severity: 'warning', type: 'content_low_engagement', title: en ? 'Recent post engagement is dropping' : '近期貼文互動下滑',
+        desc: en
+          ? `Recent posts' median organic engagement is ${recentMed.toFixed(2)}%, down ~${drop}% from the earlier ${olderMed.toFixed(2)}%. Review recent themes/formats and return to what worked before.`
+          : `近期貼文自然互動率中位數 ${recentMed.toFixed(2)}%，比先前的 ${olderMed.toFixed(2)}% 下滑約 ${drop}%。建議檢視近期內容主題與形式，回到先前表現較好的方向。`,
+        adset: allContent, metric: en ? `Median ${recentMed.toFixed(2)}%` : `中位數 ${recentMed.toFixed(2)}%`,
+        threshold: en ? `-${drop}% vs before` : `較先前 -${drop}%`, action: en ? 'Review recent themes / reference past high-engagement posts' : '檢視近期內容主題 / 參考過往高互動貼文',
       })
     }
   }
@@ -121,10 +137,12 @@ export function buildContentDiagnosis(posts: Post[], summary?: { cpm?: number })
     const perWeek = posts.length / (spanDays / 7)
     if (spanDays >= 14 && perWeek < 1) {
       items.push({
-        id: 'c3', severity: 'good', type: 'content_cadence', title: '發文頻率偏低',
-        desc: `這段期間平均每週發文 ${perWeek.toFixed(1)} 篇，頻率偏低不利於累積觸及與互動。建議維持每週至少 1–2 篇穩定發布。`,
-        adset: '整體內容', metric: `每週 ${perWeek.toFixed(1)} 篇`,
-        threshold: '建議 ≥ 1–2 篇/週', action: '建立固定發文節奏（每週 1–2 篇）',
+        id: 'c3', severity: 'good', type: 'content_cadence', title: en ? 'Posting frequency is low' : '發文頻率偏低',
+        desc: en
+          ? `You posted ${perWeek.toFixed(1)} times/week on average this period — too sparse to build reach and engagement. Aim for at least 1–2 posts/week consistently.`
+          : `這段期間平均每週發文 ${perWeek.toFixed(1)} 篇，頻率偏低不利於累積觸及與互動。建議維持每週至少 1–2 篇穩定發布。`,
+        adset: allContent, metric: en ? `${perWeek.toFixed(1)}/week` : `每週 ${perWeek.toFixed(1)} 篇`,
+        threshold: en ? 'recommend ≥ 1–2/week' : '建議 ≥ 1–2 篇/週', action: en ? 'Establish a steady cadence (1–2 posts/week)' : '建立固定發文節奏（每週 1–2 篇）',
       })
     }
   }

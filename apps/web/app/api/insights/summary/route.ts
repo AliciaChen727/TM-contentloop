@@ -11,24 +11,26 @@ function getPeriodRange(year: number, periodType: 'month' | 'quarter' | 'year', 
   start: Date; end: Date; label: string; isPartial: boolean; periodKey: string
 } {
   // Use Taiwan time (UTC+8) so "today" / month boundaries match the user's calendar.
-  // A Date shifted +8h reads its Taiwan wall-clock date via toISOString().
+  // All boundary Dates encode the TW wall-clock in their UTC fields (via Date.UTC /
+  // a +8h shift), so toISOString().slice(0,10) yields the intended date regardless
+  // of the server's own timezone (UTC on Vercel, UTC+8 on a local dev machine).
   const now = new Date(Date.now() + 8 * 3600 * 1000)
   if (periodType === 'year') {
-    const start = new Date(year, 0, 1)
-    const fullEnd = new Date(year, 11, 31, 23, 59, 59)
+    const start = new Date(Date.UTC(year, 0, 1))
+    const fullEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59))
     const isPartial = now < fullEnd
     return { start, end: isPartial ? now : fullEnd, label: `${year}年 全年`, isPartial, periodKey: `${year}` }
   }
   if (periodType === 'month') {
-    const start = new Date(year, value - 1, 1)
-    const fullEnd = new Date(year, value, 0, 23, 59, 59)
+    const start = new Date(Date.UTC(year, value - 1, 1))
+    const fullEnd = new Date(Date.UTC(year, value, 0, 23, 59, 59))
     const isPartial = now < fullEnd
     return { start, end: isPartial ? now : fullEnd, label: `${year}年${value}月`, isPartial, periodKey: `${year}-${String(value).padStart(2, '0')}` }
   }
   const QUARTER_LABELS = ['', '1-3月', '4-6月', '7-9月', '10-12月']
   const qStartMonth = (value - 1) * 3
-  const start = new Date(year, qStartMonth, 1)
-  const fullEnd = new Date(year, qStartMonth + 3, 0, 23, 59, 59)
+  const start = new Date(Date.UTC(year, qStartMonth, 1))
+  const fullEnd = new Date(Date.UTC(year, qStartMonth + 3, 0, 23, 59, 59))
   const isPartial = now < fullEnd
   return { start, end: isPartial ? now : fullEnd, label: `${year} Q${value}（${QUARTER_LABELS[value]}）`, isPartial, periodKey: `${year}-Q${value}` }
 }

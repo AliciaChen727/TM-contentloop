@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import type { Post } from '../types'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 const fmt = (n: number | null) => n == null ? '—' : n.toLocaleString('zh-TW')
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}`
@@ -24,9 +25,17 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: { k: SortKey; label: str
   )
 }
 
-function buildPostPrompt(p: Post): string {
+function buildPostPrompt(p: Post, en: boolean): string {
   const eng = (p.reach ?? 0) > 0 ? ((p.likes + p.comments + p.shares) / (p.reach ?? 1) * 100).toFixed(2) : '0.00'
   const hasAdMetrics = p.hasAd && ((p.adSpend ?? 0) > 0 || (p.adRoas ?? 0) > 0)
+  if (en) {
+    const adPart = p.hasAd
+      ? hasAdMetrics
+        ? `\nCPL: $${(p.adCpa ?? 0).toFixed(2)} | Ad spend: $${p.adSpend ?? 0} | Ad CTR: ${Number(p.adCtr ?? 0).toFixed(2)}%`
+        : '\nThis post has ads, but ad detail data is not synced yet (re-sync to view).'
+      : ''
+    return `Please analyze this post:\nDate: ${p.date} | Platform: ${p.platform} | Type: ${p.type === 'reels' ? 'Reels' : 'Post'}\nContent: ${p.title.slice(0, 100)}\nReach: ${fmt(p.reach)} | Likes: ${p.likes} | Comments: ${p.comments} | Saves: ${fmt(p.saves)} | Shares: ${p.shares} | Plays: ${fmt(p.plays)}\nEngagement: ${eng}%${adPart}\n\nPlease give a performance diagnosis and specific optimization suggestions.`
+  }
   const adPart = p.hasAd
     ? hasAdMetrics
       ? `\nCPL：$${(p.adCpa ?? 0).toFixed(2)}｜廣告花費：$${p.adSpend ?? 0}｜廣告 CTR：${Number(p.adCtr ?? 0).toFixed(2)}%`
@@ -36,6 +45,8 @@ function buildPostPrompt(p: Post): string {
 }
 
 export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSend?: boolean) => void; posts: Post[] | null }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [platform, setPlatform] = useState<Platform>('all')
   const [view, setView] = useState<View>('raw')
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -72,7 +83,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
   if (posts === null) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ad-text3)', fontSize: 13 }}>
-        載入貼文資料中⋯⋯
+        {L('載入貼文資料中⋯⋯', 'Loading posts…')}
       </div>
     )
   }
@@ -94,11 +105,11 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
     <div>
       <div className="ads-posts-summary-strip">
         {[
-          { label: '總貼文數', value: posts.length, sub: `${posts.filter(p => p.type === 'reels').length} Reels · ${posts.filter(p => p.type === 'post').length} 貼文` },
-          { label: '總觸及', value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach, sub: '所有貼文合計' },
-          { label: '總按讚', value: totalLikes.toLocaleString(), sub: `留言 ${totalComments} · 分享 ${totalShares}` },
-          { label: '平均互動率', value: `${avgEng.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
-          { label: '有投廣告', value: `${adPosts.length} 篇`, sub: adPosts.length === 0 ? '尚未串接廣告數據' : adPosts.some(p => (p.adSpend ?? 0) > 0 || (p.adRoas ?? 0) > 0) ? `最低 CPA $${maxRoas.toFixed(2)}` : '僅偵測到付費觸及（無花費數據）' },
+          { label: L('總貼文數', 'Total posts'), value: posts.length, sub: L(`${posts.filter(p => p.type === 'reels').length} Reels · ${posts.filter(p => p.type === 'post').length} 貼文`, `${posts.filter(p => p.type === 'reels').length} Reels · ${posts.filter(p => p.type === 'post').length} posts`) },
+          { label: L('總觸及', 'Total reach'), value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach, sub: L('所有貼文合計', 'All posts combined') },
+          { label: L('總按讚', 'Total likes'), value: totalLikes.toLocaleString(), sub: L(`留言 ${totalComments} · 分享 ${totalShares}`, `${totalComments} comments · ${totalShares} shares`) },
+          { label: L('平均互動率', 'Avg engagement'), value: `${avgEng.toFixed(2)}%`, sub: L('(按讚+留言+分享)/觸及', '(likes+comments+shares)/reach') },
+          { label: L('有投廣告', 'Boosted'), value: L(`${adPosts.length} 篇`, `${adPosts.length}`), sub: adPosts.length === 0 ? L('尚未串接廣告數據', 'No ad data connected') : adPosts.some(p => (p.adSpend ?? 0) > 0 || (p.adRoas ?? 0) > 0) ? L(`最低 CPA $${maxRoas.toFixed(2)}`, `Min CPA $${maxRoas.toFixed(2)}`) : L('僅偵測到付費觸及（無花費數據）', 'Paid reach detected only (no spend data)') },
         ].map(s => (
           <div key={s.label} className="ads-posts-sum-card">
             <div className="ads-posts-sum-label">{s.label}</div>
@@ -117,21 +128,21 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {([['all', '全部'], ['post', '貼文'], ['reels', 'Reels'], ['ads', '有投廣告']] as [string, string][]).map(([v, l]) => (
+          {([['all', L('全部', 'All')], ['post', L('貼文', 'Posts')], ['reels', 'Reels'], ['ads', L('有投廣告', 'Boosted')]] as [string, string][]).map(([v, l]) => (
             <button key={v} className={`ads-posts-type-chip ${typeFilter === v ? 'active' : ''}`} onClick={() => setTypeFilter(v)}>{l}</button>
           ))}
         </div>
-        <input className="ads-posts-search" placeholder="搜尋貼文內容…" value={search} onChange={e => setSearch(e.target.value)} />
+        <input className="ads-posts-search" placeholder={L('搜尋貼文內容…', 'Search posts…')} value={search} onChange={e => setSearch(e.target.value)} />
         <div className="ads-posts-view-toggle">
-          <button className={`ads-posts-view-btn ${view === 'raw' ? 'active' : ''}`} onClick={() => setView('raw')}>📋 原始數據</button>
-          <button className={`ads-posts-view-btn ${view === 'ads' ? 'active' : ''}`} onClick={() => setView('ads')}>📊 廣告指標</button>
+          <button className={`ads-posts-view-btn ${view === 'raw' ? 'active' : ''}`} onClick={() => setView('raw')}>📋 {L('原始數據', 'Raw data')}</button>
+          <button className={`ads-posts-view-btn ${view === 'ads' ? 'active' : ''}`} onClick={() => setView('ads')}>📊 {L('廣告指標', 'Ad metrics')}</button>
         </div>
-        {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7, flexShrink: 0 }} onClick={() => onAskAI('哪支素材表現最好？')}>✨ 問 AI 分析</button>}
+        {onAskAI && <button className="ads-diag-ask-btn" style={{ borderRadius: 7, flexShrink: 0 }} onClick={() => onAskAI(L('哪支素材表現最好？', 'Which creative performs best?'))}>✨ {L('問 AI 分析', 'Ask AI')}</button>}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, fontSize: 11.5, color: 'var(--ad-text3)', gap: 6, alignItems: 'center' }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ad-green)', display: 'inline-block' }} />
-        每日凌晨 3 點自動更新
+        {L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}
       </div>
 
       {view === 'raw' && (
@@ -140,15 +151,15 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
             <table className="ads-posts-table">
               <thead>
                 <tr>
-                  <SortTh k="date" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th>平台</th><th>內容</th>
-                  <SortTh k="reach" label="觸及" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh k="likes" label="按讚" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh k="comments" label="留言" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh k="saves" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh k="plays" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th>互動率</th><th>廣告</th>
+                  <SortTh k="date" label={L('日期', 'Date')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <th>{L('平台', 'Platform')}</th><th>{L('內容', 'Content')}</th>
+                  <SortTh k="reach" label={L('觸及', 'Reach')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh k="likes" label={L('按讚', 'Likes')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh k="comments" label={L('留言', 'Comments')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh k="saves" label={L('收藏', 'Saves')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh k="shares" label={L('分享', 'Shares')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh k="plays" label={L('播放', 'Plays')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <th>{L('互動率', 'Engagement')}</th><th>{L('廣告', 'Ad')}</th>
                   <th style={{ width: 60 }} />
                 </tr>
               </thead>
@@ -166,7 +177,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                           <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ad-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
                         )}
                         <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, marginTop: 3, background: p.type === 'reels' ? '#FFF3E0' : 'var(--ad-surface2)', color: p.type === 'reels' ? '#E65100' : 'var(--ad-text3)' }}>
-                          {p.type === 'reels' ? '▶ Reels' : '📝 貼文'}
+                          {p.type === 'reels' ? '▶ Reels' : L('📝 貼文', '📝 Post')}
                         </span>
                       </td>
                       <td className="ads-posts-num" style={{ textAlign: 'right' }}>
@@ -190,19 +201,19 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                       <td>
                         {p.hasAd ? (
                           <div>
-                            <span className="ads-posts-ad-badge">🎯 有投放</span>
+                            <span className="ads-posts-ad-badge">🎯 {L('有投放', 'Boosted')}</span>
                             {(p.paidReach ?? 0) > 0 && (
-                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', marginTop: 2 }}>觸及 {fmt(p.paidReach ?? 0)}</div>
+                              <div style={{ fontSize: 10, color: 'var(--ad-text3)', marginTop: 2 }}>{L('觸及', 'Reach')} {fmt(p.paidReach ?? 0)}</div>
                             )}
                           </div>
                         ) : <span style={{ color: 'var(--ad-text3)', fontSize: 12 }}>—</span>}
                       </td>
                       <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
                         {onAskAI && <button
-                          title="用 AI 分析此貼文"
-                          onClick={() => onAskAI(buildPostPrompt(p), true)}
+                          title={L('用 AI 分析此貼文', 'Analyze this post with AI')}
+                          onClick={() => onAskAI(buildPostPrompt(p, en), true)}
                           style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
-                        >✨ 分析</button>}
+                        >✨ {L('分析', 'Analyze')}</button>}
                       </td>
                     </tr>
                   )
@@ -211,8 +222,8 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
             </table>
           </div>
           <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)', display: 'flex', justifyContent: 'space-between' }}>
-            <span>共 {filtered.length} 筆記錄</span>
-            <span>點擊內容標題可前往原始貼文連結</span>
+            <span>{L(`共 ${filtered.length} 筆記錄`, `${filtered.length} records`)}</span>
+            <span>{L('點擊內容標題可前往原始貼文連結', 'Click a content title to open the original post')}</span>
           </div>
         </div>
       )}
@@ -220,12 +231,12 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
       {view === 'ads' && (
         adPosts.length === 0
           ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--ad-text3)' }}>
-              <div style={{ fontSize: 14, marginBottom: 8 }}>目前篩選條件下無廣告貼文</div>
-              <div style={{ fontSize: 12 }}>廣告數據將於串接 Meta Ads Manager 後顯示</div>
+              <div style={{ fontSize: 14, marginBottom: 8 }}>{L('目前篩選條件下無廣告貼文', 'No boosted posts under the current filter')}</div>
+              <div style={{ fontSize: 12 }}>{L('廣告數據將於串接 Meta Ads Manager 後顯示', 'Ad data appears once Meta Ads Manager is connected')}</div>
             </div>
           : (
             <>
-              <div style={{ fontSize: 12.5, color: 'var(--ad-text2)', marginBottom: 12 }}>共 <strong>{adPosts.length}</strong> 篇貼文有投廣告：</div>
+              <div style={{ fontSize: 12.5, color: 'var(--ad-text2)', marginBottom: 12 }}>{L('共 ', '')}<strong>{adPosts.length}</strong>{L(' 篇貼文有投廣告：', ' boosted posts:')}</div>
               <div className="ads-posts-ad-grid">
                 {adPosts.map(p => {
                   const rc = roasColor(p.adRoas ?? 0)
@@ -237,10 +248,10 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                   return (
                     <div key={p.id} className="ads-posts-ad-card" style={{ position: 'relative' }}>
                       {onAskAI && <button
-                        title="用 AI 分析此貼文"
-                        onClick={() => onAskAI(buildPostPrompt(p), true)}
+                        title={L('用 AI 分析此貼文', 'Analyze this post with AI')}
+                        onClick={() => onAskAI(buildPostPrompt(p, en), true)}
                         style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4 }}
-                      >✨ 分析</button>}
+                      >✨ {L('分析', 'Analyze')}</button>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                         <span style={{ fontSize: 10.5, fontFamily: 'var(--font-dm-mono)', color: 'var(--ad-text3)' }}>{p.date}</span>
                         <PlatBadge p={p.platform} />
@@ -249,7 +260,7 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                       {hasAdMetrics ? (
                         <>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-                            {[['CPA', '$' + (p.adCpa ?? 0).toFixed(2), rc], ['花費', fmtK(p.adSpend ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
+                            {[['CPA', '$' + (p.adCpa ?? 0).toFixed(2), rc], [L('花費', 'Spend'), fmtK(p.adSpend ?? 0), undefined], ['CTR', Number(p.adCtr ?? 0).toFixed(2) + '%', undefined]].map(([label, value, color]) => (
                               <div key={label as string}>
                                 <div className="ads-posts-ad-metric-label">{label}</div>
                                 <div className="ads-posts-ad-metric-value" style={{ color: color as string | undefined }}>{value}</div>
@@ -264,16 +275,16 @@ export function PostsSection({ onAskAI, posts }: { onAskAI?: (q: string, autoSen
                         <>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
                             <div>
-                              <div className="ads-posts-ad-metric-label">付費觸及</div>
+                              <div className="ads-posts-ad-metric-label">{L('付費觸及', 'Paid reach')}</div>
                               <div className="ads-posts-ad-metric-value">{(p.paidReach ?? 0) > 0 ? fmt(p.paidReach ?? 0) : '—'}</div>
                             </div>
                             <div>
-                              <div className="ads-posts-ad-metric-label">自然觸及</div>
+                              <div className="ads-posts-ad-metric-label">{L('自然觸及', 'Organic reach')}</div>
                               <div className="ads-posts-ad-metric-value">{(p.organicReach ?? 0) > 0 ? fmt(p.organicReach ?? 0) : '—'}</div>
                             </div>
                           </div>
                           <div style={{ fontSize: 10.5, color: 'var(--ad-text3)', marginTop: 8, lineHeight: 1.5 }}>
-                            此貼文偵測到付費推廣，但連接的帳號讀不到對應廣告帳號，無法顯示花費 / CTR。
+                            {L('此貼文偵測到付費推廣，但連接的帳號讀不到對應廣告帳號，無法顯示花費 / CTR。', "This post shows paid promotion, but the connected account can't access the corresponding ad account, so spend / CTR can't be shown.")}
                           </div>
                         </>
                       )}

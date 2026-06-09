@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 import { FbPostsTable } from '@/components/dashboard/FbPostsTable'
 import { FbCsvImport } from '@/components/dashboard/FbCsvImport'
 import { FbMdImport } from '@/components/dashboard/FbMdImport'
@@ -18,6 +19,7 @@ import type { MetricsContext } from '@/components/ads/AiSidekick'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingModal } from '@/components/OnboardingModal'
+import { DateField } from '@/components/ui/DateField'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null }
@@ -36,12 +38,7 @@ type Tab = 'fb' | 'ig' | 'combined'
 
 const fmtBig = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toLocaleString('zh-TW')
 
-const DATE_OPTS = [
-  { label: '7天', days: 7 },
-  { label: '30天', days: 30 },
-  { label: '90天', days: 90 },
-  { label: '全部', days: 0 },
-]
+const DATE_OPTS = [{ days: 7 }, { days: 30 }, { days: 90 }, { days: 0 }]
 
 const dateBtnStyle = (active: boolean): React.CSSProperties => ({
   padding: '4px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
@@ -58,6 +55,7 @@ const dateInputStyle: React.CSSProperties = {
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { L } = useLang()
   const [pageData, setPageData] = useState<PageTokenData | null>(null)
   const [pages, setPages] = useState<PageInfo[]>([])
   const [selectedPageId, setSelectedPageId] = useState<string>('')
@@ -301,7 +299,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ pageIdentifier: addPageInput.trim() }),
     })
     const data = await res.json()
-    if (!res.ok) { setAddPageError(data.error ?? '新增失敗'); return }
+    if (!res.ok) { setAddPageError(data.error ?? L('新增失敗', 'Failed to add')); return }
     // Refresh pages list
     const pagesRes = await fetch('/api/pages', { headers: { Authorization: `Bearer ${idToken}` } })
     if (pagesRes.ok) { const d = await pagesRes.json(); setPages(d.pages ?? []) }
@@ -315,7 +313,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-400">載入中⋯⋯</p>
+        <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
       </main>
     )
   }
@@ -350,15 +348,15 @@ export default function DashboardPage() {
                     value={addPageInput}
                     onChange={e => setAddPageInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleAddPage(); if (e.key === 'Escape') { setAddingPage(false); setAddPageError('') } }}
-                    placeholder="粉絲頁 ID 或 username"
+                    placeholder={L('粉絲頁 ID 或 username', 'Page ID or username')}
                     className="text-xs border border-gray-200 rounded px-2 py-0.5 outline-none w-40"
                   />
-                  <button onClick={handleAddPage} className="text-xs text-blue-500 hover:text-blue-700">新增</button>
-                  <button onClick={() => { setAddingPage(false); setAddPageError('') }} className="text-xs text-gray-400 hover:text-gray-600">取消</button>
+                  <button onClick={handleAddPage} className="text-xs text-blue-500 hover:text-blue-700">{L('新增', 'Add')}</button>
+                  <button onClick={() => { setAddingPage(false); setAddPageError('') }} className="text-xs text-gray-400 hover:text-gray-600">{L('取消', 'Cancel')}</button>
                   {addPageError && <span className="text-xs text-red-500">{addPageError}</span>}
                 </div>
               ) : (
-                <button onClick={() => setAddingPage(true)} className="text-xs text-gray-300 hover:text-blue-500" title="新增粉絲頁">＋</button>
+                <button onClick={() => setAddingPage(true)} className="text-xs text-gray-300 hover:text-blue-500" title={L('新增粉絲頁', 'Add page')}>＋</button>
               ))}
             </div>
           </div>
@@ -369,7 +367,7 @@ export default function DashboardPage() {
               return (<>
                 {(isAdmin || activePerms?.ads) && (
                   <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
-                    📊 廣告儀表板
+                    📊 {L('廣告儀表板', 'Ad Dashboard')}
                   </button>
                 )}
                 {(isAdmin || activePerms?.sidekick) && (
@@ -386,42 +384,42 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl px-8 py-6">
         {!pageData ? (
           <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <p className="mb-4 text-sm text-gray-500">尚未連接 Facebook 粉專</p>
+            <p className="mb-4 text-sm text-gray-500">{L('尚未連接 Facebook 粉專', 'No Facebook Page connected yet')}</p>
             <button onClick={() => router.push('/auth/connect')} className="rounded-lg bg-[#1877F2] px-4 py-2 text-sm font-semibold text-white hover:bg-[#166FE5]">
-              連接 Facebook
+              {L('連接 Facebook', 'Connect Facebook')}
             </button>
           </div>
         ) : (
           <>
             {/* Date range selector — controls summary + chart */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-text2)' }}>資料區間</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('資料區間', 'Date range')}</span>
               <div style={{ display: 'flex', gap: 4 }}>
                 {DATE_OPTS.map(opt => (
                   <button key={opt.days} onClick={() => { setDateMode('preset'); setDays(opt.days) }} style={dateBtnStyle(dateMode === 'preset' && days === opt.days)}>
-                    {opt.label}
+                    {opt.days === 0 ? L('全部', 'All') : L(`${opt.days}天`, `${opt.days}d`)}
                   </button>
                 ))}
-                <button onClick={() => setDateMode('custom')} style={dateBtnStyle(dateMode === 'custom')}>自訂</button>
+                <button onClick={() => setDateMode('custom')} style={dateBtnStyle(dateMode === 'custom')}>{L('自訂', 'Custom')}</button>
               </div>
               {dateMode === 'custom' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                  <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} style={dateInputStyle} />
-                  <span style={{ color: 'var(--ad-text3)' }}>至</span>
-                  <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={dateInputStyle} />
+                  <DateField value={customStart} onChange={setCustomStart} style={dateInputStyle} />
+                  <span style={{ color: 'var(--ad-text3)' }}>{L('至', 'to')}</span>
+                  <DateField value={customEnd} onChange={setCustomEnd} style={dateInputStyle} />
                 </div>
               )}
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>每日凌晨 3 點自動更新</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>{L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}</span>
             </div>
 
             {/* Summary Strip */}
             <div className="ads-posts-summary-strip" style={{ marginBottom: 20 }}>
               {[
-                { label: '總貼文數', value: stats.totalPosts, sub: `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文` },
-                { label: '總觸擊', value: fmtBig(stats.totalReach), sub: 'FB + IG 貼文' },
-                { label: '總按讚', value: fmtBig(stats.totalLikes), sub: `留言 ${stats.totalComments} · 分享 ${stats.totalShares}` },
-                { label: '平均互動率', value: `${stats.avgEngRate.toFixed(2)}%`, sub: '(按讚+留言+分享)/觸及' },
-                { label: '追蹤數', value: followerSummary.total > 0 ? fmtBig(followerSummary.total) : '—', sub: followerSummary.total > 0 ? `本區間 ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}` : '尚未同步' },
+                { label: L('總貼文數', 'Total posts'), value: stats.totalPosts, sub: L(`${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文`, `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} posts`) },
+                { label: L('總觸擊', 'Total reach'), value: fmtBig(stats.totalReach), sub: L('FB + IG 貼文', 'FB + IG posts') },
+                { label: L('總按讚', 'Total likes'), value: fmtBig(stats.totalLikes), sub: L(`留言 ${stats.totalComments} · 分享 ${stats.totalShares}`, `${stats.totalComments} comments · ${stats.totalShares} shares`) },
+                { label: L('平均互動率', 'Avg engagement'), value: `${stats.avgEngRate.toFixed(2)}%`, sub: L('(按讚+留言+分享)/觸及', '(likes+comments+shares)/reach') },
+                { label: L('追蹤數', 'Followers'), value: followerSummary.total > 0 ? fmtBig(followerSummary.total) : '—', sub: followerSummary.total > 0 ? L(`本區間 ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}`, `this period ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}`) : L('尚未同步', 'Not synced') },
               ].map(s => (
                 <div key={s.label} className="ads-posts-sum-card">
                   <div className="ads-posts-sum-label">{s.label}</div>
@@ -433,7 +431,7 @@ export default function DashboardPage() {
 
             {/* Chart Card */}
             <div className="ads-card ads-card-pad" style={{ marginBottom: 20 }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ad-text)', marginBottom: 14 }}>成效趨勢</div>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ad-text)', marginBottom: 14 }}>{L('成效趨勢', 'Performance trend')}</div>
               <ContentChart data={chartData} />
             </div>
 
@@ -451,12 +449,12 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', gap: 6 }}>
                 {(['all', 'post', 'reels', 'stories'] as const).map(v => (
                   <button key={v} className={`ads-posts-type-chip ${typeFilter === v ? 'active' : ''}`} onClick={() => setTypeFilter(v)}>
-                    {v === 'all' ? '全部' : v === 'post' ? '貼文' : v === 'reels' ? 'Reels' : '限動'}
+                    {v === 'all' ? L('全部', 'All') : v === 'post' ? L('貼文', 'Posts') : v === 'reels' ? 'Reels' : L('限動', 'Stories')}
                   </button>
                 ))}
               </div>
-              <input className="ads-posts-search" placeholder="搜尋貼文內容…" value={search} onChange={e => setSearch(e.target.value)} />
-              <p style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>點擊欄位標題可排序</p>
+              <input className="ads-posts-search" placeholder={L('搜尋貼文內容…', 'Search posts…')} value={search} onChange={e => setSearch(e.target.value)} />
+              <p style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>{L('點擊欄位標題可排序', 'Click a column header to sort')}</p>
             </div>
 
             <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -511,7 +509,7 @@ export default function DashboardPage() {
           totalShares: stats.totalShares,
           avgEngRate: stats.avgEngRate,
           reelsCount: stats.reelsCount,
-          dateRange: dateMode === 'preset' ? (days === 0 ? '全部時間' : `近 ${days} 天`) : `${customStart} ~ ${customEnd}`,
+          dateRange: dateMode === 'preset' ? (days === 0 ? L('全部時間', 'All time') : L(`近 ${days} 天`, `Last ${days} days`)) : `${customStart} ~ ${customEnd}`,
         } satisfies MetricsContext}
         pageId={pageData?.pageId ?? undefined}
       />

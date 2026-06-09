@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 /**
  * Self-service GA4 connection wizard (Phase B). Lets a page admin connect their
@@ -9,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
  *   3. paste GA4 Property ID + save    4. test connection
  */
 export function GaConnectCard({ pageId, idToken }: { pageId: string; idToken: string }) {
+  const { L } = useLang()
   const [saEmail, setSaEmail] = useState('')
   const [propertyId, setPropertyId] = useState('')
   const [savedId, setSavedId] = useState('')
@@ -45,9 +47,9 @@ export function GaConnectCard({ pageId, idToken }: { pageId: string; idToken: st
     try {
       const res = await fetch('/api/analytics/ga/config', { method: 'POST', headers: headers(), body: JSON.stringify({ pageId, propertyId }) })
       const d = await res.json()
-      if (!res.ok) { setMsg({ kind: 'err', text: d.error ?? '儲存失敗' }); return }
+      if (!res.ok) { setMsg({ kind: 'err', text: d.error ?? L('儲存失敗', 'Save failed') }); return }
       setSavedId(d.propertyId ?? '')
-      setMsg({ kind: 'ok', text: '已儲存 Property ID，按「測試連線」確認權限是否生效。' })
+      setMsg({ kind: 'ok', text: L('已儲存 Property ID，按「測試連線」確認權限是否生效。', 'Property ID saved — click "Test connection" to verify access.') })
     } finally { setSaving(false) }
   }
 
@@ -56,9 +58,9 @@ export function GaConnectCard({ pageId, idToken }: { pageId: string; idToken: st
     try {
       const res = await fetch('/api/analytics/ga/sync', { method: 'POST', headers: headers(), body: JSON.stringify({ pageId }) })
       const d = await res.json()
-      if (!res.ok) { setMsg({ kind: 'err', text: `連線失敗：${d.error ?? '未知錯誤'}（請確認已把上方 email 加為 GA4 檢視者）` }); return }
+      if (!res.ok) { setMsg({ kind: 'err', text: L(`連線失敗：${d.error ?? '未知錯誤'}（請確認已把上方 email 加為 GA4 檢視者）`, `Connection failed: ${d.error ?? 'unknown error'} (make sure you added the email above as a GA4 Viewer)`) }); return }
       const s = d.summary
-      setMsg({ kind: 'ok', text: `✅ 連線成功！抓到 ${s?.channels?.length ?? 0} 個管道、營收 $${Math.round(s?.totals?.revenue ?? 0).toLocaleString('zh-TW')}${s?.adsLinked ? `、ROAS ${s.totals.roas}x` : '（GA4 未連 Google Ads，無廣告花費）'}` })
+      setMsg({ kind: 'ok', text: L(`✅ 連線成功！抓到 ${s?.channels?.length ?? 0} 個管道、營收 $${Math.round(s?.totals?.revenue ?? 0).toLocaleString('zh-TW')}${s?.adsLinked ? `、ROAS ${s.totals.roas}x` : '（GA4 未連 Google Ads，無廣告花費）'}`, `✅ Connected! Found ${s?.channels?.length ?? 0} channels, revenue $${Math.round(s?.totals?.revenue ?? 0).toLocaleString('en-US')}${s?.adsLinked ? `, ROAS ${s.totals.roas}x` : ' (GA4 not linked to Google Ads — no ad spend)'}`) })
     } finally { setTesting(false) }
   }
 
@@ -67,37 +69,37 @@ export function GaConnectCard({ pageId, idToken }: { pageId: string; idToken: st
 
   return (
     <div style={box}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>📊 電商成效（GA4）串接</h3>
-      <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>若你用 Google Ads / 有網站 GA4，連接後可在儀表板看營收、轉換、各管道 ROAS。</p>
+      <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>📊 {L('電商成效（GA4）串接', 'E-commerce Performance (GA4)')}</h3>
+      <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>{L('若你用 Google Ads / 有網站 GA4，連接後可在儀表板看營收、轉換、各管道 ROAS。', 'If you use Google Ads / have GA4 on your site, connect to see revenue, conversions, and per-channel ROAS in the dashboard.')}</p>
 
       <div style={step}>
-        <b>① 複製我們的存取帳號</b>，到你的 GA4「管理 → 資源存取權管理」把它加為「<b>檢視者</b>」：
+        <b>{L('① 複製我們的存取帳號', '① Copy our access account')}</b>{L('，到你的 GA4「管理 → 資源存取權管理」把它加為「', ', then in your GA4 "Admin → Property Access Management" add it as a "')}<b>{L('檢視者', 'Viewer')}</b>{L('」：', '":')}
         <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-          <code style={{ flex: 1, fontSize: 12, background: '#f3f4f6', padding: '8px 10px', borderRadius: 6, wordBreak: 'break-all' }}>{saEmail || '載入中…'}</code>
+          <code style={{ flex: 1, fontSize: 12, background: '#f3f4f6', padding: '8px 10px', borderRadius: 6, wordBreak: 'break-all' }}>{saEmail || L('載入中…', 'Loading…')}</code>
           <button onClick={copyEmail} disabled={!saEmail}
             style={{ flexShrink: 0, padding: '8px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', background: copied ? '#16a34a' : '#2563eb', color: 'white', cursor: 'pointer' }}>
-            {copied ? '已複製 ✓' : '複製'}
+            {copied ? L('已複製 ✓', 'Copied ✓') : L('複製', 'Copy')}
           </button>
         </div>
       </div>
 
       <div style={step}>
-        <b>② 貼上你的 GA4 Property ID</b>（在 GA4「管理 → 資源設定」，純數字）：
+        <b>{L('② 貼上你的 GA4 Property ID', '② Paste your GA4 Property ID')}</b>{L('（在 GA4「管理 → 資源設定」，純數字）：', ' (in GA4 "Admin → Property Settings"; digits only):')}
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-          <input value={propertyId} onChange={e => setPropertyId(e.target.value)} placeholder="例如 123456789"
+          <input value={propertyId} onChange={e => setPropertyId(e.target.value)} placeholder={L('例如 123456789', 'e.g. 123456789')}
             style={{ flex: 1, fontSize: 13, padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6 }} />
           <button onClick={save} disabled={saving || propertyId === savedId}
             style={{ flexShrink: 0, padding: '8px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', background: (saving || propertyId === savedId) ? '#9ca3af' : '#2563eb', color: 'white', cursor: 'pointer' }}>
-            {saving ? '⋯' : '儲存'}
+            {saving ? '⋯' : L('儲存', 'Save')}
           </button>
         </div>
       </div>
 
       <div style={step}>
-        <b>③ 測試連線</b>：
+        <b>{L('③ 測試連線', '③ Test connection')}</b>:
         <button onClick={test} disabled={testing || !savedId}
           style={{ marginLeft: 8, padding: '8px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #2563eb', background: '#eff6ff', color: '#1d4ed8', cursor: (testing || !savedId) ? 'default' : 'pointer' }}>
-          {testing ? '⋯ 測試中' : '↻ 測試連線'}
+          {testing ? L('⋯ 測試中', '⋯ Testing') : L('↻ 測試連線', '↻ Test connection')}
         </button>
       </div>
 

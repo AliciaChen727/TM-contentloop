@@ -32,9 +32,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { pageId, items, summary } = (await req.json()) as {
-    pageId?: string; items?: DiagItem[]; summary?: Record<string, number>
+  const { pageId, items, summary, language } = (await req.json()) as {
+    pageId?: string; items?: DiagItem[]; summary?: Record<string, number>; language?: 'zh-TW' | 'en'
   }
+  const en = language === 'en'
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   if (!(await canAccessPage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -46,8 +47,8 @@ export async function POST(req: NextRequest) {
   if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
   const geminiKey = process.env.GEMINI_API_KEY ?? (await getUserApiKey(uid, 'gemini')) ?? null
 
-  const cards = await getOrGenerateDiagnosisCards(pageId, allItems, summary ?? {}, anthropicKey, { geminiKey, anthropicKey })
-  if (!cards) return NextResponse.json({ error: 'AI 回應格式異常', fallback: true }, { status: 200 })
+  const cards = await getOrGenerateDiagnosisCards(pageId, allItems, summary ?? {}, anthropicKey, { geminiKey, anthropicKey }, en)
+  if (!cards) return NextResponse.json({ error: en ? 'Unexpected AI response format' : 'AI 回應格式異常', fallback: true }, { status: 200 })
 
   return NextResponse.json({ cards, fingerprint: computeDiagFingerprint(allItems) })
 }

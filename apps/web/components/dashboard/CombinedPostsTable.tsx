@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 interface FbPost {
   id: string
@@ -37,9 +38,10 @@ type SortKey = 'date' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'v
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 
-function buildPostPrompt(row: CombinedRow): string {
+function buildPostPrompt(row: CombinedRow, en: boolean): string {
   const platform = row.fbOnly ? 'Facebook' : row.igOnly ? 'Instagram' : 'FB+IG'
   const engRate = row.reach > 0 ? ((row.likes + row.comments + row.shares) / row.reach * 100).toFixed(2) : '0.00'
+  if (en) return `Please analyze this post:\nDate: ${row.date} | Platform: ${platform}\nContent: ${row.content.slice(0, 100)}\nReach: ${fmt(row.reach)} | Likes: ${row.likes} | Comments: ${row.comments} | Saves: ${row.saved} | Shares: ${row.shares} | Plays: ${row.views}\nEngagement: ${engRate}%\n\nPlease give a performance diagnosis and specific optimization suggestions.`
   return `請分析這篇貼文：\n日期：${row.date}｜平台：${platform}\n內容：${row.content.slice(0, 100)}\n觸及：${fmt(row.reach)}｜按讚：${row.likes}｜留言：${row.comments}｜收藏：${row.saved}｜分享：${row.shares}｜播放：${row.views}\n互動率：${engRate}%\n\n請給出這篇貼文的成效診斷和具體優化建議。`
 }
 
@@ -70,6 +72,8 @@ function PlatBadge({ row }: { row: CombinedRow }) {
 }
 
 export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbPost[]; igPosts: IgPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -87,7 +91,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
     }
     return Array.from(byDate.entries()).map(([date, { fb, ig }]) => ({
       date,
-      content: ig?.caption || fb?.message || '（無文字內容）',
+      content: ig?.caption || fb?.message || (en ? '(no text)' : '（無文字內容）'),
       permalink: ig?.permalink || fb?.permalink || '',
       fbOnly: !!fb && !ig,
       igOnly: !fb && !!ig,
@@ -101,7 +105,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
   }, [fbPosts, igPosts])
 
   if (!rows.length) {
-    return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>尚無整合貼文資料</p>
+    return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>{L('尚無整合貼文資料', 'No combined post data yet')}</p>
   }
 
   function handleSort(key: SortKey) {
@@ -129,14 +133,14 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
       <table className="ads-posts-table">
         <thead>
           <tr>
-            <SortTh k="date" label="日期" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <th style={{ textAlign: 'left' }}>內容</th>
-            <SortTh k="reach" label="觸及" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="likes" label="按讚" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="comments" label="留言" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="saved" label="收藏" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="shares" label="分享" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-            <SortTh k="views" label="播放" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="date" label={L('日期', 'Date')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <th style={{ textAlign: 'left' }}>{L('內容', 'Content')}</th>
+            <SortTh k="reach" label={L('觸及', 'Reach')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="likes" label={L('按讚', 'Likes')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="comments" label={L('留言', 'Comments')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="saved" label={L('收藏', 'Saves')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="shares" label={L('分享', 'Shares')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="views" label={L('播放', 'Plays')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             {onAskAI && <th style={{ width: 60 }} />}
           </tr>
         </thead>
@@ -178,16 +182,16 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
               {onAskAI && (
                 <td style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 8 }}>
                   <button
-                    title="用 AI 分析此貼文"
-                    onClick={() => onAskAI(buildPostPrompt(row), true)}
+                    title={L('用 AI 分析此貼文', 'Analyze this post with AI')}
+                    onClick={() => onAskAI(buildPostPrompt(row, en), true)}
                     style={{ background: 'rgba(255,255,255,0.92)', border: '1px solid var(--ad-border)', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', color: 'var(--ad-blue)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'nowrap' }}
-                  >✨ 分析</button>
+                  >✨ {L('分析', 'Analyze')}</button>
                 </td>
               )}
             </tr>
           ))}
           <tr style={{ background: 'var(--ad-surface2)', fontWeight: 600, borderTop: '2px solid var(--ad-border)' }}>
-            <td className="ads-posts-date">合計</td>
+            <td className="ads-posts-date">{L('合計', 'Total')}</td>
             <td />
             <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.reach)}</td>
             <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(totals.likes)}</td>
@@ -202,8 +206,8 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
         </tbody>
       </table>
       <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)', display: 'flex', justifyContent: 'space-between' }}>
-        <span>共 {rows.length} 筆記錄</span>
-        <span>點擊內容標題可前往原始貼文連結</span>
+        <span>{L(`共 ${rows.length} 筆記錄`, `${rows.length} records`)}</span>
+        <span>{L('點擊內容標題可前往原始貼文連結', 'Click a content title to open the original post')}</span>
       </div>
     </div>
   )

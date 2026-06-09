@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { auth } from '@/lib/firebase/client'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 // Phase 2 — in-app notification center bell + dropdown panel.
 // See docs/phase-2-notification-center.md.
@@ -27,19 +28,21 @@ const TYPE_ICON: Record<string, string> = {
   system: '🔔',
 }
 
-function relativeTime(ms: number | null): string {
+function relativeTime(ms: number | null, en: boolean): string {
   if (!ms) return ''
   const diff = Date.now() - ms
   const min = Math.floor(diff / 60000)
-  if (min < 1) return '剛剛'
-  if (min < 60) return `${min} 分鐘前`
+  if (min < 1) return en ? 'just now' : '剛剛'
+  if (min < 60) return en ? `${min} min ago` : `${min} 分鐘前`
   const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr} 小時前`
+  if (hr < 24) return en ? `${hr} hr ago` : `${hr} 小時前`
   const day = Math.floor(hr / 24)
-  return `${day} 天前`
+  return en ? `${day} d ago` : `${day} 天前`
 }
 
 export function NotificationBell() {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<NotificationItem[]>([])
   const [unread, setUnread] = useState(0)
@@ -112,7 +115,7 @@ export function NotificationBell() {
     <div ref={panelRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen((v) => !v)}
-        title="通知"
+        title={L('通知', 'Notifications')}
         style={{
           position: 'relative', background: 'none', border: 'none', cursor: 'pointer',
           fontSize: 18, lineHeight: 1, padding: 4, color: '#6B7280',
@@ -140,18 +143,18 @@ export function NotificationBell() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '12px 16px', borderBottom: '1px solid #F3F4F6', position: 'sticky', top: 0, background: 'white',
           }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>通知</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{L('通知', 'Notifications')}</span>
             {items.some((x) => !x.read) && (
               <button onClick={onMarkAll} style={{
                 background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6366F1',
-              }}>全部標為已讀</button>
+              }}>{L('全部標為已讀', 'Mark all read')}</button>
             )}
           </div>
 
           {loading && items.length === 0 ? (
-            <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>載入中⋯⋯</div>
+            <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>{L('載入中⋯⋯', 'Loading…')}</div>
           ) : items.length === 0 ? (
-            <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>目前沒有通知 🎉</div>
+            <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>{L('目前沒有通知 🎉', 'No notifications 🎉')}</div>
           ) : (
             items.map((n) => (
               <button
@@ -172,7 +175,7 @@ export function NotificationBell() {
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{n.title}</div>
                     {n.advice && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2, whiteSpace: 'pre-line' }}>{n.advice}</div>}
                     <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
-                      {n.pageName}{n.pageName && n.createdAt ? ' · ' : ''}{relativeTime(n.createdAt)}
+                      {n.pageName}{n.pageName && n.createdAt ? ' · ' : ''}{relativeTime(n.createdAt, en)}
                     </div>
                   </div>
                 </div>

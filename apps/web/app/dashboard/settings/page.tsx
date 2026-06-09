@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { GaConnectCard } from '@/components/analytics/GaConnectCard'
 import { ThreadsConnectCard } from '@/components/analytics/ThreadsConnectCard'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
@@ -32,6 +33,7 @@ function ProgressBar({ used, limit }: { used: number; limit: number }) {
 
 export default function SettingsPage() {
   const router = useRouter()
+  const { L, lang, setLang: setDashLang } = useLang()
   const [idToken, setIdToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [language, setLanguage] = useState<Language>('zh-TW')
@@ -161,6 +163,7 @@ export default function SettingsPage() {
 
   async function handleLanguageChange(lang: Language) {
     setLanguage(lang)
+    setDashLang(lang)   // 立即套用到整個儀表板（context + localStorage）
     await fetch('/api/user/preferences', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
@@ -270,7 +273,7 @@ export default function SettingsPage() {
 
   if (loading) return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
-      <p className="text-sm text-gray-400">載入中⋯⋯</p>
+      <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
     </main>
   )
 
@@ -278,8 +281,8 @@ export default function SettingsPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-8 py-4">
         <div className="mx-auto flex max-w-2xl items-center gap-4">
-          <button onClick={() => router.back()} className="text-sm text-gray-400 hover:text-gray-600">← 返回</button>
-          <h1 className="text-base font-bold text-gray-900">設定</h1>
+          <button onClick={() => router.back()} className="text-sm text-gray-400 hover:text-gray-600">{L('← 返回', '← Back')}</button>
+          <h1 className="text-base font-bold text-gray-900">{L('設定', 'Settings')}</h1>
         </div>
       </header>
 
@@ -288,7 +291,7 @@ export default function SettingsPage() {
         {/* Page selector — only shown when managing multiple pages */}
         {pages.length > 1 && (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3">
-            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">目前設定粉專</span>
+            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">{L('目前設定粉專', 'Page being configured')}</span>
             <select value={selectedPageId} onChange={e => handlePageSwitch(e.target.value)}
               className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700 bg-white">
               {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
@@ -310,12 +313,12 @@ export default function SettingsPage() {
         {/* Copy-from-first banner */}
         {copyBanner && (
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-4">
-            <p className="text-sm text-blue-700">這個粉專還沒有設定，要套用「{pages[0]?.pageName}」的設定嗎？</p>
+            <p className="text-sm text-blue-700">{L(`這個粉專還沒有設定，要套用「${pages[0]?.pageName}」的設定嗎？`, `This page isn't configured yet. Apply settings from "${pages[0]?.pageName}"?`)}</p>
             <div className="flex gap-2 shrink-0">
               <button onClick={handleCopyFromFirst}
-                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">套用</button>
+                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">{L('套用', 'Apply')}</button>
               <button onClick={() => setCopyBanner(false)}
-                className="px-3 py-1.5 border border-blue-300 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">略過</button>
+                className="px-3 py-1.5 border border-blue-300 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">{L('略過', 'Skip')}</button>
             </div>
           </div>
         )}
@@ -325,8 +328,8 @@ export default function SettingsPage() {
           <div className="bg-white rounded-2xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-sm font-bold text-gray-800">本月用量</h2>
-                <p className="text-xs text-gray-400 mt-0.5">每月 1 日重置</p>
+                <h2 className="text-sm font-bold text-gray-800">{L('本月用量', "This month's usage")}</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{L('每月 1 日重置', 'Resets on the 1st')}</p>
               </div>
               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${usage.tier === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
                 {usage.tier === 'pro' ? 'Pro' : 'Free'}
@@ -337,8 +340,8 @@ export default function SettingsPage() {
               {/* Image usage */}
               <div>
                 <div className="flex justify-between text-xs text-gray-600 mb-1">
-                  <span>圖片生成</span>
-                  <span className="font-mono">{usage.imageCount} / {usage.imageLimit} 張</span>
+                  <span>{L('圖片生成', 'Image generation')}</span>
+                  <span className="font-mono">{usage.imageCount} / {usage.imageLimit} {L('張', 'imgs')}</span>
                 </div>
                 <ProgressBar used={usage.imageCount} limit={usage.imageLimit} />
               </div>
@@ -346,10 +349,10 @@ export default function SettingsPage() {
               {/* Video usage */}
               <div>
                 <div className="flex justify-between text-xs text-gray-600 mb-1">
-                  <span>影片生成</span>
+                  <span>{L('影片生成', 'Video generation')}</span>
                   {usage.videoSecondsLimit === 0
-                    ? <span className="text-gray-400">Free 方案不開放</span>
-                    : <span className="font-mono">{usage.videoSeconds} / {usage.videoSecondsLimit} 秒</span>
+                    ? <span className="text-gray-400">{L('Free 方案不開放', 'Not available on Free')}</span>
+                    : <span className="font-mono">{usage.videoSeconds} / {usage.videoSecondsLimit} {L('秒', 'sec')}</span>
                   }
                 </div>
                 {usage.videoSecondsLimit > 0 && (
@@ -364,7 +367,7 @@ export default function SettingsPage() {
         {/* Language */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
           <h2 className="text-sm font-bold text-gray-800 mb-1">語言 / Language</h2>
-          <p className="text-xs text-gray-400 mb-4">影響 AI Sidekick 的回應語言。其他 UI 全面翻譯將於後續版本推出。</p>
+          <p className="text-xs text-gray-400 mb-4">{L('影響整個儀表板與 AI Sidekick 的語言（含 A/B 文案與生圖文字）。', 'Controls the language of the entire dashboard and AI Sidekick (including A/B copy and in-image text).')}</p>
           <div className="flex gap-4">
             {([['zh-TW', '繁體中文'], ['en', 'English']] as [Language, string][]).map(([val, label]) => (
               <label key={val} className="flex items-center gap-2 cursor-pointer select-none">
@@ -384,17 +387,17 @@ export default function SettingsPage() {
 
         {/* Ad Goal & Industry */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">廣告目標設定</h2>
-          <p className="text-xs text-gray-400 mb-5">調整後儀表板的 KPI 排序與 AI Sidekick 建議會同步更新。</p>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">{L('廣告目標設定', 'Ad objective')}</h2>
+          <p className="text-xs text-gray-400 mb-5">{L('調整後儀表板的 KPI 排序與 AI Sidekick 建議會同步更新。', 'Changing this updates the dashboard KPI order and AI Sidekick advice.')}</p>
           <div className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-2">最在乎的廣告目標</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">{L('最在乎的廣告目標', 'Primary ad objective')}</label>
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  { v: 'clicks', t: '提升點擊率', d: 'CTR / CPC / 連結點擊' },
-                  { v: 'conversion', t: '提升轉換與 ROI', d: 'ROAS / CPA / 轉換數' },
-                  { v: 'reach', t: '擴大品牌觸及', d: 'CPM / 觸及 / 曝光' },
-                  { v: 'event', t: '活動報名推廣', d: 'CTR / CPL / 頁面瀏覽' },
+                  { v: 'clicks', t: L('提升點擊率', 'Boost click-through'), d: L('CTR / CPC / 連結點擊', 'CTR / CPC / link clicks') },
+                  { v: 'conversion', t: L('提升轉換與 ROI', 'Conversions & ROI'), d: L('ROAS / CPA / 轉換數', 'ROAS / CPA / conversions') },
+                  { v: 'reach', t: L('擴大品牌觸及', 'Brand reach'), d: L('CPM / 觸及 / 曝光', 'CPM / reach / impressions') },
+                  { v: 'event', t: L('活動報名推廣', 'Event sign-ups'), d: L('CTR / CPL / 頁面瀏覽', 'CTR / CPL / page views') },
                 ] as const).map(opt => {
                   const active = adGoal === opt.v
                   return (
@@ -411,14 +414,14 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-2">產業類別</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">{L('產業類別', 'Industry')}</label>
               <div className="flex flex-wrap gap-2">
                 {([
-                  { v: 'ecommerce', t: '電商 / 零售' },
-                  { v: 'education', t: '課程 / 教育訓練' },
-                  { v: 'event', t: '活動 / 社群組織' },
-                  { v: 'personal_brand', t: '個人品牌 / 自媒體' },
-                  { v: 'other', t: '其他' },
+                  { v: 'ecommerce', t: L('電商 / 零售', 'E-commerce / Retail') },
+                  { v: 'education', t: L('課程 / 教育訓練', 'Courses / Training') },
+                  { v: 'event', t: L('活動 / 社群組織', 'Events / Community') },
+                  { v: 'personal_brand', t: L('個人品牌 / 自媒體', 'Personal brand / Creator') },
+                  { v: 'other', t: L('其他', 'Other') },
                 ] as const).map(opt => {
                   const active = industry === opt.v
                   return (
@@ -437,7 +440,7 @@ export default function SettingsPage() {
                   type="text"
                   value={industryOther}
                   onChange={e => setIndustryOther(e.target.value)}
-                  placeholder="請輸入你的產業（例：寵物用品、SaaS、醫美…）"
+                  placeholder={L('請輸入你的產業（例：寵物用品、SaaS、醫美…）', 'Enter your industry (e.g. pet supplies, SaaS, aesthetics…)')}
                   className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 text-gray-700"
                   autoFocus
                 />
@@ -448,33 +451,33 @@ export default function SettingsPage() {
               disabled={goalSaveState === 'saving' || !goalReady}
               className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
-              {goalSaveState === 'saving' ? '儲存中⋯' : goalSaveState === 'ok' ? '已儲存 ✓' : goalSaveState === 'error' ? '儲存失敗' : '儲存'}
+              {goalSaveState === 'saving' ? L('儲存中⋯', 'Saving…') : goalSaveState === 'ok' ? L('已儲存 ✓', 'Saved ✓') : goalSaveState === 'error' ? L('儲存失敗', 'Save failed') : L('儲存', 'Save')}
             </button>
           </div>
         </div>
 
         {/* Brand context */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">AI 顧問背景補充</h2>
-          <p className="text-xs text-gray-400 mb-5">填寫後，AI Sidekick 會依你的品牌 / 組織給出更精準的廣告建議。留空則沿用上方產業設定。</p>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">{L('AI 顧問背景補充', 'AI advisor context')}</h2>
+          <p className="text-xs text-gray-400 mb-5">{L('填寫後，AI Sidekick 會依你的品牌 / 組織給出更精準的廣告建議。留空則沿用上方產業設定。', 'Fill this in and AI Sidekick gives more precise advice based on your brand / organization. Leave blank to use the industry setting above.')}</p>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">品牌 / 組織名稱</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">{L('品牌 / 組織名稱', 'Brand / organization name')}</label>
               <input
                 type="text"
                 value={brandName}
                 onChange={e => setBrandName(e.target.value)}
-                placeholder="例：TM 分會、XX 電商、OO 學院"
+                placeholder={L('例：TM 分會、XX 電商、OO 學院', 'e.g. TM Club, XX Store, OO Academy')}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">補充說明（選填）</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">{L('補充說明（選填）', 'Additional notes (optional)')}</label>
               <input
                 type="text"
                 value={extraContext}
                 onChange={e => setExtraContext(e.target.value)}
-                placeholder="例：主要銷售女裝，目標受眾 25-40 歲女性，客單價 $1,500"
+                placeholder={L('例：主要銷售女裝，目標受眾 25-40 歲女性，客單價 $1,500', "e.g. Sell women's apparel, target women 25-40, AOV $1,500")}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700"
               />
             </div>
@@ -483,7 +486,7 @@ export default function SettingsPage() {
               disabled={brandSaveState === 'saving'}
               className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
             >
-              {brandSaveState === 'saving' ? '儲存中⋯' : brandSaveState === 'ok' ? '已儲存 ✓' : brandSaveState === 'error' ? '儲存失敗' : '儲存'}
+              {brandSaveState === 'saving' ? L('儲存中⋯', 'Saving…') : brandSaveState === 'ok' ? L('已儲存 ✓', 'Saved ✓') : brandSaveState === 'error' ? L('儲存失敗', 'Save failed') : L('儲存', 'Save')}
             </button>
           </div>
         </div>
@@ -491,12 +494,12 @@ export default function SettingsPage() {
         {/* Ad Alert Notifications — admin only */}
         {!!pages.find(p => p.pageId === selectedPageId)?.permissions === false &&
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">成效診斷優化建議通知</h2>
-          <p className="text-xs text-gray-400 mb-5">自動診斷廣告與貼文成效（CTR、素材疲勞、貼文互動、最佳貼文加碼等），在你設定的星期與時間以 Email 通知你（台灣時間）。</p>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">{L('成效診斷優化建議通知', 'Performance diagnosis alerts')}</h2>
+          <p className="text-xs text-gray-400 mb-5">{L('自動診斷廣告與貼文成效（CTR、素材疲勞、貼文互動、最佳貼文加碼等），在你設定的星期與時間以 Email 通知你（台灣時間）。', 'Automatically diagnoses ad & post performance (CTR, creative fatigue, post engagement, top-post boosting, etc.) and emails you on the days and time you set (Taiwan time).')}</p>
           <div className="mb-4">
-            <div className="text-xs text-gray-500 mb-2">通知狀態</div>
+            <div className="text-xs text-gray-500 mb-2">{L('通知狀態', 'Notification status')}</div>
             <div className="flex gap-2">
-              {([[true, '開啟'], [false, '關閉']] as const).map(([v, label]) => (
+              {([[true, L('開啟', 'On')], [false, L('關閉', 'Off')]] as const).map(([v, label]) => (
                 <button key={String(v)} onClick={() => setAlertEnabled(v)}
                   className={`px-4 py-2 text-sm rounded-lg border transition-colors ${alertEnabled === v ? 'border-blue-400 bg-blue-50 text-blue-600 font-semibold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                   {label}
@@ -507,14 +510,14 @@ export default function SettingsPage() {
           {alertEnabled && (
             <>
               <div className="mb-4">
-                <div className="text-xs text-gray-500 mb-2">通知星期</div>
+                <div className="text-xs text-gray-500 mb-2">{L('通知星期', 'Notification days')}</div>
                 <div className="flex gap-2">
-                  {['日','一','二','三','四','五','六'].map((label, d) => {
+                  {(lang === 'en' ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] : ['日','一','二','三','四','五','六']).map((label, d) => {
                     const on = alertDays.includes(d)
                     return (
                       <button key={d}
                         onClick={() => setAlertDays(on ? alertDays.filter(x => x !== d) : [...alertDays, d].sort())}
-                        className={`w-9 h-9 rounded-full text-sm font-semibold transition-colors ${on ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+                        className={`min-w-9 px-2 h-9 rounded-full text-sm font-semibold transition-colors ${on ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
                         {label}
                       </button>
                     )
@@ -522,7 +525,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="mb-4">
-                <div className="text-xs text-gray-500 mb-2">通知時間（整點）</div>
+                <div className="text-xs text-gray-500 mb-2">{L('通知時間（整點）', 'Notification time (on the hour)')}</div>
                 <select value={alertHour} onChange={e => setAlertHour(Number(e.target.value))}
                   className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700 bg-white">
                   {Array.from({ length: 24 }, (_, h) => (
@@ -533,13 +536,13 @@ export default function SettingsPage() {
             </>
           )}
           <div className="mb-4">
-            <div className="text-xs text-gray-500 mb-2">通知 Email（留空則寄到你的登入信箱）</div>
+            <div className="text-xs text-gray-500 mb-2">{L('通知 Email（留空則寄到你的登入信箱）', 'Notification email (blank = your login email)')}</div>
             <div className="space-y-2">
               {alertEmails.map((email, i) => (
                 <div key={i} className="flex gap-2">
                   <input type="email" value={email}
                     onChange={e => { const arr = [...alertEmails]; arr[i] = e.target.value; setAlertEmails(arr) }}
-                    placeholder={i === 0 ? '選填，自訂收件信箱' : '新增信箱'}
+                    placeholder={i === 0 ? L('選填，自訂收件信箱', 'Optional, custom recipient') : L('新增信箱', 'Add email')}
                     className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700" />
                   {alertEmails.length > 1 && (
                     <button onClick={() => setAlertEmails(alertEmails.filter((_, j) => j !== i))}
@@ -548,24 +551,24 @@ export default function SettingsPage() {
                 </div>
               ))}
               <button onClick={() => setAlertEmails([...alertEmails, ''])}
-                className="text-xs text-blue-500 hover:text-blue-700 font-medium mt-1">+ 新增收件人</button>
+                className="text-xs text-blue-500 hover:text-blue-700 font-medium mt-1">{L('+ 新增收件人', '+ Add recipient')}</button>
             </div>
           </div>
           <button onClick={handleAlertSave} disabled={alertSaveState === 'saving'}
             className="px-4 py-2 bg-[#3B6FD4] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
-            {alertSaveState === 'saving' ? '儲存中⋯' : alertSaveState === 'ok' ? '已儲存 ✓' : alertSaveState === 'error' ? '儲存失敗，請重試' : '儲存'}
+            {alertSaveState === 'saving' ? L('儲存中⋯', 'Saving…') : alertSaveState === 'ok' ? L('已儲存 ✓', 'Saved ✓') : alertSaveState === 'error' ? L('儲存失敗，請重試', 'Save failed, retry') : L('儲存', 'Save')}
           </button>
         </div>}
 
         {/* Canva Integration */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">Canva 整合</h2>
-          <p className="text-xs text-gray-400 mb-5">連接 Canva 後，AI Sidekick 可分析你的設計稿並上傳圖片素材。</p>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">{L('Canva 整合', 'Canva integration')}</h2>
+          <p className="text-xs text-gray-400 mb-5">{L('連接 Canva 後，AI Sidekick 可分析你的設計稿並上傳圖片素材。', 'Once connected, AI Sidekick can analyze your designs and upload image assets to Canva.')}</p>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${canvaConnected ? 'bg-green-400' : 'bg-gray-300'}`} />
               <span className="text-sm text-gray-700">
-                {canvaConnected === null ? '檢查中⋯' : canvaConnected ? '已連接' : '尚未連接'}
+                {canvaConnected === null ? L('檢查中⋯', 'Checking…') : canvaConnected ? L('已連接', 'Connected') : L('尚未連接', 'Not connected')}
               </span>
             </div>
             {!canvaConnected && (
@@ -574,36 +577,36 @@ export default function SettingsPage() {
                 disabled={!idToken}
                 className="px-4 py-2 bg-[#8B5CF6] text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
               >
-                連接 Canva
+                {L('連接 Canva', 'Connect Canva')}
               </button>
             )}
             {canvaConnected && (
               <div className="flex items-center gap-3">
-                <span className="text-xs text-green-600 font-semibold">✓ 授權有效</span>
+                <span className="text-xs text-green-600 font-semibold">{L('✓ 授權有效', '✓ Authorized')}</span>
                 <button
                   onClick={switchCanvaAccount}
                   disabled={!idToken}
                   className="px-3 py-1.5 border border-gray-300 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  切換帳號
+                  {L('切換帳號', 'Switch account')}
                 </button>
                 <button
                   onClick={disconnectCanva}
                   disabled={!idToken}
                   className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
                 >
-                  中斷連接
+                  {L('中斷連接', 'Disconnect')}
                 </button>
               </div>
             )}
           </div>
           {canvaMsg === 'connected' && (
-            <p className="text-xs text-green-600 mt-3">✅ Canva 連接成功！</p>
+            <p className="text-xs text-green-600 mt-3">{L('✅ Canva 連接成功！', '✅ Canva connected!')}</p>
           )}
           {/* Only surface an error when we're genuinely not connected — a stale
               bad_state replay after a successful connect should not alarm. */}
           {canvaMsg === 'error' && canvaConnected === false && (
-            <p className="text-xs text-red-500 mt-3">連接失敗，請稍後再試。</p>
+            <p className="text-xs text-red-500 mt-3">{L('連接失敗，請稍後再試。', 'Connection failed, please try again later.')}</p>
           )}
         </div>
 

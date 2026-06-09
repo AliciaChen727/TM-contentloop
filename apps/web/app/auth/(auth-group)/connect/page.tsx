@@ -25,6 +25,10 @@ function ConnectContent() {
   const errorType = searchParams.get('error')
   const errorMsg = searchParams.get('msg')
   const [pageLabel, setPageLabel] = useState<string>('')
+  // Pre-auth page (no language context); honor the saved UI language preference.
+  const [en, setEn] = useState(false)
+  useEffect(() => { setEn(localStorage.getItem('cl_dash_lang') === 'en' || localStorage.getItem('cl_lang') === 'en') }, [])
+  const L = (zh: string, eng: string) => (en ? eng : zh)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -66,37 +70,37 @@ function ConnectContent() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900">連接 Facebook</h1>
+        <h1 className="mb-2 text-2xl font-bold text-gray-900">{L('連接 Facebook', 'Connect Facebook')}</h1>
         <p className="mb-4 text-sm text-gray-500">
-          授權 ContentLoop 讀取你的 FB 粉專與 IG 成效資料。
+          {L('授權 ContentLoop 讀取你的 FB 粉專與 IG 成效資料。', 'Authorize ContentLoop to read your FB Page and IG performance data.')}
         </p>
 
         {errorType === 'denied' && (
           <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4">
-            <p className="text-xs font-semibold text-red-700">授權被取消，請重新連接。</p>
+            <p className="text-xs font-semibold text-red-700">{L('授權被取消，請重新連接。', 'Authorization was cancelled. Please reconnect.')}</p>
           </div>
         )}
 
         {errorType === 'token' && (
           <div className="mb-4 rounded-xl border border-red-100 bg-red-50 p-4">
-            <p className="mb-1 text-xs font-semibold text-red-700">連接失敗，請重試。</p>
+            <p className="mb-1 text-xs font-semibold text-red-700">{L('連接失敗，請重試。', 'Connection failed, please retry.')}</p>
             {errorMsg && (
               <p className="break-all text-xs text-red-500">{decodeURIComponent(errorMsg)}</p>
             )}
-            <p className="mt-2 text-xs text-red-400">提示：請確認在 Facebook 上已被加為此粉絲頁的「管理員（Admin）」角色，且授權時有勾選此粉絲頁。</p>
+            <p className="mt-2 text-xs text-red-400">{L('提示：請確認在 Facebook 上已被加為此粉絲頁的「管理員（Admin）」角色，且授權時有勾選此粉絲頁。', 'Tip: make sure you are an Admin of this Page on Facebook, and that you selected this Page during authorization.')}</p>
           </div>
         )}
 
         <div className="mb-6 space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">授權步驟說明</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{L('授權步驟說明', 'Authorization steps')}</p>
 
           {/* Step 1 */}
           <div className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">1</span>
             <div>
-              <p className="text-xs font-semibold text-gray-800">選擇商家</p>
+              <p className="text-xs font-semibold text-gray-800">{L('選擇商家', 'Choose a business')}</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                只勾選 <strong className="text-gray-700">{pageLabel || '你的品牌/組織'}</strong> 相關商家，其餘商家<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
+                {L('只勾選 ', 'Select only the business related to ')}<strong className="text-gray-700">{pageLabel || L('你的品牌/組織', 'your brand/organization')}</strong>{L(' 相關商家，其餘商家', '; ')}<span className="text-red-500 font-medium">{L('不需勾選', 'leave the others unchecked')}</span>{L('，直接點「下一步」。', ', then click "Next".')}
               </p>
             </div>
           </div>
@@ -105,9 +109,9 @@ function ConnectContent() {
           <div className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">2</span>
             <div>
-              <p className="text-xs font-semibold text-gray-800">選擇粉絲專頁</p>
+              <p className="text-xs font-semibold text-gray-800">{L('選擇粉絲專頁', 'Choose a Page')}</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                只勾選 <strong className="text-gray-700">{pageLabel ? `「${pageLabel}」` : '你的品牌粉絲專頁'}</strong>，其他粉專<span className="text-red-500 font-medium">不需勾選</span>，直接點「下一步」。
+                {L('只勾選 ', 'Select only ')}<strong className="text-gray-700">{pageLabel ? `「${pageLabel}」` : L('你的品牌粉絲專頁', 'your brand Page')}</strong>{L('，其他粉專', '; ')}<span className="text-red-500 font-medium">{L('不需勾選', 'leave the other Pages unchecked')}</span>{L('，直接點「下一步」。', ', then click "Next".')}
               </p>
             </div>
           </div>
@@ -116,8 +120,8 @@ function ConnectContent() {
           <div className="flex gap-3 rounded-xl border border-amber-100 bg-amber-50 p-3">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400 text-[10px] font-bold text-white">!</span>
             <div>
-              <p className="text-xs font-semibold text-amber-800">出現其他商家資產、廣告帳戶等畫面？</p>
-              <p className="mt-0.5 text-xs text-amber-700"><strong>不需要勾選任何項目</strong>，直接點「下一步」或「完成」即可完成授權。</p>
+              <p className="text-xs font-semibold text-amber-800">{L('出現其他商家資產、廣告帳戶等畫面？', 'See other business assets, ad accounts, etc.?')}</p>
+              <p className="mt-0.5 text-xs text-amber-700"><strong>{L('不需要勾選任何項目', "You don't need to check anything")}</strong>{L('，直接點「下一步」或「完成」即可完成授權。', ' — just click "Next" or "Done" to finish authorization.')}</p>
             </div>
           </div>
         </div>
@@ -129,7 +133,7 @@ function ConnectContent() {
           <svg className="h-5 w-5 fill-white" viewBox="0 0 24 24">
             <path d="M24 12.073C24 5.404 18.627 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z" />
           </svg>
-          連接 Facebook 粉絲專頁
+          {L('連接 Facebook 粉絲專頁', 'Connect Facebook Page')}
         </button>
       </div>
     </main>

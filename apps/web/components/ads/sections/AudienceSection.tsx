@@ -2,17 +2,18 @@
 
 import { useMemo } from 'react'
 import type { DemoBreakdown, FunnelStage } from '../types'
+import { useLang } from '@/lib/i18n/LanguageProvider'
 
 // Funnel stages in canonical order (matches the API's audience-based classification).
 const FUNNEL_ORDER = ['Acquisition Prospecting', 'Retargeting', 'Retention']
-const FUNNEL_LABEL: Record<string, string> = {
-  'Acquisition Prospecting': '開發新客 (Prospecting・冷受眾)',
-  'Retargeting': '再行銷 (Retargeting・互動/網站受眾)',
-  'Retention': '回購留存 (Retention・會員/顧客名單)',
-}
+const funnelLabel = (stage: string, en: boolean): string => en
+  ? ({ 'Acquisition Prospecting': 'Prospecting (cold audiences)', 'Retargeting': 'Retargeting (engaged / site audiences)', 'Retention': 'Retention (members / customer lists)' }[stage] ?? stage)
+  : ({ 'Acquisition Prospecting': '開發新客 (Prospecting・冷受眾)', 'Retargeting': '再行銷 (Retargeting・互動/網站受眾)', 'Retention': '回購留存 (Retention・會員/顧客名單)' }[stage] ?? stage)
 
 // Friendlier gender labels; Meta returns male / female / unknown.
-const GENDER_LABEL: Record<string, string> = { male: '男', female: '女', unknown: '未知' }
+const genderLabel = (g: string, en: boolean): string => en
+  ? ({ male: 'M', female: 'F', unknown: 'Unknown' }[g] ?? g)
+  : ({ male: '男', female: '女', unknown: '未知' }[g] ?? g)
 
 type Kind = 'currency' | 'int' | 'percent' | 'ratio'
 const fmt = (v: number, kind: Kind) =>
@@ -39,10 +40,10 @@ const derive = (r: Row, hasPurchase: boolean) => ({
 })
 
 // Column set adapts to whether this page sells (purchase) or not.
-function columns(hasPurchase: boolean): { key: string; label: string; kind: Kind }[] {
+function columns(hasPurchase: boolean, en: boolean): { key: string; label: string; kind: Kind }[] {
   const base: { key: string; label: string; kind: Kind }[] = [
-    { key: 'spend', label: '花費', kind: 'currency' },
-    { key: 'clicks', label: '點擊', kind: 'int' },
+    { key: 'spend', label: en ? 'Spend' : '花費', kind: 'currency' },
+    { key: 'clicks', label: en ? 'Clicks' : '點擊', kind: 'int' },
     { key: 'ctr', label: 'CTR', kind: 'percent' },
     { key: 'cpc', label: 'CPC', kind: 'currency' },
     { key: 'roas', label: 'ROAS', kind: 'ratio' },
@@ -50,7 +51,7 @@ function columns(hasPurchase: boolean): { key: string; label: string; kind: Kind
   if (hasPurchase) {
     base.push(
       { key: 'revenue', label: 'Revenue', kind: 'currency' },
-      { key: 'conversions', label: '轉換', kind: 'int' },
+      { key: 'conversions', label: en ? 'Conversions' : '轉換', kind: 'int' },
       { key: 'cpp', label: 'Cost / Purchase', kind: 'currency' },
     )
   }
@@ -102,15 +103,17 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
   funnelStages?: FunnelStage[]
   conversionType?: string
 }) {
+  const { L, lang } = useLang()
+  const en = lang === 'en'
   const hasPurchase = conversionType === 'purchase'
-  const cols = useMemo(() => columns(hasPurchase), [hasPurchase])
+  const cols = useMemo(() => columns(hasPurchase, en), [hasPurchase, en])
 
   // Age × Gender: single table, one row per (age, gender), sorted by spend desc.
   const demoRows: Row[] = useMemo(() =>
     demographics
-      .map(d => ({ label: `${d.age} · ${GENDER_LABEL[d.gender] ?? d.gender}`, spend: d.spend, clicks: d.clicks, impressions: d.impressions, conversions: d.conversions, revenue: d.revenue }))
+      .map(d => ({ label: `${d.age} · ${genderLabel(d.gender, en)}`, spend: d.spend, clicks: d.clicks, impressions: d.impressions, conversions: d.conversions, revenue: d.revenue }))
       .sort((a, b) => b.spend - a.spend)
-  , [demographics])
+  , [demographics, en])
 
   // Funnel: fixed stage order, drop stages with no spend/impressions.
   const funnelRows: Row[] = useMemo(() => {
@@ -118,16 +121,16 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
     return FUNNEL_ORDER
       .map(stage => {
         const f = byStage.get(stage)
-        return { label: FUNNEL_LABEL[stage] ?? stage, spend: f?.spend ?? 0, clicks: f?.clicks ?? 0, impressions: f?.impressions ?? 0, conversions: f?.conversions ?? 0, revenue: f?.revenue ?? 0 }
+        return { label: funnelLabel(stage, en), spend: f?.spend ?? 0, clicks: f?.clicks ?? 0, impressions: f?.impressions ?? 0, conversions: f?.conversions ?? 0, revenue: f?.revenue ?? 0 }
       })
       .filter(r => r.spend > 0 || r.impressions > 0)
-  }, [funnelStages])
+  }, [funnelStages, en])
 
   const empty = demoRows.length === 0 && funnelRows.length === 0
   if (empty) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: '#9A9490', fontSize: 13 }}>
-        此粉專在所選區間內沒有受眾資料。<br />請選擇有投放廣告的日期區間,並按「同步廣告資料」。
+        {L('此粉專在所選區間內沒有受眾資料。', 'No audience data for this page in the selected range.')}<br />{L('請選擇有投放廣告的日期區間,並按「同步廣告資料」。', 'Pick a date range with ad delivery and click "Sync ad data".')}
       </div>
     )
   }
@@ -137,25 +140,25 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
       {/* Age × Gender */}
       <section>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>人口統計（年齡 × 性別）</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>{L('人口統計（年齡 × 性別）', 'Demographics (Age × Gender)')}</h2>
           <span style={{ fontSize: 11.5, color: '#9A9490' }}>
-            {hasPurchase ? '電商粉專:顯示 Revenue / 轉換 / Cost per Purchase' : '本粉專廣告層級資料(已隔離,不含同帳號其他粉專)'}
+            {hasPurchase ? L('電商粉專:顯示 Revenue / 轉換 / Cost per Purchase', 'E-commerce page: shows Revenue / Conversions / Cost per Purchase') : L('本粉專廣告層級資料(已隔離,不含同帳號其他粉專)', 'Ad-level data for this page (isolated; excludes other pages on the same account)')}
           </span>
         </div>
         {demoRows.length === 0
-          ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>所選區間內沒有人口統計資料。</div>
-          : <MetricTable rows={demoRows} cols={cols} hasPurchase={hasPurchase} firstHeader="年齡 · 性別" />}
+          ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>{L('所選區間內沒有人口統計資料。', 'No demographic data in the selected range.')}</div>
+          : <MetricTable rows={demoRows} cols={cols} hasPurchase={hasPurchase} firstHeader={L('年齡 · 性別', 'Age · Gender')} />}
       </section>
 
       {/* Funnel stages */}
       <section>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>漏斗階段</h2>
-          <span style={{ fontSize: 11.5, color: '#9A9490' }}>依 ad set 自訂受眾類型分類(互動/網站→再行銷,會員名單→留存)</span>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>{L('漏斗階段', 'Funnel Stages')}</h2>
+          <span style={{ fontSize: 11.5, color: '#9A9490' }}>{L('依 ad set 自訂受眾類型分類(互動/網站→再行銷,會員名單→留存)', 'Classified by ad set custom-audience type (engagement/site → retargeting, member lists → retention)')}</span>
         </div>
         {funnelRows.length === 0
-          ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>所選區間內沒有漏斗階段資料。</div>
-          : <MetricTable rows={funnelRows} cols={cols} hasPurchase={hasPurchase} firstHeader="漏斗階段" />}
+          ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>{L('所選區間內沒有漏斗階段資料。', 'No funnel data in the selected range.')}</div>
+          : <MetricTable rows={funnelRows} cols={cols} hasPurchase={hasPurchase} firstHeader={L('漏斗階段', 'Funnel stage')} />}
       </section>
     </div>
   )

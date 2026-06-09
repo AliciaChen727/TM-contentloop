@@ -8,6 +8,7 @@ import { loadContentDiagnosis } from '@/lib/ads/contentDiagnosisServer'
 import { diagnosisCardKey, severityRank } from '@/lib/ads/diagnosisCardKey'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import type { DiagItem, AiDiagCard } from '@/components/ads/types'
+import type { AlertItem } from '@/lib/alerts/types'
 import type { Timestamp } from 'firebase-admin/firestore'
 import { writeInAppNotification, resolveUidsFromEmails, buildAdAnomalyNotification } from '@/lib/notifications/store'
 
@@ -124,21 +125,50 @@ export async function processPageAlerts(pageId: string): Promise<{
   const alerts = diagnosisToAlertItems(items)
   if (alerts.length === 0) return { sent: false, reason: 'no alerts', alertCount: 0 }
 
-  // Agent rewrite (Layer 2). Reuses the fingerprint cache shared with the
-  // diagnosis page; only calls Haiku on a cache miss. Key: env, else page owner's
-  // stored key. Failure → cards null → email/bell fall back to rule text.
-  let cards: AiDiagCard[] | null = null
-  try {
-    let apiKey = process.env.ANTHROPIC_API_KEY ?? null
-    if (!apiKey && ownerUid) apiKey = await getUserApiKey(ownerUid, 'anthropic')
-    if (apiKey) {
-      const summary = (snap.summary ?? {}) as Record<string, number>
-      let geminiKey = process.env.GEMINI_API_KEY ?? null
-      if (!geminiKey && ownerUid) geminiKey = await getUserApiKey(ownerUid, 'gemini')
-      cards = await getOrGenerateDiagnosisCards(pageId, items, summary, apiKey, { geminiKey, anthropicKey: apiKey })
+  // The set of "live" cards after status filtering (keys are language-stable, so
+  // the same survivors apply regardless of which language we render in).
+  const survivingKeys = new Set(items.map(diagnosisCardKey))
+  const summary = (snap.summary ?? {}) as Record<string, number>
+  const adPostIds = Array.isArray(snap.adPostIds) ? (snap.adPostIds as string[]) : []
+  const igPostIds = Array.isArray(snap.igPostIds) ? (snap.igPostIds as string[]) : []
+  let apiKey = process.env.ANTHROPIC_API_KEY ?? null
+  if (!apiKey && ownerUid) apiKey = await getUserApiKey(ownerUid, 'anthropic')
+  let geminiKey = process.env.GEMINI_API_KEY ?? null
+  if (!geminiKey && ownerUid) geminiKey = await getUserApiKey(ownerUid, 'gemini')
+
+  // Per-language digest (recipients may have different language prefs). Memoized:
+  // recompute diagnosis text in the target language, filter to the live survivors,
+  // then run the Agent rewrite (fingerprint cache is language-distinct).
+  const digestCache = new Map<boolean, { alerts: AlertItem[]; cards: AiDiagCard[] | null }>()
+  async function digestFor(en: boolean): Promise<{ alerts: AlertItem[]; cards: AiDiagCard[] | null }> {
+    const cached = digestCache.get(en)
+    if (cached) return cached
+    // zh fast-path can reuse the stored snapshot diagnosis; en must recompute.
+    const ad = (storedDiag && diagMs >= syncedMs && !en) ? storedDiag : computeDiagnosisFromSnapshot(snap, en).items
+    let its = ad
+    if (ownerUid) {
+      const content = await loadContentDiagnosis(ownerUid, pageId, adPostIds, igPostIds, summary, en).catch(() => [])
+      if (content.length > 0) its = [...ad.filter(d => d.id !== 'd0'), ...content]
     }
-  } catch (e) {
-    console.error('[processPageAlerts] diagnosis agent failed', e)
+    its = its.filter(d => survivingKeys.has(diagnosisCardKey(d)))
+    let cards: AiDiagCard[] | null = null
+    try {
+      if (apiKey) cards = await getOrGenerateDiagnosisCards(pageId, its, summary, apiKey, { geminiKey, anthropicKey: apiKey }, en)
+    } catch (e) {
+      console.error('[processPageAlerts] diagnosis agent failed', e)
+    }
+    const out = { alerts: diagnosisToAlertItems(its), cards }
+    digestCache.set(en, out)
+    return out
+  }
+
+  // Resolve a uid's UI language preference (English?). Defaults to zh on any miss.
+  async function uidIsEn(uid: string | null | undefined): Promise<boolean> {
+    if (!uid) return false
+    try {
+      const p = await adminDb.collection('users').doc(uid).collection('settings').doc('preferences').get()
+      return p.data()?.language === 'en'
+    } catch { return false }
   }
 
   // Recipient emails. Priority:
@@ -166,22 +196,31 @@ export async function processPageAlerts(pageId: string): Promise<{
   }
   if (!pageName) pageName = pageId
 
-  // Send full current digest to all recipients
-  const results = await Promise.all(recipients.map(to => sendAlertEmail(to, pageName, alerts, pageId, cards)))
+  // Send the digest to each recipient in THEIR language (email maps to an account
+  // → its language pref; unknown emails fall back to zh).
+  const results = await Promise.all(recipients.map(async (to) => {
+    const uids = await resolveUidsFromEmails([to]).catch(() => [] as string[])
+    const en = await uidIsEn(uids[0])
+    const d = await digestFor(en)
+    return sendAlertEmail(to, pageName, d.alerts, pageId, d.cards, en)
+  }))
   const result = results.find(r => r.ok) ?? results[0]
 
   // In-app notification sink (Phase 2, option A — alongside the scheduled email).
-  // Fan out to recipient admins by UID. Resolve UIDs from the recipient emails
-  // and always include the configuring admin's UID (most reliable source). The
+  // Fan out to recipient admins by UID, each in their own language. The
   // deterministic per-day doc id makes this idempotent across cron re-runs.
   let inAppWritten = 0
   try {
     const emailUids = await resolveUidsFromEmails(recipients)
     const configuredByUid = (profile.alertConfiguredByUid as string) ?? null
     const targetUids = Array.from(new Set([...emailUids, ...(configuredByUid ? [configuredByUid] : [])]))
-    const notif = buildAdAnomalyNotification(pageId, pageName, alerts, dateStr, cards)
-    const res = await writeInAppNotification(targetUids, notif)
-    inAppWritten = res.written
+    for (const uid of targetUids) {
+      const en = await uidIsEn(uid)
+      const d = await digestFor(en)
+      const notif = buildAdAnomalyNotification(pageId, pageName, d.alerts, dateStr, d.cards, en)
+      const res = await writeInAppNotification([uid], notif)
+      inAppWritten += res.written
+    }
   } catch (e) {
     // In-app failure must not break the email flow.
     console.error('[processPageAlerts] in-app notification failed', e)

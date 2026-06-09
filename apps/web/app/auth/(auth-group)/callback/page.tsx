@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
@@ -77,9 +77,11 @@ function CallbackHandler() {
 }
 
 export default function CallbackPage() {
+  const [en, setEn] = useState(false)
+  useEffect(() => { setEn(localStorage.getItem('cl_dash_lang') === 'en' || localStorage.getItem('cl_lang') === 'en') }, [])
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
-      <p className="text-sm text-gray-500">正在連接 Facebook，請稍候⋯⋯</p>
+      <p className="text-sm text-gray-500">{en ? 'Connecting to Facebook, please wait…' : '正在連接 Facebook，請稍候⋯⋯'}</p>
       <Suspense>
         <CallbackHandler />
       </Suspense>
