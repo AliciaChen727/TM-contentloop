@@ -132,9 +132,6 @@ export default function LoginPage() {
           {L('使用 Facebook 帳號登入', 'Sign in with Facebook')}
         </button>
 
-        <p className="mt-2 text-center text-xs text-gray-400">
-          {L('若 Facebook 登入無法使用，請改用 Google 登入', 'If Facebook login fails, use Google instead')}
-        </p>
       </div>
     </main>
   )
