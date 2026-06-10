@@ -838,6 +838,10 @@ export default function AdsPage() {
             </>
           )}
           <div className="ads-nav-section" style={{ marginTop: 8 }}>{L('導覽', 'Navigation')}</div>
+          <div className="ads-nav-item" onClick={() => router.push('/dashboard/links')}>
+            <Icon name="ads" size={15} color="var(--ad-text3)" />
+            🔗 {L('報名連結追蹤', 'Link tracking')}
+          </div>
           <div className="ads-nav-item" onClick={() => router.push('/dashboard')}>
             <Icon name="ads" size={15} color="var(--ad-text3)" />
             {L('← 回內容儀表板', '← Back to content')}

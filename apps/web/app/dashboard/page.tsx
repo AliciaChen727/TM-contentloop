@@ -370,6 +370,11 @@ export default function DashboardPage() {
                     📊 {L('廣告儀表板', 'Ad Dashboard')}
                   </button>
                 )}
+                {isAdmin && (
+                  <button onClick={() => router.push('/dashboard/links')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
+                    🔗 {L('報名連結', 'Links')}
+                  </button>
+                )}
                 {(isAdmin || activePerms?.sidekick) && (
                   <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
                     ✨ AI Sidekick
