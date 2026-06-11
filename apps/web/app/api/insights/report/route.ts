@@ -36,6 +36,37 @@ const SYSTEM_PROMPT = `你是一位社群媒體數據分析師，為各產業的
 - 若產業為自由填寫的其他產業（非預設類別），請運用你對「該特定產業」常見社群互動率與廣告 CTR/CPC 水準的知識，給出貼近該產業的同業比較，不要套用非營利組織的數字。
 - 若標示為「未設定」，請在 benchmarkInsight 提醒使用者到設定填寫產業類別以取得更準確的比較。`
 
+const SYSTEM_PROMPT_EN = `You are a social-media data analyst producing insight reports for social/brand managers across industries.
+Based on the provided data, write a concise, high-impact monthly insight report IN ENGLISH.
+Use the industry named in the "產業 Benchmark / Industry Benchmark" field as the comparison baseline (do NOT default to nonprofit).
+
+[JSON FORMAT — STRICT]
+1. Output ONLY pure JSON — no markdown, no code fence, no extra text
+2. No newline characters inside any string value (use spaces)
+3. No unescaped double quotes inside string values
+4. postSnippet/adSnippet must be a plain-text summary of ~6 words or fewer; do NOT copy the original post
+5. Write each string value on a single line
+
+Output structure (KEYS MUST STAY EXACTLY AS SHOWN; only the VALUES are in English):
+{"executiveSummary":"3-4 sentence summary","topPostAnalysis":[{"postSnippet":"short summary","engRate":number,"whyItWorked":"reason","replicablePattern":"pattern"}],"underPerformerAnalysis":[{"postSnippet":"short summary","engRate":number,"issue":"issue","improvement":"suggestion"}],"topAdAnalysis":[{"adSnippet":"short summary","ctr":number,"whyItWorked":"why it worked","replicablePattern":"replicable pattern"}],"underAdAnalysis":[{"adSnippet":"short summary","ctr":number,"issue":"issue","improvement":"suggestion"}],"abTestInsight":"2-3 sentence A/B insight (combine if A/B data exists, else empty string)","benchmarkInsight":"2-3 sentence peer comparison","topRecommendations":["rec 1","rec 2","rec 3"]}
+
+[AD ANALYSIS RULES]
+- topAdAnalysis/underAdAnalysis cover AD CREATIVES (not organic posts), measured by CTR
+- If only 1 ad is provided: put its full analysis in topAdAnalysis (performance, reasons, optimization all in whyItWorked/replicablePattern), and return [] for underAdAnalysis
+- If there is no ad data, return [] for both topAdAnalysis and underAdAnalysis
+
+[A/B TEST RULES (abTestInsight) — IMPORTANT]
+Each experiment's variants array has real per-variant data (variant name, ctr, impressions, spend, linkClicks, cpa). You must:
+1. State the SPECIFIC data comparison of winner vs control, e.g. "Variant A CTR 4.2% vs control 2.1%, +100%". Always write both sides' real numbers.
+2. Explain the likely reason it won (from a creative/copy angle).
+3. If winner is "pending": explain it is likely because the two groups had very different run periods or impression volumes (see the impressions/spend gap), so the data is insufficient and not yet statistically significant. Still note the DIRECTIONAL difference — point out the current CTR/CPA gap and early trend, and recommend extending observation or aligning delivery conditions before deciding.
+4. Only write a generic note if there are no variants at all; write "" for abTestInsight when there is no A/B data.
+
+[PEER COMPARISON RULES (benchmarkInsight)]
+- Interpret engagement and ad performance against the industry named in the Industry Benchmark field, clearly stating whether it is above or below that industry's typical level.
+- If the industry is a free-text custom one (not a preset category), use your knowledge of THAT specific industry's typical social engagement rate and ad CTR/CPC levels; do not apply nonprofit numbers.
+- If marked "not set", remind the user in benchmarkInsight to set their industry category in Settings for a more accurate comparison.`
+
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -47,8 +78,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { summary } = await req.json() as { summary: Record<string, unknown> }
+  const { summary, language } = await req.json() as { summary: Record<string, unknown>; language?: string }
   if (!summary) return NextResponse.json({ error: 'Missing summary' }, { status: 400 })
+  const en = language === 'en'
 
   // Sanitize post messages before sending to Claude
   function sanitizePost(p: Record<string, unknown>) {
@@ -115,7 +147,7 @@ ${JSON.stringify(underAds, null, 2)}${abSection}`
     const res = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 8000,
-      system: SYSTEM_PROMPT,
+      system: en ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
     })
 

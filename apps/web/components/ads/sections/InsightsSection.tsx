@@ -297,10 +297,11 @@ const selectStyle: React.CSSProperties = {
 
 // Fingerprint of the underlying data — if this changes, a cached Claude report
 // is stale and should be regenerated. Built from the metrics that drive the report.
-function fingerprintOf(s: Summary): string {
+function fingerprintOf(s: Summary, lang: string): string {
   const a = s.adsSummary, o = s.overview
-  // v4: ad analysis now includes finished ads (metrics fallback), regenerate caches.
-  return ['v4', a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
+  // v5: report language is part of the fingerprint — switching ZH⇄EN must
+  // regenerate (the AI prose is language-specific), not serve a stale report.
+  return ['v5', lang, a.ctr, a.cpc, a.cpm, a.spend, a.clicks, o.totalPosts, o.avgEngRate, o.followerGrowth].join('|')
 }
 
 // First/last calendar day (YYYY-MM-DD) of the selected report period — used to
@@ -375,7 +376,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
 
         const { cached } = cacheRes.ok ? await cacheRes.json() : { cached: null }
         if (cached?.report && freshSummary && !cancelled) {
-          const freshFp = fingerprintOf(freshSummary)
+          const freshFp = fingerprintOf(freshSummary, lang)
           const cachedFp = cached.dataFingerprint ?? null
           if (cachedFp && cachedFp === freshFp) {
             // Data unchanged → reuse cached Claude report (no tokens burned)
@@ -395,7 +396,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
     }
     checkCache()
     return () => { cancelled = true }
-  }, [pageId, periodKey, periodType, year, month, quarter])
+  }, [pageId, periodKey, periodType, year, month, quarter, lang])
 
   async function generate(forceRegen = false) {
     if (forceRegen) {
@@ -457,7 +458,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
       await fetch('/api/insights/cache', {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId, periodKey: sumData.periodKey, report: repData.report, summary: sumData, dataFingerprint: fingerprintOf(sumData) }),
+        body: JSON.stringify({ pageId, periodKey: sumData.periodKey, report: repData.report, summary: sumData, dataFingerprint: fingerprintOf(sumData, lang) }),
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : L('發生錯誤', 'An error occurred'))
