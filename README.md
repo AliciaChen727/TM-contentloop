@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-06-12 | 修正洞察報告分析內文不跟隨語系：report API 讀 body `language` + 新增英文 system prompt（鍵不變、值英文）；快取 fingerprint 納入語系（v5），ZH⇄EN 各自快取、切換語言重新生成而非沿用舊中文報告 | `8ff900c` |
 | 2026-06-10 | 報名連結追蹤：自建短網址 `/r/{slug}`（點擊追蹤＋bot 過濾）、`/c/{slug}` 轉換回報（cookie／cl_id 對回）、表單 webhook；`/dashboard/links` 管理頁＋CSV 匯出。ROAS①：Meta Conversions API 回報（`/r` 擷取 fbclid→fbc，轉換時送 Purchase／CompleteRegistration，per-page 加密存 token＋測試事件）。登入頁加「返回首頁」。文件見 `docs/registration-link-tracking.md` | `4768462` |
 | 2026-06-10 | 儀表板全面中／英雙語：設定切換英文後整站英文（含 AI Sidekick 回應、A/B 產出、生圖英文字體、診斷引擎、站內通知/Email 告警依使用者語言）；新增 `LanguageProvider` + `dashboard/layout` + 自訂英文日曆 `DateField`（繞過瀏覽器原生 date/file 在地化） | _本次_ |
 | 2026-06-07 | 新部署流程：改完先 localhost 測，OK 才 commit/push（記入 CLAUDE.md + memory） | _本次_ |
