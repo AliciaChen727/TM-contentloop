@@ -372,7 +372,7 @@ export default function DashboardPage() {
                 )}
                 {isAdmin && (
                   <button onClick={() => router.push('/dashboard/links')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
-                    🔗 {L('報名連結', 'Links')}
+                    🔗 {L('報名連結追蹤', 'Link Tracking')}
                   </button>
                 )}
                 {(isAdmin || activePerms?.sidekick) && (
