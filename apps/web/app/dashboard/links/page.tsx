@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { CapiSetupWizard } from '@/components/links/CapiSetupWizard'
 
 interface LinkRow {
   slug: string
@@ -137,7 +138,7 @@ export default function LinksPage() {
       </p>
 
       {/* Meta ROAS reporting (CAPI) */}
-      {pageId && <MetaCapiCard pageId={pageId} idToken={idToken} L={L} />}
+      {pageId && <MetaCapiCard key={pageId} pageId={pageId} idToken={idToken} L={L} />}
 
       {/* Create */}
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
@@ -254,8 +255,12 @@ function Field({ label, value, copy, copied }: { label: string; value: string; c
 function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string) => void; copied: string; L: (zh: string, en: string) => string }) {
   return (
     <div className="text-xs leading-relaxed text-gray-600">
-      <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">⚠️ {L('重要：把廣告的「目的地網址」設成上面這條短網址（不要直接指向報名表），ROAS 才歸得到該支廣告。', 'Important: set your ad’s destination to the short URL above (not the form directly), or ROAS can’t be attributed to the ad.')}</p>
-      {link.conversionUrl && <Field label={L('完成回報網址（貼到表單「送出後導向」）', 'Conversion URL (paste into form’s “after-submit redirect”)')} value={link.conversionUrl} copy={copy} copied={copied} />}
+      <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">⚠️ {L('這兩個網址是「同一條連結」的一組，slug 要一樣才會串起來：① 貼廣告、② 貼表單。不要直接把報名表連結拿去投廣告。', 'These two URLs are a pair from the SAME link (same slug) — they only tie back if matched: ① goes in the ad, ② goes in the form. Don’t put the raw form link in the ad.')}</p>
+      <div className="mb-3 space-y-2 rounded-lg border border-blue-200 bg-blue-50/60 p-2.5">
+        <Field label={L('① 廣告目的地網址（貼到廣告／貼文）', '① Ad destination URL (paste into the ad / post)')} value={link.shortUrl} copy={copy} copied={copied} />
+        {link.conversionUrl && <Field label={L('② 完成回報網址（貼到表單「送出後導向」）', '② Conversion URL (paste into the form’s “after-submit redirect”)')} value={link.conversionUrl} copy={copy} copied={copied} />}
+        <p className="text-[11px] text-blue-700">{L('兩個都是這條的 slug；別跟其他連結的 /r 或 /c 混用。', 'Both use this link’s slug — don’t mix with another link’s /r or /c.')}</p>
+      </div>
       {link.webhookUrl && <Field label={L('Webhook 網址（Tally/Typeform 用）', 'Webhook URL (Tally/Typeform)')} value={link.webhookUrl} copy={copy} copied={copied} />}
       <p className="mt-2 font-semibold text-gray-700">{L('依你的表單平台擇一設定：', 'Pick the steps for your form platform:')}</p>
       <ul className="ml-4 mt-1 list-disc space-y-1">
@@ -274,6 +279,7 @@ function MetaCapiCard({ pageId, idToken, L }: { pageId: string; idToken: string;
   const [token, setToken] = useState('')
   const [status, setStatus] = useState<'idle' | 'saving' | 'ok' | 'err'>('idle')
   const [msg, setMsg] = useState('')
+  const [wizard, setWizard] = useState(false)
 
   useEffect(() => {
     if (!pageId || !idToken) return
@@ -283,16 +289,28 @@ function MetaCapiCard({ pageId, idToken, L }: { pageId: string; idToken: string;
       .catch(() => {})
   }, [pageId, idToken])
 
-  async function save() {
-    if (!pixelId.trim() || !token.trim()) return
-    setStatus('saving'); setMsg('')
+  // Single source of truth for the save call; used by both the inline button and
+  // the wizard's final step (which passes its own pixelId/token).
+  async function doSave(pid: string, tok: string): Promise<{ ok: boolean; msg: string }> {
     const res = await fetch('/api/integrations/meta-capi', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, pixelId: pixelId.trim(), accessToken: token.trim() }),
+      body: JSON.stringify({ pageId, pixelId: pid, accessToken: tok }),
     })
-    if (res.ok) { setStatus('ok'); setConfigured(true); setToken(''); setMsg(L('✅ 已連線並通過測試事件', '✅ Connected — test event passed')) }
-    else { const d = await res.json().catch(() => ({})); setStatus('err'); setMsg(d.error ?? L('連線失敗', 'Connection failed')) }
+    if (res.ok) {
+      setConfigured(true); setPixelId(pid)
+      return { ok: true, msg: L('✅ 已連線並通過測試事件', '✅ Connected — test event passed') }
+    }
+    const d = await res.json().catch(() => ({}))
+    return { ok: false, msg: d.error ?? L('連線失敗', 'Connection failed') }
+  }
+
+  async function save() {
+    if (!pixelId.trim() || !token.trim()) return
+    setStatus('saving'); setMsg('')
+    const r = await doSave(pixelId.trim(), token.trim())
+    setStatus(r.ok ? 'ok' : 'err'); setMsg(r.msg)
+    if (r.ok) setToken('')
   }
 
   return (
@@ -312,6 +330,10 @@ function MetaCapiCard({ pageId, idToken, L }: { pageId: string; idToken: string;
             {L('一次性設定：貼上 Meta Events Manager 的 Pixel/Dataset ID 與 Conversions API access token，之後有人完成報名，ContentLoop 會自動回報金額給 Meta 算 ROAS（不需要你碰像素代碼）。',
               'One-time setup: paste your Pixel/Dataset ID and Conversions API access token from Meta Events Manager. ContentLoop then auto-reports each registration’s value to Meta for ROAS — no pixel code needed.')}
           </p>
+          <button onClick={() => setWizard(true)}
+            className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+            🧭 {L('不知道怎麼拿？開啟設定精靈', 'Not sure how? Open setup wizard')}
+          </button>
           <label className="mb-1 block text-xs font-semibold text-gray-600">Pixel / Dataset ID</label>
           <input value={pixelId} onChange={e => setPixelId(e.target.value)} placeholder="1234567890"
             className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
@@ -327,6 +349,9 @@ function MetaCapiCard({ pageId, idToken, L }: { pageId: string; idToken: string;
             {L('在 Events Manager → 你的資料集 → 設定 → Conversions API → 產生存取權杖。', 'In Events Manager → your dataset → Settings → Conversions API → Generate access token.')}
           </p>
         </div>
+      )}
+      {wizard && (
+        <CapiSetupWizard L={L} configured={configured} onSave={doSave} onClose={() => setWizard(false)} />
       )}
     </div>
   )
