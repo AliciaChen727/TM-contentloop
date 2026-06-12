@@ -158,7 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
-| 2026-06-13 | 報名連結追蹤：SetupGuide 內嵌 Google 表單教學（可一鍵複製 GAS，WEBHOOK_URL 自動帶入；簡化版「不用加欄位」即可記完成數，付費要 Meta ROAS 才需進階 cl_id 欄位）；修正教學程式碼區塊在表格內撐寬溢出 | `（本次）` |
+| 2026-06-13 | 報名連結追蹤：SetupGuide 內嵌 Google 表單教學，分兩種做法——A 只看 ContentLoop 自家「完成/轉換率/營收」（表單免加欄位）、B 要 Meta Ads Manager ROAS（加 1 題承載 cl_id，欄位名「專屬報名序號（系統自動帶入，請勿修改）」、值填 `__CLID__`）；兩段 GAS 可一鍵複製（WEBHOOK_URL 自動帶入、FIELD_TITLE 可改）；做法 B 附 4 張實機截圖（編輯器→Pre-fill 選單→填 `__CLID__`→Get link 複製，已裁掉個人頭像）；修正程式碼區塊在表格內撐寬溢出 | `（本次）` |
 | 2026-06-13 | 報名連結追蹤：`/r` 支援 `__CLID__` 佔位字（Google 表單預填連結帶點擊碼，配 Apps Script onFormSubmit webhook 回報完成）；SetupGuide ①/② 說明改白話（點進表單數 / 真正完成數） | `（本次）` |
 | 2026-06-13 | 報名連結追蹤：新增 Meta CAPI 設定精靈（全螢幕 9 步，第 0 步先選對商家組合）；設定卡修正切換粉專時成功訊息殘留（`key={pageId}` 重新掛載）；SetupGuide 把 `/r`（廣告貼）與 `/c`（表單貼）做成同 slug 配對防呆。文件補首次設定實戰路徑＋Dataset ID 找法 | `（本次）` |
 | 2026-06-12 | 修正洞察報告分析內文不跟隨語系：report API 讀 body `language` + 新增英文 system prompt（鍵不變、值英文）；快取 fingerprint 納入語系（v5），ZH⇄EN 各自快取、切換語言重新生成而非沿用舊中文報告 | `8ff900c` |

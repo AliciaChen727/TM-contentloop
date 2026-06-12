@@ -252,21 +252,32 @@ function Field({ label, value, copy, copied }: { label: string; value: string; c
   )
 }
 
-function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string) => void; copied: string; L: (zh: string, en: string) => string }) {
-  // Ready-to-paste Apps Script for Google Forms, with this link's webhook pre-filled.
-  // No hidden cl_id field needed — the webhook URL itself is link-specific, so any
-  // submit on this form counts as a conversion for this link (clean respondent UX).
-  const gasCode = `// === ContentLoop 報名完成回報（綁定表單版）===
-var WEBHOOK_URL = '${link.webhookUrl ?? ''}';
-
-function onFormSubmitCL(e) {
-  UrlFetchApp.fetch(WEBHOOK_URL, {
-    method: 'post', contentType: 'application/json',
-    payload: JSON.stringify({ via: 'google-form' }), muteHttpExceptions: true
-  });
+// A copy-able code block (used for the Google Forms Apps Script snippets).
+function CodeBlock({ code, copy, copied, L }: { code: string; copy: (s: string) => void; copied: string; L: (zh: string, en: string) => string }) {
+  return (
+    <div className="mt-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[11px] text-gray-500">{L('Apps Script 程式碼', 'Apps Script code')}</span>
+        <button onClick={() => copy(code)}
+          className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100">
+          {copied === code ? L('✓ 已複製', '✓ Copied') : L('📋 複製程式碼', '📋 Copy code')}
+        </button>
+      </div>
+      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-gray-900 p-2.5 text-[10px] leading-snug text-gray-100">{code}</pre>
+    </div>
+  )
 }
 
-// 只需執行一次：建立「表單送出時」自動觸發器
+// Guide screenshot (static asset under /public/guides). Plain img is fine here —
+// these are fixed-size tutorial images, not user content needing optimization.
+function GuideImg({ src, alt }: { src: string; alt: string }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt={alt} className="w-full max-w-md rounded-lg border border-gray-200 shadow-sm" />
+}
+
+function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string) => void; copied: string; L: (zh: string, en: string) => string }) {
+  const webhook = link.webhookUrl ?? ''
+  const trigger = `// 只需執行一次：建立「表單送出時」自動觸發器
 function setupCL() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'onFormSubmitCL') ScriptApp.deleteTrigger(t);
@@ -275,6 +286,33 @@ function setupCL() {
     .forForm(FormApp.getActiveForm())
     .onFormSubmit().create();
 }`
+  // 做法 A：只要 ContentLoop 自家「完成/營收」— 表單免加欄位，送出即計一筆。
+  const gasSimple = `// === ContentLoop 報名完成回報（簡單版：只算完成/營收）===
+var WEBHOOK_URL = '${webhook}';
+
+function onFormSubmitCL(e) {
+  UrlFetchApp.fetch(WEBHOOK_URL, {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({ via: 'google-form' }), muteHttpExceptions: true
+  });
+}
+
+${trigger}`
+  // 做法 B：要 Meta ROAS — 表單需有一題承載 cl_id（標題可自取，值填 __CLID__）。
+  const gasRoas = `// === ContentLoop 報名完成回報（Meta ROAS 版）===
+var WEBHOOK_URL = '${webhook}';
+var FIELD_TITLE = '專屬報名序號（系統自動帶入，請勿修改）';  // ← 跟你表單那一題的「標題」一字不差 (該題的值填 __CLID__)
+
+function onFormSubmitCL(e) {
+  var v = e.namedValues || {};
+  var clId = (v[FIELD_TITLE] && v[FIELD_TITLE][0]) || '';
+  UrlFetchApp.fetch(WEBHOOK_URL, {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({ cl_id: clId }), muteHttpExceptions: true
+  });
+}
+
+${trigger}`
   return (
     <div className="text-xs leading-relaxed text-gray-600">
       <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">⚠️ {L('這兩個網址是「同一條連結」的一組，slug 要一樣才會串起來：① 貼廣告、② 貼表單。不要直接把報名表連結拿去投廣告。', 'These two URLs are a pair from the SAME link (same slug) — they only tie back if matched: ① goes in the ad, ② goes in the form. Don’t put the raw form link in the ad.')}</p>
@@ -290,39 +328,86 @@ function setupCL() {
         <li><b>SurveyCake：</b>{L('結束設定 → 結束導向，貼上「完成回報網址」。', 'End settings → redirect, paste the Conversion URL.')}</li>
       </ul>
 
-      {/* Google Forms: special path (no native redirect) — full tutorial + ready code */}
-      <details className="mt-3 rounded-lg border border-gray-200 bg-gray-50">
-        <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-gray-700">
-          🟦 {L('Google 表單設定教學（做法較特別，點開）', 'Google Forms setup tutorial (special — click to open)')}
+      {/* Google Forms: two tutorials — A) ContentLoop revenue only, B) Meta ROAS */}
+      <p className="mt-3 font-semibold text-gray-700">{L('Google 表單（兩種做法，依需求選一）：', 'Google Forms (two paths — pick by need):')}</p>
+
+      {/* 做法 A：只看 ContentLoop 自家完成/營收 */}
+      <details className="mt-1.5 rounded-lg border border-green-200 bg-green-50/40">
+        <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-green-800">
+          🟢 {L('做法 A：只看 ContentLoop 自家「完成數／轉換率／營收」（簡單，表單免改）', 'Path A: ContentLoop’s own completions/rate/revenue only (simple, no form change)')}
         </summary>
-        <div className="space-y-3 border-t border-gray-200 px-3 py-3">
-          <p className="break-words text-[11px] text-amber-700">⚠️ {L('Google 表單送出後不能自訂導向，所以「②完成回報網址」用不到；改用下面的 Apps Script 自動回報。不用在表單加任何欄位、填答者也看不到任何代碼。',
-            'Google Forms can’t redirect after submit, so the ② Conversion URL won’t work here; use the Apps Script below instead. No extra form field needed — respondents see nothing unusual.')}</p>
-
+        <div className="space-y-3 border-t border-green-200 px-3 py-3">
+          <p className="break-words text-[11px] text-gray-600">{L('Google 表單送出後不能自訂導向，所以「②完成回報網址」用不到；改用 Apps Script 在送出時打 webhook。表單免加任何欄位、填答者看不到任何代碼。',
+            'Google Forms can’t redirect after submit, so the ② Conversion URL won’t work; use Apps Script to ping the webhook on submit. No form field needed — respondents see nothing.')}</p>
           <div>
-            <p className="font-semibold text-gray-700">🟩 {L('地方一：ContentLoop（此頁上方）', 'Place 1: ContentLoop (top of this page)')}</p>
-            <p className="ml-1">{L('把你的 Google 表單連結直接當作「報名表連結」貼上，勾「追蹤報名完成」、填金額，產生短網址。表單本身完全不用改。', 'Paste your Google Form link as the form link, tick “Track completion”, set the fee, and create the short link. No change to the form itself.')}</p>
+            <p className="font-semibold text-gray-700">🟩 {L('地方一：ContentLoop（此頁上方）', 'Place 1: ContentLoop (top of page)')}</p>
+            <p className="ml-1">{L('把 Google 表單連結直接當「報名表連結」貼上，勾「追蹤報名完成」、填金額，產生短網址。', 'Paste your Google Form link as the form link, tick “Track completion”, set the fee, create the short link.')}</p>
           </div>
-
           <div>
-            <p className="font-semibold text-gray-700">🟨 {L('地方二：Apps Script（貼一次就好）', 'Place 2: Apps Script (one-time)')}</p>
+            <p className="font-semibold text-gray-700">🟨 {L('地方二：Apps Script（貼一次）', 'Place 2: Apps Script (one-time)')}</p>
             <ol className="ml-4 list-decimal space-y-0.5">
               <li>{L('表單 → 右上 ⋮ → 指令碼編輯器（Apps Script）', 'Form → top-right ⋮ → Script editor (Apps Script)')}</li>
-              <li>{L('刪掉預設內容，貼上下面整段（WEBHOOK_URL 已幫你填好這條的）', 'Delete the default code and paste the block below (WEBHOOK_URL is pre-filled for this link)')}</li>
-              <li>{L('上方函式選 setupCL → ▶ 執行 → 授權（進階 → 前往 → 允許）。以後自動跑。', 'Pick setupCL → ▶ Run → authorize (Advanced → Go → Allow). Runs automatically after that.')}</li>
+              <li>{L('刪掉預設內容，貼上下面整段（WEBHOOK_URL 已自動帶入這條）', 'Replace the default code with the block below (WEBHOOK_URL pre-filled for this link)')}</li>
+              <li>{L('函式選 setupCL → ▶ 執行 → 授權（進階 → 前往 → 允許）', 'Pick setupCL → ▶ Run → authorize (Advanced → Go → Allow)')}</li>
             </ol>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">{L('Apps Script 程式碼', 'Apps Script code')}</span>
-              <button onClick={() => copy(gasCode)}
-                className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100">
-                {copied === gasCode ? L('✓ 已複製', '✓ Copied') : L('📋 複製程式碼', '📋 Copy code')}
-              </button>
-            </div>
-            <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-gray-900 p-2.5 text-[10px] leading-snug text-gray-100">{gasCode}</pre>
+            <CodeBlock code={gasSimple} copy={copy} copied={copied} L={L} />
           </div>
+          <p className="text-[11px] text-gray-500">✅ {L('自測：點短網址 → 填表 → 送出 → 列表「完成 +1」、營收 = 完成數 × 金額。', 'Test: open short link → fill → submit → “Done +1”; revenue = completions × fee.')}</p>
+          <p className="text-[11px] text-gray-400">{L('※ 這條算的是 ContentLoop 自家數字；Meta Ads Manager 的 ROAS 不會動，要的話用做法 B。', '※ This is ContentLoop’s own metric; Meta Ads Manager ROAS won’t move — use Path B for that.')}</p>
+        </div>
+      </details>
 
-          <p className="text-[11px] text-gray-500">✅ {L('自測：點短網址 → 填表 → 送出 → 列表「完成 +1」。', 'Test: open the short link → fill the form → submit → “Done +1” in the list.')}</p>
-          <p className="text-[11px] text-gray-400">{L('※ 付費活動要 Meta 算 ROAS：需加 cl_id 欄位，Meta 才能把 Purchase 歸因到廣告（否則仍有 ContentLoop 自家「營收＝完成數×金額」，但 Meta 端 ROAS 維持 N/A）。做法見 docs/registration-link-tracking.md。', '※ Paid events needing Meta ROAS: add the cl_id field so Meta can attribute the Purchase to the ad (you still get ContentLoop’s own revenue = completions × fee, but Meta-side ROAS stays N/A without it). See docs/registration-link-tracking.md.')}</p>
+      {/* 做法 B：要 Meta Ads Manager ROAS */}
+      <details className="mt-1.5 rounded-lg border border-blue-200 bg-blue-50/40">
+        <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-blue-800">
+          🔵 {L('做法 B：要 Meta Ads Manager／儀表板的 ROAS（進階，表單加 1 題）', 'Path B: Meta Ads Manager / dashboard ROAS (advanced, +1 form question)')}
+        </summary>
+        <div className="space-y-3 border-t border-blue-200 px-3 py-3">
+          <p className="break-words text-[11px] text-gray-600">{L('比做法 A 多一個欄位，讓「點擊識別碼」隨表單送出，Meta 才能把 Purchase 歸因到廣告算 ROAS。另需：廣告活動為購買／轉換目標、CAPI 已連線。',
+            'One extra field carries the click ID with the submission so Meta can attribute the Purchase to the ad for ROAS. Also requires: a purchase/conversion-objective campaign and CAPI connected.')}</p>
+          <div>
+            <p className="font-semibold text-gray-700">🟦 {L('地方一：Google 表單加一題', 'Place 1: add one question to the form')}</p>
+            <ol className="ml-4 list-decimal space-y-0.5">
+              <li>{L('加一題「簡答（Short answer）」，標題打：專屬報名序號（系統自動帶入，請勿修改）。只要標題＋類型，別加說明、別加驗證、必填關掉。', 'Add a “Short answer” question titled: 專屬報名序號（系統自動帶入，請勿修改）. Title + type only — no description, no validation, Required off.')}</li>
+              <li><b className="text-blue-700">{L('編輯這一題時「不要」打 __CLID__。', 'Do NOT type __CLID__ while editing the question.')}</b>{L('右上 ⋮ → 取得預先填入的連結 → 畫面變「填表預覽」→ 在這一題的答案框打 ', ' Top-right ⋮ → Get pre-filled link → the form opens in fill mode → in this question’s answer box type ')}<code className="rounded bg-gray-200 px-1">__CLID__</code>{L(' → 取得連結 → 複製。', ' → Get link → Copy.')}</li>
+            </ol>
+            <p className="ml-1 text-[11px] text-blue-700">{L('欄位標題可隨意改，但「取得預填連結」那步那一題的值一定要填 __CLID__（ContentLoop 會在點擊時換成真實識別碼）。', 'Rename the field freely, but in the “pre-filled link” step that question’s value must be __CLID__ (ContentLoop swaps it for the real ID at click time).')}</p>
+            {/* Real screenshots: correct editor state → where to click → fill preview */}
+            <div className="mt-2 space-y-2">
+              <div>
+                <p className="mb-1 text-[11px] text-gray-500">{L('① 編輯這一題時長這樣（標題＋Short answer，Description 空白、Required 關、無驗證）：', '① The question editor should look like this (title + Short answer; Description empty, Required off, no validation):')}</p>
+                <GuideImg src="/guides/capi/gform-question.png" alt="Question editor correct state" />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] text-gray-500">{L('② 右上 ⋮ → 點「Pre-fill form（取得預先填入的連結）」：', '② Top-right ⋮ → click “Pre-fill form”:')}</p>
+                <GuideImg src="/guides/capi/gform-menu.png" alt="Pre-fill form menu" />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] text-gray-500">{L('③ 在填表預覽裡，於「專屬報名序號」那格打 __CLID__：', '③ In the fill preview, type __CLID__ in the 專屬報名序號 box:')}</p>
+                <GuideImg src="/guides/capi/gform-prefill.png" alt="Pre-fill __CLID__ example" />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] text-gray-500">{L('④ 拉到最下面按「Get link」→ 黑色長條按「COPY LINK」複製，這條就是要貼進 ContentLoop 的報名表連結：', '④ Scroll down, click “Get link” → in the black bar click “COPY LINK”; this is the link to paste into ContentLoop:')}</p>
+                <GuideImg src="/guides/capi/gform-getlink.png" alt="Get link and copy" />
+              </div>
+              <p className="text-[10px] leading-relaxed text-amber-700">{L('注意：編輯題目的畫面那格是「空白」的（打不進去）；只有在「取得預先填入的連結」的填表預覽才打 __CLID__。別加數字驗證、別設必填。',
+                'Note: in the question EDITOR that box is empty (can’t type a value); only type __CLID__ in the “Pre-fill form” fill preview. No number validation, not required.')}</p>
+            </div>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-700">🟩 {L('地方二：ContentLoop（此頁上方）', 'Place 2: ContentLoop (top of page)')}</p>
+            <p className="ml-1">{L('把上面複製的「預填連結」（含 __CLID__）當「報名表連結」貼上，勾「追蹤報名完成」、填金額。', 'Paste the pre-filled link (with __CLID__) as the form link, tick “Track completion”, set the fee.')}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-700">🟨 {L('地方三：Apps Script（貼一次）', 'Place 3: Apps Script (one-time)')}</p>
+            <ol className="ml-4 list-decimal space-y-0.5">
+              <li>{L('表單 → 右上 ⋮ → 指令碼編輯器 → 貼下面整段', 'Form → ⋮ → Script editor → paste the block below')}</li>
+              <li>{L('把 FIELD_TITLE 改成你那一題的標題（要跟表單一字不差）', 'Set FIELD_TITLE to your question’s title (must match exactly)')}</li>
+              <li>{L('函式選 setupCL → ▶ 執行 → 授權', 'Pick setupCL → ▶ Run → authorize')}</li>
+            </ol>
+            <CodeBlock code={gasRoas} copy={copy} copied={copied} L={L} />
+          </div>
+          <p className="text-[11px] text-gray-500">✅ {L('自測：點短網址 → 表單（識別碼已自動填，別動）→ 送出 → 列表「完成 +1」；Events Manager「測試事件」收到 Purchase。', 'Test: open short link → form (ID auto-filled, don’t touch) → submit → “Done +1”; Events Manager shows a Purchase.')}</p>
         </div>
       </details>
     </div>
