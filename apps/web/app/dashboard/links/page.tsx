@@ -257,8 +257,8 @@ function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string
     <div className="text-xs leading-relaxed text-gray-600">
       <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">⚠️ {L('這兩個網址是「同一條連結」的一組，slug 要一樣才會串起來：① 貼廣告、② 貼表單。不要直接把報名表連結拿去投廣告。', 'These two URLs are a pair from the SAME link (same slug) — they only tie back if matched: ① goes in the ad, ② goes in the form. Don’t put the raw form link in the ad.')}</p>
       <div className="mb-3 space-y-2 rounded-lg border border-blue-200 bg-blue-50/60 p-2.5">
-        <Field label={L('① 廣告目的地網址（貼到廣告／貼文）', '① Ad destination URL (paste into the ad / post)')} value={link.shortUrl} copy={copy} copied={copied} />
-        {link.conversionUrl && <Field label={L('② 完成回報網址（貼到表單「送出後導向」）', '② Conversion URL (paste into the form’s “after-submit redirect”)')} value={link.conversionUrl} copy={copy} copied={copied} />}
+        <Field label={L('① 廣告目的地網址 → 貼到廣告／貼文（算「有幾個人點進報名表」）', '① Ad destination URL → paste into the ad/post (counts “how many clicked through to the form”)')} value={link.shortUrl} copy={copy} copied={copied} />
+        {link.conversionUrl && <Field label={L('② 完成回報網址 → 貼到表單「送出後導向」（算「有幾個人真的填完報名表」）', '② Conversion URL → paste into the form’s “after-submit redirect” (counts “how many actually finished the form”)')} value={link.conversionUrl} copy={copy} copied={copied} />}
         <p className="text-[11px] text-blue-700">{L('兩個都是這條的 slug；別跟其他連結的 /r 或 /c 混用。', 'Both use this link’s slug — don’t mix with another link’s /r or /c.')}</p>
       </div>
       {link.webhookUrl && <Field label={L('Webhook 網址（Tally/Typeform 用）', 'Webhook URL (Tally/Typeform)')} value={link.webhookUrl} copy={copy} copied={copied} />}

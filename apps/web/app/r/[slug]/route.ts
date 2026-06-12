@@ -58,11 +58,19 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     // Build the destination, carrying cl_id when conversion tracking is on.
     let dest = link.destination as string
     if (trackConversion && !bot) {
-      try {
-        const u = new URL(dest)
-        u.searchParams.set('cl_id', clickId)
-        dest = u.toString()
-      } catch { /* leave dest as-is on malformed URL */ }
+      if (dest.includes('__CLID__')) {
+        // Google Forms (and similar) ignore a plain ?cl_id. Instead the user pastes
+        // a *prefilled* form URL whose cl_id field holds the literal __CLID__, which
+        // we swap for the real click id here — so it arrives as an actual form answer
+        // that Apps Script can read and post back to our webhook.
+        dest = dest.replace(/__CLID__/g, encodeURIComponent(clickId))
+      } else {
+        try {
+          const u = new URL(dest)
+          u.searchParams.set('cl_id', clickId)
+          dest = u.toString()
+        } catch { /* leave dest as-is on malformed URL */ }
+      }
     }
 
     const res = NextResponse.redirect(dest, 302)
