@@ -83,9 +83,35 @@ pages/{pageId}/integrations/metaCapi    # pixelId, accessTokenEnc(加密), enabl
 - **備案 A**：過幾小時或換瀏覽器重試「手動設定」（Meta wizard 常暫時性出錯）。
 - **備案 B（繞過 wizard）**：商業管理平台設定 → 使用者 → **系統用戶** → 新增「ContentLoop」(admin) → **指派**剛建的網站資料集 → **產生新權杖**（勾 `ads_management`）。此 token 一樣能用。
 
+### ✅ 實戰走過的完整路徑（2026-06-13 首次設定，最可靠）
+
+主流程 wizard 常卡住（選「網站」按繼續沒反應），實際成功的路徑如下，照這個走最穩：
+
+1. **確認手上的舊資料集都是 App 資料集、不能用**：事件管理工具看到的 `ContentLoop / ContentLoop Dev / Contentloop Auth` 等，**分頁有「Facebook SDK」、設定頁全是「應用程式編號 / iOS / SKAdNetwork」、沒有「Conversions API」** → 全是 App 資料集，CAPI 用不了（程式打 `{id}/events`，App 資料集收不到）。
+2. **新建一個「網站」資料集**：事件管理工具左上角綠色「**＋ 連結資料**」→ 選「**網站**」→ 在「建立新的資料集」彈窗填名稱（例 `ContentLoop Web`）、類別留空 → **建立**。
+   - 若「連結資料 → 網站 → 繼續」沒反應 → 開**無痕視窗**或關掉廣告攔截器再試；仍不行走下方備案 B。
+3. **選整合方式**：建好後它會問「連結你的網站資料」→ 選「**設定轉換 API**」（**不是** Meta 像素，我們沒有要在網站貼 JS）。
+4. **選事件**：勾「**完成註冊（CompleteRegistration）**」+「**購買（Purchase）**」即可，其他無害可不管（程式只送這兩個）。
+5. **選事件詳情**：顧客資料參數加勾「**點擊編號（fbc）**」「**用戶端 IP 位址**」（程式實際會送的；其餘 email/電話/姓名**不要勾**，報名表在第三方拿不到）。
+6. **查看指示 → 開啟實作指南**（不要按「傳送指示」email）→ 找「**產生存取權杖**」→（保持 Dataset Quality API Recommended）→ 按下去 → **立刻複製權杖**（`EAA` 開頭；Facebook 不幫你存，關掉要重產）。
+7. **與廣告帳號共用**：把這個網站資料集分享給**實際跑廣告的帳號**（本案 `act_329347941177339`），ROAS 才歸得到。
+8. **回 ContentLoop 正式站**貼 Dataset ID + 權杖 → 儲存並測試 → 綠勾「已連線並通過測試事件」。
+
+### 🔑 Dataset ID 到底在哪（最常卡這裡）
+
+設定卡的「Pixel / Dataset ID」要填**網站資料集自己的編號**，找法：
+- **看網址列最準**：在資料集頁面時網址是 `…/events_manager2/implementation_instructions/【1491541229092942】?business_id=3617616568552330…` → `implementation_instructions/` 後面、`?` 前面那串（本案 `1491541229092942`）就是 Dataset ID。
+- 或：左側「資料集」清單 → 新資料集**名稱下方那串數字**。
+
 ### 常見錯誤
-- 找不到網站 CAPI 權杖：你點到的是 **App 資料集**（有「應用程式編號」「Facebook SDK」字樣）。要用**網站**資料集。
-- 「編號」貼錯：`擁有者` 下方是 Business ID、`應用程式編號` 是 App ID，**都不是** Dataset ID。Dataset ID 在資料集名稱旁。
+- **找不到「Conversions API / 產生存取權杖」**：你點到的是 **App 資料集**（分頁有「Facebook SDK」、設定全是應用程式編號 / SKAdNetwork）。要另**建網站資料集**。
+- **Dataset ID 貼錯**：以下三種都**不是** Dataset ID——
+  - `business_id=3617616568552330`（網址裡的）= **商家** Legacy Toastmasters Club
+  - `1288330390162210` = **App** ContentLoop 的應用程式編號
+  - `擁有者` 下方的編號 = Business ID
+  正解是 `implementation_instructions/` 後面那串、或資料集清單名稱下方的編號。
+- **設定卡紅字「Invalid OAuth access token - Cannot parse access token」**：權杖欄是空的（或貼到非 `EAA` 開頭的東西）。貼上正確權杖即消失。
+- **wizard「選網站按繼續沒反應」**：Meta 前端 bug，開無痕視窗 / 關廣告攔截器重試，或走備案 B（系統用戶）。
 
 ### 在 ContentLoop 設定
 `/dashboard/links` → 📈 Meta 轉換回報卡 → 貼 **Dataset ID + token** → 儲存並測試連線 → 綠勾 = 成功（Events Manager「測試事件」會收到一筆 `CompleteRegistration`）。
