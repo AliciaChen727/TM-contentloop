@@ -253,6 +253,28 @@ function Field({ label, value, copy, copied }: { label: string; value: string; c
 }
 
 function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string) => void; copied: string; L: (zh: string, en: string) => string }) {
+  // Ready-to-paste Apps Script for Google Forms, with this link's webhook pre-filled.
+  // No hidden cl_id field needed — the webhook URL itself is link-specific, so any
+  // submit on this form counts as a conversion for this link (clean respondent UX).
+  const gasCode = `// === ContentLoop 報名完成回報（綁定表單版）===
+var WEBHOOK_URL = '${link.webhookUrl ?? ''}';
+
+function onFormSubmitCL(e) {
+  UrlFetchApp.fetch(WEBHOOK_URL, {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({ via: 'google-form' }), muteHttpExceptions: true
+  });
+}
+
+// 只需執行一次：建立「表單送出時」自動觸發器
+function setupCL() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'onFormSubmitCL') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('onFormSubmitCL')
+    .forForm(FormApp.getActiveForm())
+    .onFormSubmit().create();
+}`
   return (
     <div className="text-xs leading-relaxed text-gray-600">
       <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">⚠️ {L('這兩個網址是「同一條連結」的一組，slug 要一樣才會串起來：① 貼廣告、② 貼表單。不要直接把報名表連結拿去投廣告。', 'These two URLs are a pair from the SAME link (same slug) — they only tie back if matched: ① goes in the ad, ② goes in the form. Don’t put the raw form link in the ad.')}</p>
@@ -266,8 +288,43 @@ function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string
       <ul className="ml-4 mt-1 list-disc space-y-1">
         <li><b>Tally / Typeform：</b>{L('表單設定 → 送出後導向，貼上「完成回報網址」；或設 Webhook 用上面網址，並加一個隱藏欄位 ', 'Settings → redirect after submit, paste the Conversion URL; or add the Webhook above plus a hidden field ')}<code className="rounded bg-gray-200 px-1">cl_id</code></li>
         <li><b>SurveyCake：</b>{L('結束設定 → 結束導向，貼上「完成回報網址」。', 'End settings → redirect, paste the Conversion URL.')}</li>
-        <li><b>Google {L('表單', 'Forms')}：</b>{L('原生不支援，需在表單加 Apps Script onFormSubmit 呼叫 Webhook（或改用 Tally）。', 'Not supported natively — add an Apps Script onFormSubmit trigger calling the Webhook (or switch to Tally).')}</li>
       </ul>
+
+      {/* Google Forms: special path (no native redirect) — full tutorial + ready code */}
+      <details className="mt-3 rounded-lg border border-gray-200 bg-gray-50">
+        <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-gray-700">
+          🟦 {L('Google 表單設定教學（做法較特別，點開）', 'Google Forms setup tutorial (special — click to open)')}
+        </summary>
+        <div className="space-y-3 border-t border-gray-200 px-3 py-3">
+          <p className="break-words text-[11px] text-amber-700">⚠️ {L('Google 表單送出後不能自訂導向，所以「②完成回報網址」用不到；改用下面的 Apps Script 自動回報。不用在表單加任何欄位、填答者也看不到任何代碼。',
+            'Google Forms can’t redirect after submit, so the ② Conversion URL won’t work here; use the Apps Script below instead. No extra form field needed — respondents see nothing unusual.')}</p>
+
+          <div>
+            <p className="font-semibold text-gray-700">🟩 {L('地方一：ContentLoop（此頁上方）', 'Place 1: ContentLoop (top of this page)')}</p>
+            <p className="ml-1">{L('把你的 Google 表單連結直接當作「報名表連結」貼上，勾「追蹤報名完成」、填金額，產生短網址。表單本身完全不用改。', 'Paste your Google Form link as the form link, tick “Track completion”, set the fee, and create the short link. No change to the form itself.')}</p>
+          </div>
+
+          <div>
+            <p className="font-semibold text-gray-700">🟨 {L('地方二：Apps Script（貼一次就好）', 'Place 2: Apps Script (one-time)')}</p>
+            <ol className="ml-4 list-decimal space-y-0.5">
+              <li>{L('表單 → 右上 ⋮ → 指令碼編輯器（Apps Script）', 'Form → top-right ⋮ → Script editor (Apps Script)')}</li>
+              <li>{L('刪掉預設內容，貼上下面整段（WEBHOOK_URL 已幫你填好這條的）', 'Delete the default code and paste the block below (WEBHOOK_URL is pre-filled for this link)')}</li>
+              <li>{L('上方函式選 setupCL → ▶ 執行 → 授權（進階 → 前往 → 允許）。以後自動跑。', 'Pick setupCL → ▶ Run → authorize (Advanced → Go → Allow). Runs automatically after that.')}</li>
+            </ol>
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">{L('Apps Script 程式碼', 'Apps Script code')}</span>
+              <button onClick={() => copy(gasCode)}
+                className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100">
+                {copied === gasCode ? L('✓ 已複製', '✓ Copied') : L('📋 複製程式碼', '📋 Copy code')}
+              </button>
+            </div>
+            <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-gray-900 p-2.5 text-[10px] leading-snug text-gray-100">{gasCode}</pre>
+          </div>
+
+          <p className="text-[11px] text-gray-500">✅ {L('自測：點短網址 → 填表 → 送出 → 列表「完成 +1」。', 'Test: open the short link → fill the form → submit → “Done +1” in the list.')}</p>
+          <p className="text-[11px] text-gray-400">{L('※ 付費活動要 Meta 算 ROAS：需加 cl_id 欄位，Meta 才能把 Purchase 歸因到廣告（否則仍有 ContentLoop 自家「營收＝完成數×金額」，但 Meta 端 ROAS 維持 N/A）。做法見 docs/registration-link-tracking.md。', '※ Paid events needing Meta ROAS: add the cl_id field so Meta can attribute the Purchase to the ad (you still get ContentLoop’s own revenue = completions × fee, but Meta-side ROAS stays N/A without it). See docs/registration-link-tracking.md.')}</p>
+        </div>
+      </details>
     </div>
   )
 }
