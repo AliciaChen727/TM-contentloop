@@ -58,7 +58,22 @@ pages/{pageId}/integrations/metaCapi    # pixelId, accessTokenEnc(加密), enabl
 ### 表單設定（讓「完成」回報）
 - **Tally / Typeform**：送出後導向貼「完成回報網址」；或設 webhook + 隱藏欄位 `cl_id`
 - **SurveyCake**：結束導向貼「完成回報網址」
-- **Google 表單**：原生不支援，需加 Apps Script `onFormSubmit` 呼叫 webhook（或改用 Tally）
+- **Google 表單**：原生不支援送出後導向，改用 Apps Script `onFormSubmit` 呼叫 webhook（或改用 Tally）。`/dashboard/links` 展開連結的設定指引內有**兩種做法的圖文教學 + 可複製 GAS**（見下）。
+
+#### Google 表單兩種做法（與頁面教學一致）
+
+| 做法 | 適用 | 表單要不要加欄位 | GAS |
+|------|------|------------------|-----|
+| **A：只看 ContentLoop 自家數字** | 免費活動 / 只想要「完成數・轉換率・營收」 | **不用**（webhook 本身 per-link，送出即計一筆；填答者看不到任何代碼） | 送出時 POST `{ via:'google-form' }` 到該連結 webhook |
+| **B：要 Meta Ads Manager ROAS** | 付費活動、要 Meta 算 ROAS | **要 1 題**簡答承載 `cl_id` | 讀該題的值，POST `{ cl_id }` 到 webhook |
+
+- **為什麼 B 要欄位**：Meta 要把 Purchase 歸因到廣告，需要 `fbc`；`fbc` 在 `/r` 點擊時存於該 click，靠 `cl_id` 取回。沒有 `cl_id` → 取不到 `fbc` → Meta 收到的 Purchase 無識別碼、無法歸因（但 ContentLoop 自家「營收＝完成數×金額」照算）。
+- **做法 B 設定要點**：
+  1. 表單加一題「簡答」，標題建議 `專屬報名序號（系統自動帶入，請勿修改）`（標題本身就是提示）；**別加說明、別加驗證、必填關掉**。
+  2. **編輯題目時不要打 `__CLID__`**。右上 ⋮ →「取得預先填入的連結」的填表預覽，才在那一題填 `__CLID__` → Get link → COPY LINK。
+  3. 把這條**預填連結（含 `entry.xxx=__CLID__`）**當「報名表連結」貼進 ContentLoop（`/r` 會在點擊時把 `__CLID__` 換成真實 click id，見 `app/r/[slug]/route.ts`）。
+  4. Apps Script（表單 ⋮ → 指令碼編輯器）貼 ROAS 版 GAS，`FIELD_TITLE` 設成該題標題、`WEBHOOK_URL` 設成該連結 webhook，執行一次 `setupCL` 建立 onFormSubmit 觸發器。
+  5. ROAS 還需：廣告活動為**購買/轉換目標**、CAPI 已連線。
 
 ### ⚠️ 廣告目的地
 廣告的目的地網址要設成**短網址 `/r/{slug}`**（不可直接指向報名表），否則 `fbclid` 會掉、ROAS 歸不到該廣告。
