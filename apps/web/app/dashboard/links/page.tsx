@@ -23,6 +23,9 @@ interface LinkRow {
 }
 interface PageOpt { pageId: string; pageName: string }
 
+// 常用報名幣別（Meta CAPI 接受 ISO 4217 三碼）。
+const CURRENCIES = ['TWD', 'JPY', 'KRW', 'USD', 'CNY', 'HKD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'IDR'] as const
+
 export default function LinksPage() {
   const { L } = useLang()
   const router = useRouter()
@@ -36,6 +39,7 @@ export default function LinksPage() {
   const [track, setTrack] = useState(false)
   const [thankYouUrl, setThankYouUrl] = useState('')
   const [value, setValue] = useState('')
+  const [currency, setCurrency] = useState('TWD')
   const [creating, setCreating] = useState(false)
   const [err, setErr] = useState('')
   const [copied, setCopied] = useState('')
@@ -75,11 +79,11 @@ export default function LinksPage() {
     const res = await fetch('/api/links', {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, destination: destination.trim(), label: label.trim(), trackConversion: track, thankYouUrl: thankYouUrl.trim() || undefined, value: Number(value) || 0 }),
+      body: JSON.stringify({ pageId, destination: destination.trim(), label: label.trim(), trackConversion: track, thankYouUrl: thankYouUrl.trim() || undefined, value: Number(value) || 0, currency }),
     })
     if (res.ok) {
       const d = await res.json()
-      setDestination(''); setLabel(''); setThankYouUrl(''); setValue('')
+      setDestination(''); setLabel(''); setThankYouUrl(''); setValue(''); setCurrency('TWD')
       await load(idToken, pageId)
       if (d.trackConversion) setOpenSetup(d.slug) // jump straight to setup steps
     } else { const d = await res.json().catch(() => ({})); setErr(d.error ?? L('建立失敗', 'Failed to create')) }
@@ -159,7 +163,10 @@ export default function LinksPage() {
             <div className="mb-2 flex items-center gap-2">
               <input type="number" min="0" value={value} onChange={e => setValue(e.target.value)} placeholder="150"
                 className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              <span className="text-xs text-gray-500">TWD</span>
+              <select value={currency} onChange={e => setCurrency(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-2 text-sm text-gray-700">
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <p className="mb-2 text-[11px] text-gray-500">{L('有金額 → 回報 Meta「Purchase」算 ROAS；填 0 → 回報「報名完成」當轉換數。', '>0 → reports Meta “Purchase” for ROAS; 0 → reports “CompleteRegistration” as a conversion.')}</p>
             <label className="mb-1 block text-xs font-semibold text-gray-600">{L('完成後導向（感謝頁，選填）', 'Redirect after completion (optional)')}</label>
@@ -330,6 +337,8 @@ ${trigger}`
 
       {/* Google Forms: two tutorials — A) ContentLoop revenue only, B) Meta ROAS */}
       <p className="mt-3 font-semibold text-gray-700">{L('Google 表單（兩種做法，依需求選一）：', 'Google Forms (two paths — pick by need):')}</p>
+      <p className="mt-1 break-words rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">⚠️ {L('Google 表單兩種做法都需要「表單的編輯權限」（裝 Apps Script、加題目）。如果表單不是你本人建立的，你只有填寫權限是改不了的——請表單擁有者把你加為「協作者（可編輯）」，或請對方代貼一次 Apps Script；都拿不到的話，這條連結就只能看「點擊」，完成數會一直是 0（用對方表單的回覆數人工對）。',
+        'Both Google Forms paths need EDIT access to the form (to install Apps Script / add a question). If the form isn’t yours, fill-in access isn’t enough — ask the owner to add you as an editor (collaborator) or to paste the Apps Script once. If you can’t get either, this link can only track clicks; completions stay 0 (reconcile manually against the owner’s response count).')}</p>
 
       {/* 做法 A：只看 ContentLoop 自家完成/營收 */}
       <details className="mt-1.5 rounded-lg border border-green-200 bg-green-50/40">
