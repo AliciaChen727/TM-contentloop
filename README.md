@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-06-26 | 修 FB 貼文互動數全 0：根因為 OAuth SCOPES 漏 `pages_read_user_content`，同步抓 reactions/comments/shares 被 Graph #10 擋下退回 basic（只存 0）。連接頁 SCOPES 補上該權限；重連授權後重新同步即可抓到並存入 Firebase（之後由 read-then-max 保護）。診斷用 `/debug/fb-probe`（並排 full/basic 回應）。⚠️ Dev mode 下此 scope 對有 App 角色者可直接授權，一般使用者需 App Review | `（本次）` |
 | 2026-06-15 | 報名連結追蹤：報名金額幣別改下拉選單（TWD/JPY/KRW/USD…16 種 ISO 幣別，建立時帶入並回報 Meta CAPI Purchase）；Google 表單教學標題下加黃色提醒——兩種做法都需表單編輯權，非本人建立的表單要請擁有者加協作者或代貼 Apps Script，否則只能看點擊、完成恆為 0 | `（本次）` |
 | 2026-06-13 | 報名連結追蹤：SetupGuide 內嵌 Google 表單教學，分兩種做法——A 只看 ContentLoop 自家「完成/轉換率/營收」（表單免加欄位）、B 要 Meta Ads Manager ROAS（加 1 題承載 cl_id，欄位名「專屬報名序號（系統自動帶入，請勿修改）」、值填 `__CLID__`）；兩段 GAS 可一鍵複製（WEBHOOK_URL 自動帶入、FIELD_TITLE 可改）；做法 B 附 4 張實機截圖（編輯器→Pre-fill 選單→填 `__CLID__`→Get link 複製，已裁掉個人頭像）；修正程式碼區塊在表格內撐寬溢出 | `（本次）` |
 | 2026-06-13 | 報名連結追蹤：`/r` 支援 `__CLID__` 佔位字（Google 表單預填連結帶點擊碼，配 Apps Script onFormSubmit webhook 回報完成）；SetupGuide ①/② 說明改白話（點進表單數 / 真正完成數） | `（本次）` |

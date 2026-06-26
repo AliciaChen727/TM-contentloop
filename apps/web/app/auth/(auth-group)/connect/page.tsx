@@ -9,6 +9,7 @@ import { Suspense } from 'react'
 const SCOPES = [
   'pages_show_list',
   'pages_read_engagement',
+  'pages_read_user_content', // needed for reactions/comments/shares on /{page}/posts (Graph #10 without it)
   'pages_manage_posts', // needed to read the Page Stories edge (/{page}/stories)
   'read_insights',
   'instagram_basic',
