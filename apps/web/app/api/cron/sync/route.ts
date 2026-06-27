@@ -55,6 +55,26 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
 
   const userRef = adminDb.collection('users').doc(uid)
   const fbPostsCol = userRef.collection('pages').doc(pageId).collection('fbPosts')
+
+  // Read existing docs first so a flaky per-post /insights call (which falls back to
+  // all-zeros in the catch above) can never WIPE previously-synced engagement. Same
+  // read-then-max guarantee the manual sync already has (commit b414e9c) — without it,
+  // a single bad cron run zeroes out every page's real numbers.
+  const existingSnaps = withInsights.length > 0
+    ? await adminDb.getAll(...withInsights.map(p => fbPostsCol.doc(p.id)))
+    : []
+  const prevInsightsById = new Map<string, Record<string, number>>()
+  for (const snap of existingSnaps) {
+    if (snap.exists) prevInsightsById.set(snap.id, (snap.data()?.insights ?? {}) as Record<string, number>)
+  }
+  const maxMerge = (prev: Record<string, number>, next: Record<string, number>): Record<string, number> => {
+    const out: Record<string, number> = { ...prev }
+    for (const [k, v] of Object.entries(next)) {
+      if (typeof v === 'number') out[k] = Math.max(out[k] ?? 0, v)
+    }
+    return out
+  }
+
   const batch = adminDb.batch()
   for (const post of withInsights) {
     const postRef = fbPostsCol.doc(post.id)
@@ -62,7 +82,7 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
       message: post.message ?? '',
       createdTime: Timestamp.fromDate(new Date(post.created_time)),
       permalink: post.permalink_url ?? '',
-      insights: post.insights,
+      insights: maxMerge(prevInsightsById.get(post.id) ?? {}, post.insights),
       syncedAt: Timestamp.now(),
     }, { merge: true })
   }
