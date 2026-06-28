@@ -8,7 +8,7 @@ interface FbPost {
   message: string
   createdTime: string
   permalink: string
-  insights: { reactions: number; comments: number; shares: number }
+  insights: { reactions: number; comments: number; shares: number; reach: number }
 }
 
 interface IgPost {
@@ -95,7 +95,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
       permalink: ig?.permalink || fb?.permalink || '',
       fbOnly: !!fb && !ig,
       igOnly: !fb && !!ig,
-      reach: ig?.insights.reach ?? 0,
+      reach: (fb?.insights.reach ?? 0) + (ig?.insights.reach ?? 0),
       likes: (fb?.insights.reactions ?? 0) + (ig?.insights.likes ?? 0),
       comments: (fb?.insights.comments ?? 0) + (ig?.insights.comments ?? 0),
       saved: ig?.insights.saved ?? 0,
@@ -168,7 +168,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
                 )}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: row.reach > 200 ? 'var(--ad-green)' : undefined }}>
-                {row.igOnly || !row.fbOnly ? fmt(row.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+                {row.reach > 0 ? fmt(row.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.likes)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.comments)}</td>

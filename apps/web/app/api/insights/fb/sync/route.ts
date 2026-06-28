@@ -30,10 +30,13 @@ export async function POST(req: NextRequest) {
     if (!accessToken) return NextResponse.json({ error: 'No page access token' }, { status: 400 })
 
     // Fetch recent posts with engagement metrics
-    const fullFields = 'id,message,story,created_time,permalink_url,reactions.summary(total_count),comments.summary(total_count),shares'
+    // reach via field expansion `insights.metric(post_impressions_unique)` — needs
+    // read_insights (granted). The manual sync previously skipped reach entirely, so FB
+    // 觸及 never had a reliable source (only the flaky daily cron filled it).
+    const fullFields = 'id,message,story,created_time,permalink_url,reactions.summary(total_count),comments.summary(total_count),shares,insights.metric(post_impressions_unique)'
     const basicFields = 'id,message,story,created_time,permalink_url'
 
-    let posts: { id: string; message?: string; story?: string; created_time: string; permalink_url?: string; reactions?: { summary: { total_count: number } }; comments?: { summary: { total_count: number } }; shares?: { count: number } }[] = []
+    let posts: { id: string; message?: string; story?: string; created_time: string; permalink_url?: string; reactions?: { summary: { total_count: number } }; comments?: { summary: { total_count: number } }; shares?: { count: number }; insights?: { data?: { name: string; values: { value: number }[] }[] } }[] = []
     let engagementAvailable = true
 
     const fetchUrl = new URL(`${BASE}/${pageId}/posts`)
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest) {
       const r = post.reactions?.summary?.total_count
       const c = post.comments?.summary?.total_count
       const s = post.shares?.count
+      const reach = post.insights?.data?.find(m => m.name === 'post_impressions_unique')?.values?.[0]?.value
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const record: Record<string, any> = {
         postId: post.id,
@@ -97,6 +101,7 @@ export async function POST(req: NextRequest) {
           reactions: Math.max(prev.reactions ?? 0, r ?? 0),
           comments: Math.max(prev.comments ?? 0, c ?? 0),
           shares: Math.max(prev.shares ?? 0, s ?? 0),
+          reach: Math.max(prev.reach ?? 0, reach ?? 0),
         },
       }
       batch.set(fbPostsCol.doc(post.id), record, { merge: true })

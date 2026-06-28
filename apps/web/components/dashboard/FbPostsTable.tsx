@@ -12,10 +12,11 @@ interface FbPost {
     reactions: number
     comments: number
     shares: number
+    reach: number
   }
 }
 
-type SortKey = 'createdTime' | 'reactions' | 'comments' | 'shares'
+type SortKey = 'createdTime' | 'reach' | 'reactions' | 'comments' | 'shares'
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 
@@ -78,6 +79,7 @@ export function FbPostsTable({ posts, onAskAI }: { posts: FbPost[]; onAskAI?: (q
           <tr>
             <SortTh k="createdTime" label={L('日期', 'Date')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <th style={{ textAlign: 'left' }}>{L('內容', 'Content')}</th>
+            <SortTh k="reach" label={L('觸及', 'Reach')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="reactions" label={L('按讚', 'Likes')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="comments" label={L('留言', 'Comments')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="shares" label={L('分享', 'Shares')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -106,6 +108,9 @@ export function FbPostsTable({ posts, onAskAI }: { posts: FbPost[]; onAskAI?: (q
                 <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, marginTop: 3, background: 'var(--ad-surface2)', color: 'var(--ad-text3)' }}>
                   📝 {L('貼文', 'Post')}
                 </span>
+              </td>
+              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: post.insights.reach > 200 ? 'var(--ad-green)' : undefined }}>
+                {post.insights.reach > 0 ? fmt(post.insights.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.reactions)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.comments)}</td>

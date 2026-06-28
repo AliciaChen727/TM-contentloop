@@ -203,7 +203,7 @@ export default function DashboardPage() {
     for (const fb of fbPosts) {
       const d = fb.createdTime.slice(0, 10)
       const e = byDate.get(d) ?? { reach: 0, likes: 0, comments: 0, shares: 0 }
-      byDate.set(d, { ...e, likes: e.likes + (fb.insights?.reactions ?? 0), comments: e.comments + (fb.insights?.comments ?? 0), shares: e.shares + (fb.insights?.shares ?? 0) })
+      byDate.set(d, { ...e, reach: e.reach + (fb.insights?.reach ?? 0), likes: e.likes + (fb.insights?.reactions ?? 0), comments: e.comments + (fb.insights?.comments ?? 0), shares: e.shares + (fb.insights?.shares ?? 0) })
     }
     for (const ig of igPosts) {
       const d = ig.timestamp.slice(0, 10)
