@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-06-28 | FB 貼文觸及補齊（之前內容儀表板 FB 觸及全空、只有 IG 有）。根因兩層：①顯示層 FbPostsTable 無觸及欄、合併表觸及只取 IG（FB-only 硬寫「—」）、折線圖總觸及只加總 IG；②抓取層手動同步根本不抓 reach，FB 觸及只靠不穩的每日 cron。修法：手動同步 fullFields 加 `insights.metric(post_impressions_unique)`（需 read_insights，已有）寫入 `insights.reach`＋read-then-max；FbPostsTable 加觸及欄；合併表觸及改 **FB+IG 合計**（與「總觸及」卡片同口徑）；折線圖 FB 迴圈補 reach | `06bf924` |
 | 2026-06-27 | 修「所有粉專 FB 互動數整批變 0」：第二根因在每日 cron（`api/cron/sync` 的 `syncFbForUser`）——每篇打 `/{post}/insights`，呼叫失敗時 catch 回全 0，且原本 `batch.set` 直接整包覆蓋 `insights`（**無 read-then-max**），一次壞掉的 cron run 就把所有粉專真值抹平。手動同步早有的保護（b414e9c）漏補在這條 cron 路徑。改為先讀現有 doc、每個 metric 取 `max(舊,新)`，往後抓失敗不再清空。⚠️ 注意：兩條寫 `fbPosts` 的路徑（手動 `reactions.summary` vs cron post-insights metric）都要保留 read-then-max | `fb1f422` |
 | 2026-06-26 | 修 FB 貼文互動數全 0：根因為 OAuth SCOPES 漏 `pages_read_user_content`，同步抓 reactions/comments/shares 被 Graph #10 擋下退回 basic（只存 0）。連接頁 SCOPES 補上該權限；重連授權後重新同步即可抓到並存入 Firebase（之後由 read-then-max 保護）。診斷用 `/debug/fb-probe`（並排 full/basic 回應）。⚠️ Dev mode 下此 scope 對有 App 角色者可直接授權，一般使用者需 App Review | `（本次）` |
 | 2026-06-15 | 報名連結追蹤：報名金額幣別改下拉選單（TWD/JPY/KRW/USD…16 種 ISO 幣別，建立時帶入並回報 Meta CAPI Purchase）；Google 表單教學標題下加黃色提醒——兩種做法都需表單編輯權，非本人建立的表單要請擁有者加協作者或代貼 Apps Script，否則只能看點擊、完成恆為 0 | `（本次）` |
