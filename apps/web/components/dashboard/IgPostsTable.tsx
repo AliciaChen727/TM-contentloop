@@ -1,7 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { TablePager } from './TablePager'
+
+const PAGE_SIZE = 200
 
 interface IgPost {
   id: string
@@ -61,6 +64,8 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
   const en = lang === 'en'
   const [sortKey, setSortKey] = useState<SortKey>('timestamp')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [page, setPage] = useState(1)
+  useEffect(() => { setPage(1) }, [posts, sortKey, sortDir])
 
   if (!posts.length) {
     return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>{L('尚無 IG 貼文資料', 'No IG post data yet')}</p>
@@ -83,6 +88,8 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
     return sortDir === 'desc' ? bv - av : av - bv
   })
 
+  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table className="ads-posts-table">
@@ -104,7 +111,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
           </tr>
         </thead>
         <tbody>
-          {sorted.map(post => {
+          {paged.map(post => {
             const isReels = post.mediaType === 'REELS' || post.mediaType === 'VIDEO'
             return (
               <tr key={post.id}>
@@ -157,9 +164,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
           })}
         </tbody>
       </table>
-      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)' }}>
-        {L(`共 ${posts.length} 筆記錄`, `${posts.length} records`)}
-      </div>
+      <TablePager page={page} pageSize={PAGE_SIZE} total={sorted.length} onPage={setPage} />
     </div>
   )
 }

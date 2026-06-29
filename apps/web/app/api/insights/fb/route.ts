@@ -1,7 +1,12 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { Timestamp } from 'firebase-admin/firestore'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
+
+// Hard ceiling so the unbounded "全部" query can't read an ever-growing collection in
+// one shot. Ranged (7/30/90d) queries are naturally bounded by the date filter.
+const READ_CAP = 1000
 
 // Combine two insights maps for the SAME post, taking the best (max) value per
 // metric so a real imported number (e.g. reactions 51) beats a live-sync 0.
@@ -37,6 +42,18 @@ export async function GET(req: NextRequest) {
 
   const pageId = req.nextUrl.searchParams.get('pageId')
 
+  // Optional date-range filter (YYYY-MM-DD). Absent → "全部" (capped at READ_CAP).
+  const since = req.nextUrl.searchParams.get('since')
+  const until = req.nextUrl.searchParams.get('until')
+  const sinceTs = since ? Timestamp.fromDate(new Date(since + 'T00:00:00.000Z')) : null
+  const untilTs = until ? Timestamp.fromDate(new Date(until + 'T23:59:59.999Z')) : null
+  const rangedFbQuery = (q: FirebaseFirestore.Query): FirebaseFirestore.Query => {
+    let out = q.orderBy('createdTime', 'desc')
+    if (sinceTs) out = out.where('createdTime', '>=', sinceTs)
+    if (untilTs) out = out.where('createdTime', '<=', untilTs)
+    return out.limit(READ_CAP)
+  }
+
   // Resolve data owner: admin queries own data; viewer needs page admin's UID
   let dataOwnerUid = uid
   if (pageId) {
@@ -59,8 +76,8 @@ export async function GET(req: NextRequest) {
   let rawPosts: RawPost[]
   if (pageId) {
     const [newSnap, legacySnap] = await Promise.all([
-      userRef.collection('pages').doc(pageId).collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
-      userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get(),
+      rangedFbQuery(userRef.collection('pages').doc(pageId).collection('fbPosts')).get(),
+      rangedFbQuery(userRef.collection('fbPosts')).get(),
     ])
     // Page-scoped docs (live fb/sync) are the canonical base.
     const byId = new Map<string, Record<string, unknown>>()
@@ -82,9 +99,9 @@ export async function GET(req: NextRequest) {
     rawPosts = Array.from(byId.entries())
       .map(([id, data]) => ({ id, data }))
       .sort((a, b) => tsMillis(b.data.createdTime) - tsMillis(a.data.createdTime))
-      .slice(0, 200)
+      .slice(0, READ_CAP)
   } else {
-    const snap = await userRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(200).get()
+    const snap = await rangedFbQuery(userRef.collection('fbPosts')).get()
     rawPosts = snap.docs.map(d => ({ id: d.id, data: d.data() }))
   }
 

@@ -81,12 +81,18 @@ export default function DashboardPage() {
   const [idToken, setIdToken] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
 
-  const fetchPosts = useCallback(async (idToken: string, pageId: string) => {
+  const fetchPosts = useCallback(async (idToken: string, pageId: string, since?: string, until?: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
-    const qs = pageId ? `?pageId=${pageId}` : ''
+    const base = new URLSearchParams()
+    if (pageId) base.set('pageId', pageId)
+    const qs = base.toString() ? `?${base.toString()}` : '' // stories: no date filter (24h only)
+    const range = new URLSearchParams(base)
+    if (since) range.set('since', since)
+    if (until) range.set('until', until)
+    const rqs = range.toString() ? `?${range.toString()}` : '' // posts: date-range filtered
     const [fbRes, igRes, storiesRes, fbStoriesRes] = await Promise.all([
-      fetch(`/api/insights/fb${qs}`, { headers }),
-      fetch(`/api/insights/ig${qs}`, { headers }),
+      fetch(`/api/insights/fb${rqs}`, { headers }),
+      fetch(`/api/insights/ig${rqs}`, { headers }),
       fetch(`/api/insights/ig/stories${qs}`, { headers }),
       fetch(`/api/insights/fb/stories${qs}`, { headers }),
     ])
@@ -148,8 +154,7 @@ export default function DashboardPage() {
         }
       }
 
-      await fetchPosts(idToken, activePageId)
-      setLoading(false)
+      // Posts are fetched by the date-range effect below (keyed on page + date bounds).
     })
     return unsub
   }, [router, fetchPosts])
@@ -163,6 +168,19 @@ export default function DashboardPage() {
     start.setDate(start.getDate() - days)
     return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
   }, [days, dateMode, customStart, customEnd])
+
+  // (Re)fetch posts whenever the selected page or date range changes — the server now
+  // queries by date range, so "全部" returns everything (capped) and 7/30/90d read only
+  // what they need. loading stays true until the first fetch resolves; later refetches
+  // update in place without flashing the spinner. "全部" sends 2000-01-01 → no lower bound.
+  useEffect(() => {
+    if (!idToken) return
+    let cancelled = false
+    const since = days === 0 && dateMode === 'preset' ? undefined : dateBounds.start
+    const until = days === 0 && dateMode === 'preset' ? undefined : dateBounds.end
+    fetchPosts(idToken, selectedPageId, since, until).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [idToken, selectedPageId, dateBounds.start, dateBounds.end, days, dateMode, fetchPosts])
 
   // Posts in date range (for summary cards)
   const rangedFb = useMemo(() => fbPosts.filter(p => {
@@ -273,7 +291,7 @@ export default function DashboardPage() {
     setSkOpen(true)
   }, [])
 
-  async function handlePageChange(newPageId: string) {
+  function handlePageChange(newPageId: string) {
     setSelectedPageId(newPageId)
     localStorage.setItem('selectedPageId', newPageId)
     const found = pages.find(p => p.pageId === newPageId)
@@ -281,10 +299,7 @@ export default function DashboardPage() {
     if (found) setPageData({ pageId: found.pageId, pageName: found.pageName, igUserId: found.igUserId })
     setFbPosts([])
     setIgPosts([])
-    const u = auth.currentUser
-    if (!u) return
-    const idToken = await u.getIdToken()
-    await fetchPosts(idToken, newPageId)
+    // The date-range effect refetches automatically when selectedPageId changes.
   }
 
   async function handleAddPage() {

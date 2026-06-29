@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { Timestamp } from 'firebase-admin/firestore'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
+
+// Hard ceiling so the unbounded "全部" query can't read an ever-growing collection at once.
+const READ_CAP = 1000
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -35,9 +39,21 @@ export async function GET(req: NextRequest) {
   }
   const userRef = adminDb.collection('users').doc(dataOwnerUid)
 
+  // Optional date-range filter (YYYY-MM-DD). Absent → "全部" (capped at READ_CAP).
+  const since = req.nextUrl.searchParams.get('since')
+  const until = req.nextUrl.searchParams.get('until')
+  const sinceTs = since ? Timestamp.fromDate(new Date(since + 'T00:00:00.000Z')) : null
+  const untilTs = until ? Timestamp.fromDate(new Date(until + 'T23:59:59.999Z')) : null
+  const rangedIgQuery = (q: FirebaseFirestore.Query): FirebaseFirestore.Query => {
+    let out = q.orderBy('timestamp', 'desc')
+    if (sinceTs) out = out.where('timestamp', '>=', sinceTs)
+    if (untilTs) out = out.where('timestamp', '<=', untilTs)
+    return out.limit(READ_CAP)
+  }
+
   const snap = pageId
-    ? await userRef.collection('pages').doc(pageId).collection('igPosts').orderBy('timestamp', 'desc').limit(50).get()
-    : await userRef.collection('igPosts').orderBy('timestamp', 'desc').limit(50).get()
+    ? await rangedIgQuery(userRef.collection('pages').doc(pageId).collection('igPosts')).get()
+    : await rangedIgQuery(userRef.collection('igPosts')).get()
 
   const posts = snap.docs.map((doc) => ({
     id: doc.id,

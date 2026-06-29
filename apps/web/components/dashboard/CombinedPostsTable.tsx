@@ -1,7 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { TablePager } from './TablePager'
+
+const PAGE_SIZE = 200
 
 interface FbPost {
   id: string
@@ -76,6 +79,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
   const en = lang === 'en'
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [page, setPage] = useState(1)
 
   const rows = useMemo<CombinedRow[]>(() => {
     const byDate = new Map<string, { fb?: FbPost; ig?: IgPost }>()
@@ -104,6 +108,9 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
     }))
   }, [fbPosts, igPosts])
 
+  // Reset to first page when the data set or sort changes.
+  useEffect(() => { setPage(1) }, [rows, sortKey, sortDir])
+
   if (!rows.length) {
     return <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>{L('尚無整合貼文資料', 'No combined post data yet')}</p>
   }
@@ -118,6 +125,8 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
     const bv = sortKey === 'date' ? new Date(b.date).getTime() : b[sortKey] as number
     return sortDir === 'desc' ? bv - av : av - bv
   })
+
+  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -145,7 +154,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
           </tr>
         </thead>
         <tbody>
-          {sorted.map(row => (
+          {paged.map(row => (
             <tr key={row.date}>
               <td className="ads-posts-date" style={{ whiteSpace: 'nowrap' }}>
                 {fullDate(row.date)}
@@ -205,10 +214,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
           </tr>
         </tbody>
       </table>
-      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-border)', fontSize: 11.5, color: 'var(--ad-text3)', display: 'flex', justifyContent: 'space-between' }}>
-        <span>{L(`共 ${rows.length} 筆記錄`, `${rows.length} records`)}</span>
-        <span>{L('點擊內容標題可前往原始貼文連結', 'Click a content title to open the original post')}</span>
-      </div>
+      <TablePager page={page} pageSize={PAGE_SIZE} total={rows.length} onPage={setPage} />
     </div>
   )
 }
