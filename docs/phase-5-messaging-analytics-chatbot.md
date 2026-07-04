@@ -141,5 +141,108 @@ users/{uid}/pages/{pageId}/messageStats/daily__{YYYY-MM-DD}
 
 ---
 
+## 7. 詳細計畫 — 5-1 擴充（問題分類 + 歷史存檔）
+
+> **現況（`4c3d485` 已上線）**：5-1 是「即時抓、不存檔」的唯讀統計（則數/人數/對話數/每日趨勢/最近對話）。**限制**：每對話只抓最近 100 則→歷史低估；**沒抓訊息文字**→無法分類；每次載入即時打 Graph→較慢。
+
+### 7.1 為什麼擴充要一起做「存檔」
+「問題分類」需要**訊息文字**，而目前 5-1 只抓 `created_time`+`from`，沒抓 `message` 內容。要分類就得抓文字；抓了文字若不存，每次載入都要重打 + 重跑 LLM（貴又慢）。因此**問題分類 = 抓文字 + 存檔 + 分類快取**，三者綁在一起，這一刀把原本 deferred 的 cron 存檔一併做掉。
+
+### 7.2 Cron 增量存檔
+- 新 `app/api/cron/sync-messages`（GitHub Actions，每 4–6 小時；接在既有 sync 節奏後）。
+- 增量：記 per-page `lastMessageTime`，只抓新訊息、翻頁補歷史。
+- Firestore（page-scoped，嚴守隔離）：
+  ```
+  users/{uid}/pages/{pageId}/msgConversations/{convId}
+    platform, participantName, lastMessageTime, totalCount
+  users/{uid}/pages/{pageId}/msgConversations/{convId}/items/{msgId}
+    direction: inbound|outbound, from, createdTime,
+    text?          # 視隱私選項決定存不存原文（見 7.4）
+    intent, intentConfidence   # 分類結果
+  users/{uid}/pages/{pageId}/messageStats/daily__{YYYY-MM-DD}
+    inboundCount, uniqueSenders, avgFirstReplyMinutes, intentCounts{...}
+  ```
+
+### 7.3 問題分類（intent classification）
+- **分類器**：低成本模型（`gemini-2.5-flash` thinkingBudget 0，或 `claude-haiku-4-5`），對每則 **inbound** 訊息判 intent + 信心分。走**批次**（cron 時分類新訊息），不在使用者請求時即時算 → 控成本。
+- **意圖分類法（初版，TM 分會情境；owner 可調）**：
+  `例會時間` / `例會地點` / `如何加入·報名` / `費用·價格` / `體驗·初次參加` / `聯絡·其他窗口` / `其他`
+- **儀表板新增**：
+  - 「**常見問題 Top N**」長條圖/清單（依 intent 分群計數，可點看該類對話）
+  - 「**平均首次回覆時間**」（inbound→第一則 outbound 的中位/平均）
+  - 選配：「**尖峰時段**」熱圖（哪個時段最多私訊）
+- **這是 5-2 的燃料**：Top 問題直接告訴你 FAQ 要先答哪幾題、答案怎麼寫。
+
+### 7.4 🔑 關鍵決策：訊息原文要不要存？（分類前必須定）
+分類需要文字。三種取捨：
+
+| 選項 | 做法 | 優點 | 代價 |
+|------|------|------|------|
+| **A. 存原文 + 短 TTL** | Firestore 存 `text`，設 90/180 天 TTL | 可回溯、可重分類、可餵 5-2 few-shot、debug 容易 | 需補 `/privacy`「訊息內容蒐集/保存/刪除」+ `/data-deletion` 涵蓋；資料敏感度最高 |
+| **B. 只存 intent 標籤（不存原文）** | 分類後只留 `intent`，丟棄文字 | 隱私最小化、審查最友善 | 無法回溯/重分類；分類法一改要重抓 |
+| **C. 完全 live 不存** | 每次載入即時抓+分類 | 完全不存敏感資料 | 每次都貴+慢；不可行於 Top 問題長期統計 |
+
+> **建議 A**（存原文 + TTL）：分類品質、5-2 FAQ 訓練、debug 都靠它；隱私靠 TTL + 政策補件 + owner 可刪來守。若你偏保守可選 B。**C 不建議**。
+
+**✅ 決策（2026-07-05，使用者拍板）：採 A — 存原文 + 短 TTL。** 實作要點：
+- 存 `text`（inbound + outbound 都存，回覆時間差要算首次回覆）。
+- **TTL 180 天**：Firestore TTL policy 掛在 `items` 的 `expireAt` 欄位（寫入時 = createdTime + 180d），到期自動刪。
+- **隱私補件（存原文前必做）**：`/privacy` 新增「訊息內容：蒐集範圍、用途（統計+分類+自動回覆）、保存 180 天、如何刪除」；`/data-deletion` 流程涵蓋訊息資料。
+- **owner 可手動清除**：設定頁提供「刪除此粉專所有已存私訊」按鈕（一次清空 page-scoped 訊息）。
+- 隔離照舊：一律 `users/{uid}/pages/{pageId}/...`，跨頁不混。
+
+### 7.5 5-1 擴充驗收
+- Top 問題數字合理、點得進該類對話；平均回覆時間有值。
+- cron 增量正確（不重複、補得到歷史）。
+- 跨頁隔離：A 粉專的分類/訊息不出現在 B。
+- （若選 A）隱私政策 + 資料刪除已補、TTL 生效。
+
+---
+
+## 8. 詳細計畫 — 5-2 FAQ Chatbot（讀寫）範圍
+
+> **前置**：5-1 擴充上線、累積夠資料知道「最常被問什麼」後才做。messaging **寫入**（Send API）+ webhook + **商家驗證** → 單獨 App Review。
+
+### 8.1 In scope（第一版刻意保守）
+1. **Webhook 接收**（Firebase Cloud Function）：訂閱 `messages` 事件；驗 `hub.verify_token` + `X-Hub-Signature-256`（App Secret）。收到 inbound → 存 Firestore（沿用 7.2 model）→ 分類 intent。
+2. **FAQ 設定**（owner 可編輯，`pages/{pageId}/faqBot/config`）：
+   ```
+   enabled: boolean
+   humanHandoffEnabled: boolean
+   fallbackMessage: string
+   faqs: [{ intent, answer, dynamicFields?, needsHuman }]
+   ```
+3. **回覆決策**：
+   - 命中 FAQ **且高信心** → Send API 回模板答案（例會時間/地點可帶動態欄位）。
+   - 低信心 / 未命中 → **不亂答**，回 `fallbackMessage`（「已收到，稍後由真人回覆」）並標記 handoff。
+4. **控制與稽核**：owner 可**全域關 bot**、**逐 FAQ 停用**；所有 outbound 自動回覆存檔，儀表板可審閱「bot 回了什麼」。
+5. **合規**：遵守 **24 小時訊息窗**（窗內自由回；超窗才需訊息標籤 / `human_agent`）。
+
+### 8.2 Out of scope（第一版不做）
+- ❌ 開放式閒聊/生成式自由對話（只答預定 FAQ，降風險 + 好過審）。
+- ❌ 主動群發 / 行銷推播（違反 24h 窗，審查地雷）。
+- ❌ 自動轉真人客服的複雜工單系統（先只「標記 handoff」）。
+
+### 8.3 Send API
+- IG：`POST /{ig-user-id}/messages`；FB：`POST /{page-id}/messages`。
+- 需 scope 升級為可寫（`instagram_manage_messages` 已含回覆能力；FB 用 `pages_messaging`）。
+
+### 8.4 5-2 App Review 交付
+- 錄 screencast：真實用戶私訊 → bot 命中 FAQ 自動回覆 / 未命中轉真人 全流程。
+- messaging 寫入權限用途說明（英文）。
+- 完成 **Business Verification**。
+- `/privacy` 補「自動回覆如何運作、訊息如何處理」。
+
+---
+
+## 9. 建議順序（更新版）
+1. **5-1 擴充**：先定 7.4 存原文選項 → cron 存檔 + 問題分類 + Top 問題儀表板（+ 隱私補件）。
+2. 累積 2–4 週資料、確認 Top 問題穩定。
+3. **5-2**：FAQ 設定 UI → webhook → 保守版自動回覆（命中才回、否則 handoff）→ 單獨送審 + 商家驗證。
+4. 穩定後再擴：動態答案、尖峰時段、轉真人流程。
+
+---
+
 ## 變更紀錄
-- 2026-07-05：新增本文件（Phase 5 規劃，尚未動工；等現行 8 權限 App Review 送出後再啟動）。
+- 2026-07-05：新增本文件（Phase 5 規劃）。5-1 私訊分析（唯讀）已上線（commit `d1fe863`/`4c3d485`）。
+- 2026-07-05：補 §7–§9 詳細計畫——5-1 擴充（問題分類 + cron 存檔 + 原文儲存決策 A/B/C）與 5-2 FAQ chatbot 範圍。尚未動工。
