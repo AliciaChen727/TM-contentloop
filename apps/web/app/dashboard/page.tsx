@@ -277,8 +277,13 @@ export default function DashboardPage() {
   // Stories are their own capped list, NOT bound to the posts' date range: IG
   // stories are 24h-ephemeral (always recent), but FB's Stories Archive returns
   // older stories too, and applying dateBounds hid those entirely. Show every
-  // synced story — the table sorts newest-first.
-  const filteredStories = igStories
+  // synced story — the table sorts newest-first. But DO respect the platform tab
+  // (FB+IG / Facebook / Instagram): the FB tab shows only FB stories and vice versa.
+  const filteredStories = useMemo(() => {
+    if (activeTab === 'fb') return igStories.filter(s => s.platform === 'FB')
+    if (activeTab === 'ig') return igStories.filter(s => s.platform === 'IG')
+    return igStories
+  }, [igStories, activeTab])
 
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
