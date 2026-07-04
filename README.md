@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-04 | 修限動表格未依平台分頁過濾：切到 Instagram+Stories 卻同時顯示 FB 限動（反之亦然）。`filteredStories` 無條件把全部限動餵給 `IgStoriesTable`，未依 `activeTab` 過濾。改為 fb 分頁只回 `platform==='FB'`、ig 分頁只回 `'IG'`、combined 回全部 | `14d8f1a` |
 | 2026-07-04 | 登入頁偵測 App 內嵌瀏覽器（webview）並提示改用 Safari/Chrome。根因：使用者從 LINE/FB/IG/Messenger/Threads/WeChat 內建瀏覽器點連結登入時，Google 依「Use secure browsers」政策禁止 webview 做 OAuth → `Error 403: disallowed_useragent`，卡在看不懂的 Google 錯誤頁。無法繞過政策，改用 UA regex 偵測常見 in-app browser，命中顯示提示橫幅引導改用系統瀏覽器。純前端偵測，桌機/一般行動瀏覽器不受影響 | `c24ce8d` |
 | 2026-07-04 | App Review 精簡：移除 OAuth scope `pages_manage_posts`（原僅用於讀 FB Page Stories `/{page}/stories`）。唯讀分析工具不需「發文/管理」等級權限，且 FB 限動 insights 恆 0、會拖累審查；Meta 後台使用案例一併移除。IG 限動/貼文/廣告不受影響。新增 `docs/meta-app-review.md` 交付清單（送審 8 核心讀取權限）| `ef5db8d` |
 | 2026-07-04 | 修「新 FB 貼文互動恆 0」復發。read-then-max（`fb1f422`）只防 cron 抹平**已存真值**，但全新貼文沒有前值可 max；而 cron 算互動的來源仍是不可靠的 per-post `/insights` metrics（`post_reactions_by_type_total`/`post_activity_by_action_type`），對剛發貼文回空/錯→catch 寫 0。手動同步走 `/posts` plain field 沒事，故只被 cron 碰過的新貼文卡 0（實測 Legacy 07/01 Meta 真值 10/0/0、07/02 6/0/1，Firestore 卻 0，且該兩則 `engagementAvailable=undefined`）。改為 cron 互動也讀 `/posts` plain field（`reactions.summary/comments.summary/shares`），`/insights` 只留 reach；兩條寫 fbPosts 路徑自此互動同源＋都 read-then-max。stuck 舊 0 貼文靠手動同步一次補回 | `ab63c55` |
