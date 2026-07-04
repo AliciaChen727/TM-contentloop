@@ -14,6 +14,7 @@ Toastmasters 分會用的 AI 廣告／內容成效儀表板。從 FB 粉專 + �
 | 2 | 站內通知中心（紅點）+ 排程 email 告警 | ✅ `docs/phase-2-notification-center.md` |
 | 3 | AI Sidekick 優化 loop + 自我學習（批次審查 agent / Quality evaluator / feedback memory；agent = **Anthropic 原生**，非 LangChain）| 📋 `docs/phase-3-sidekick-self-learning.md` |
 | 4 | 半自動廣告更新（Meta Marketing API 寫入，需 `ads_management` + App Review）| 📋 `docs/phase-4-ad-automation.md` |
+| 5 | 私訊分析 + FAQ 自動回覆 chatbot（讀 IG/FB DM，需 `instagram_manage_messages`/`pages_messaging` + Business Verification + 獨立 App Review，**不混現行唯讀送審**）| 📋 `docs/phase-5-messaging-analytics-chatbot.md` |
 
 系統架構詳見 `docs/architecture.md`；廣告目標→指標對照見 `docs/goal-metrics.md`。
 
