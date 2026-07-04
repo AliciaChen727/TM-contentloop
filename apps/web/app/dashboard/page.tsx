@@ -274,13 +274,11 @@ export default function DashboardPage() {
     return arr
   }, [igPosts, typeFilter, search])
 
-  // Stories live in a date-range-filtered list (they expire after 24h anyway)
-  const filteredStories = useMemo(() => {
-    return igStories.filter(s => {
-      const d = s.timestamp?.slice(0, 10)
-      return d ? d >= dateBounds.start && d <= dateBounds.end : true
-    })
-  }, [igStories, dateBounds])
+  // Stories are their own capped list, NOT bound to the posts' date range: IG
+  // stories are 24h-ephemeral (always recent), but FB's Stories Archive returns
+  // older stories too, and applying dateBounds hid those entirely. Show every
+  // synced story — the table sorts newest-first.
+  const filteredStories = igStories
 
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')

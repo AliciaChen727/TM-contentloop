@@ -69,7 +69,7 @@ export function IgStoriesTable({ stories, onAskAI }: { stories: IgStory[]; onAsk
   if (!stories.length) {
     return (
       <p style={{ padding: '32px 0', textAlign: 'center', fontSize: 13, color: 'var(--ad-text3)' }}>
-        {L('尚無限動資料。IG 限動需在發布後 24 小時內、限動還在線時按同步收集。（FB 粉專限動目前 Meta API 無法讀取手動發布的限動，請改用「上傳圖片」分析。）', 'No Story data yet. IG Stories must be synced within 24 hours of posting while they are still live. (Meta API currently cannot read manually-posted FB Page Stories — use "Upload image" to analyze instead.)')}
+        {L('尚無限動資料。IG 限動需在發布後 24 小時內、限動還在線時按同步收集；FB 粉專限動會自動同步（含典藏的舊限動），但 Meta 多半不提供其觸及／觀看數。', 'No Story data yet. IG Stories must be synced within 24 hours of posting while they are still live; FB Page Stories sync automatically (including archived ones), though Meta usually does not provide reach/views for them.')}
       </p>
     )
   }
