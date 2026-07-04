@@ -16,7 +16,7 @@ const BASE = 'https://graph.facebook.com/v19.0'
 
 async function syncFbForUser(uid: string, accessToken: string, pageId: string): Promise<{ synced: number; error?: string }> {
   const postsUrl = new URL(`${BASE}/${pageId}/posts`)
-  postsUrl.searchParams.set('fields', 'id,message,story,created_time,permalink_url')
+  postsUrl.searchParams.set('fields', 'id,message,story,created_time,permalink_url,reactions.summary(total_count),comments.summary(total_count),shares')
   postsUrl.searchParams.set('limit', '100')
   postsUrl.searchParams.set('access_token', accessToken)
 
@@ -24,18 +24,32 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
   const postsData = await postsRes.json()
   if (!postsRes.ok || postsData.error) return { synced: 0, error: postsData.error?.message ?? 'posts fetch failed' }
 
-  type RawPost = { id: string; message?: string; story?: string; created_time: string; permalink_url?: string }
+  type RawPost = { id: string; message?: string; story?: string; created_time: string; permalink_url?: string; reactions?: { summary?: { total_count?: number } }; comments?: { summary?: { total_count?: number } }; shares?: { count?: number } }
   const allPosts: RawPost[] = postsData.data ?? []
 
   // Posts with user-written text → save; story-only / empty → delete from Firestore
   const posts = allPosts.filter(p => p.message)
   const storyOnlyIds = allPosts.filter(p => !p.message).map(p => p.id)
 
-  // Fetch insights per post in parallel
+  // Engagement (reactions/comments/shares) comes from the plain /posts fields above —
+  // reliable and available immediately, even for brand-new posts. The per-post /insights
+  // call is ONLY for reach (impressions), which lags and often errors on fresh posts.
+  // A failure there must NEVER zero engagement.
+  //
+  // ⚠️ Root cause of the recurring "new FB posts show 0 likes/comments/shares": cron
+  // used to derive engagement from /insights metrics (post_reactions_by_type_total /
+  // post_activity_by_action_type). Those are empty/erroring for a day-old post → wrote 0.
+  // The earlier read-then-max fix only stopped cron from WIPING posts that already had
+  // numbers; a fresh post has no prev value to max against, so it stuck at 0. Now cron
+  // reads the same reliable plain fields the manual sync uses.
   const withInsights = await Promise.all(posts.map(async post => {
+    const reactions = post.reactions?.summary?.total_count ?? 0
+    const comments = post.comments?.summary?.total_count ?? 0
+    const shares = post.shares?.count ?? 0
+    let reach = 0, paidReach = 0, organicReach = 0
     try {
       const insUrl = new URL(`${BASE}/${post.id}/insights`)
-      insUrl.searchParams.set('metric', 'post_reactions_by_type_total,post_impressions_unique,post_activity_by_action_type,post_impressions_paid_unique,post_impressions_organic_unique')
+      insUrl.searchParams.set('metric', 'post_impressions_unique,post_impressions_paid_unique,post_impressions_organic_unique')
       insUrl.searchParams.set('period', 'lifetime')
       insUrl.searchParams.set('access_token', accessToken)
       const insRes = await fetch(insUrl)
@@ -44,13 +58,13 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
       for (const item of (insData.data ?? []) as { name: string; values: { value: unknown }[] }[]) {
         vals[item.name] = item.values?.[0]?.value ?? 0
       }
-      const reactionsByType = vals.post_reactions_by_type_total as Record<string, number> ?? {}
-      const reactions = Object.values(reactionsByType).reduce((s, v) => s + v, 0)
-      const activity = vals.post_activity_by_action_type as Record<string, number> ?? {}
-      return { ...post, insights: { reactions, reach: (vals.post_impressions_unique as number) ?? 0, comments: activity.comment ?? 0, shares: activity.share ?? 0, paidReach: (vals.post_impressions_paid_unique as number) ?? 0, organicReach: (vals.post_impressions_organic_unique as number) ?? 0 } }
+      reach = (vals.post_impressions_unique as number) ?? 0
+      paidReach = (vals.post_impressions_paid_unique as number) ?? 0
+      organicReach = (vals.post_impressions_organic_unique as number) ?? 0
     } catch {
-      return { ...post, insights: { reactions: 0, reach: 0, comments: 0, shares: 0, paidReach: 0, organicReach: 0 } }
+      // reach unavailable this run; engagement (plain fields) is unaffected.
     }
+    return { ...post, insights: { reactions, reach, comments, shares, paidReach, organicReach } }
   }))
 
   const userRef = adminDb.collection('users').doc(uid)
