@@ -13,6 +13,16 @@ export default function LoginPage() {
   useEffect(() => { setEn(localStorage.getItem('cl_dash_lang') === 'en' || localStorage.getItem('cl_lang') === 'en') }, [])
   const L = (zh: string, eng: string) => (en ? eng : zh)
 
+  // In-app browsers (Facebook / IG / LINE / Messenger / Threads / WeChat 等內建
+  // webview) 會被 Google 以「Use secure browsers」政策擋下 Google 登入
+  // （Error 403: disallowed_useragent）。偵測到就提示使用者改用 Safari/Chrome 開啟。
+  const [inAppBrowser, setInAppBrowser] = useState(false)
+  useEffect(() => {
+    const ua = navigator.userAgent || ''
+    const patterns = /FBAN|FBAV|FB_IAB|Instagram|Line\/|Messenger|Barcelona|MicroMessenger|Twitter|TikTok|musical_ly|BytedanceWebview/i
+    setInAppBrowser(patterns.test(ua))
+  }, [])
+
   async function handlePostLogin(idToken: string) {
     await fetch('/api/auth/accept-invite', {
       method: 'POST',
@@ -102,6 +112,15 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">ContentLoop</h1>
         <p className="mb-8 text-sm text-gray-500">{L('登入以管理你的內容成效', 'Sign in to manage your content performance')}</p>
+        {inAppBrowser && (
+          <div className="mb-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <p className="font-semibold">{L('請改用 Safari 或 Chrome 開啟', 'Please open in Safari or Chrome')}</p>
+            <p className="mt-1 leading-relaxed">
+              {L('偵測到你正從其他 App 的內建瀏覽器開啟，Google 基於安全政策會禁止在這裡登入。請點畫面右上角的「⋯」或分享鍵，選擇「在 Safari 開啟」（或用瀏覽器開啟），再重新登入。',
+                 'You are in an app’s built-in browser, where Google blocks sign-in for security. Tap the “⋯” or share button at the top and choose “Open in Safari” (or open in a browser), then sign in again.')}
+            </p>
+          </div>
+        )}
         {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
         <button
           onClick={handleGoogleLogin}
