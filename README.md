@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-05 | Phase 5-1 私訊分析（唯讀）上線：新增 `/dashboard/messages`，即時列舉 IG/FB 對話算「私訊則數 / 對話數 / 發問人數 / 每日私訊量 / 最近對話」，不存原文（隱私最小化）。BFF `/api/messages`（verifyIdToken + pageId 隔離 + page-scoped token）→ Graph `/{pageId}/conversations`（IG `platform=instagram`、FB `platform=messenger`）。連接流程加 scope `instagram_manage_messages`+`pages_messaging`（開發模式 admin 可直接授權，一般使用者需 Phase 5 單獨審查+商家驗證）。主控台加「💬 私訊分析」導覽鈕、頁面加「← 返回儀表板」。含 `<AiSidekick contextPage="messages">`。規劃見 `docs/phase-5-messaging-analytics-chatbot.md` | (本次) |
 | 2026-07-04 | 修限動表格未依平台分頁過濾：切到 Instagram+Stories 卻同時顯示 FB 限動（反之亦然）。`filteredStories` 無條件把全部限動餵給 `IgStoriesTable`，未依 `activeTab` 過濾。改為 fb 分頁只回 `platform==='FB'`、ig 分頁只回 `'IG'`、combined 回全部 | `14d8f1a` |
 | 2026-07-04 | 登入頁偵測 App 內嵌瀏覽器（webview）並提示改用 Safari/Chrome。根因：使用者從 LINE/FB/IG/Messenger/Threads/WeChat 內建瀏覽器點連結登入時，Google 依「Use secure browsers」政策禁止 webview 做 OAuth → `Error 403: disallowed_useragent`，卡在看不懂的 Google 錯誤頁。無法繞過政策，改用 UA regex 偵測常見 in-app browser，命中顯示提示橫幅引導改用系統瀏覽器。純前端偵測，桌機/一般行動瀏覽器不受影響 | `c24ce8d` |
 | 2026-07-04 | App Review 精簡：移除 OAuth scope `pages_manage_posts`（原僅用於讀 FB Page Stories `/{page}/stories`）。唯讀分析工具不需「發文/管理」等級權限，且 FB 限動 insights 恆 0、會拖累審查；Meta 後台使用案例一併移除。IG 限動/貼文/廣告不受影響。新增 `docs/meta-app-review.md` 交付清單（送審 8 核心讀取權限）| `ef5db8d` |

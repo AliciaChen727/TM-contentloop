@@ -18,6 +18,11 @@ const SCOPES = [
   'instagram_manage_insights',
   'ads_read',
   'business_management',
+  // Phase 5-1 私訊分析（唯讀統計）：讀 IG/FB 對話做「每日則數/發問人數」等統計。
+  // 開發模式下 app admin/tester 可直接授權使用，無須等 App Review；日後開放
+  // 一般使用者才需單獨送這兩個 messaging 權限審查。詳見 docs/phase-5-messaging-analytics-chatbot.md。
+  'instagram_manage_messages',
+  'pages_messaging',
 ].join(',')
 
 function ConnectContent() {

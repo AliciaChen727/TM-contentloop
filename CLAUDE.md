@@ -89,6 +89,7 @@ users/{uid}
 |---|---|---|
 | 廣告儀表板 | `apps/web/app/dashboard/ads/page.tsx` | overview / diagnosis / creative 等 |
 | 內容表現 | `apps/web/app/dashboard/page.tsx` | posts |
+| 私訊分析 | `apps/web/app/dashboard/messages/page.tsx` | messages |
 
 ### Firestore 路徑
 - 有 `pageId`：`pages/{pageId}/sidekickConversations/{sessionId}`（對話存檔、歷史、CSV 匯出）
