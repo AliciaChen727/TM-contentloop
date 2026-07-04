@@ -2,12 +2,15 @@ export default function PrivacyPage() {
   return (
     <main style={{ maxWidth: 680, margin: '0 auto', padding: '48px 24px', fontFamily: 'system-ui, sans-serif', color: '#1e293b', lineHeight: 1.7 }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Privacy Policy</h1>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 40 }}>Last updated: May 2025</p>
+      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 40 }}>Last updated: July 2026</p>
 
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>1. About ContentLoop</h2>
         <p style={{ fontSize: 14 }}>
           ContentLoop is a social media analytics tool that helps page administrators view performance insights for their Facebook Pages and Instagram Business accounts. We do not sell, rent, or share your personal data with third parties.
+        </p>
+        <p style={{ fontSize: 14, marginTop: 8 }}>
+          ContentLoop is operated by <strong>Pei-Wen Chen</strong> as an individual, who is the data controller responsible for the personal data processed through this service.
         </p>
       </section>
 
@@ -61,7 +64,7 @@ export default function PrivacyPage() {
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>7. Contact</h2>
         <p style={{ fontSize: 14 }}>
-          If you have any questions about this Privacy Policy, please contact us at:{' '}
+          If you have any questions about this Privacy Policy, please contact Pei-Wen Chen at:{' '}
           <a href="mailto:courage727@gmail.com" style={{ color: '#3B6FD4' }}>courage727@gmail.com</a>
         </p>
       </section>
