@@ -4,10 +4,11 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 const BASE = 'https://graph.facebook.com/v21.0'
-const DAYS = 30                 // daily buckets window
+const DAY = 86400000
+const MAX_DAYS = 400            // daily-series bar cap (avoid runaway for 全部/自訂)
 const MAX_CONV_PAGES = 5        // pagination safety cap
 const CONV_LIMIT = 50           // conversations per page
-const MSG_LIMIT = 25            // recent messages expanded per conversation
+const MSG_LIMIT = 100           // recent messages expanded per conversation (accuracy vs payload)
 
 // Phase 5-1 私訊分析（唯讀）：即時列舉 IG/FB 對話算統計，不存原文（隱私最小化）。
 // 需要 instagram_manage_messages / pages_messaging scope（開發模式下 admin 可直接用）。
@@ -30,7 +31,8 @@ interface PlatformStat {
   uniqueSenders: number
 }
 interface RecentItem { platform: 'IG' | 'FB'; name: string; lastTime: string | null; messageCount: number }
-interface DailyPoint { date: string; ig: number; fb: number }
+interface DailyPoint { date: string; fbMsg: number; igMsg: number; fbUsers: number; igUsers: number }
+interface InboundMsg { platform: 'IG' | 'FB'; convId: string; fromId: string | null; timeMs: number | null }
 
 function dateKeyTaipei(iso: string): string {
   // Bucket by the user's local day (TM chapter is in Taiwan).
@@ -65,14 +67,13 @@ async function fetchConversations(
   return { convs }
 }
 
-// Reduce one platform's conversations into stats + daily buckets + recent list.
+// Collect inbound (non-page) messages with timestamps + build the recent-conversation
+// list. Windowing/bucketing happens in the handler so the date range can vary.
 // ownIds = the page's own participant ids (so we can tell inbound from outbound).
-function reduceConversations(
-  convs: RawConv[], platform: 'IG' | 'FB', ownIds: Set<string>,
-  daily: Map<string, DailyPoint>, recent: RecentItem[],
-): { inbound: number; senders: Set<string> } {
-  const senders = new Set<string>()
-  let inbound = 0
+function collectInbound(
+  convs: RawConv[], platform: 'IG' | 'FB', ownIds: Set<string>, recent: RecentItem[],
+): InboundMsg[] {
+  const out: InboundMsg[] = []
   for (const c of convs) {
     // Participant name that isn't the page itself → the person messaging us.
     const other = (c.participants?.data ?? []).find(p => p.id && !ownIds.has(p.id))
@@ -87,19 +88,34 @@ function reduceConversations(
       messageCount: c.message_count || (c.messages?.data?.length ?? 0),
     })
     for (const m of c.messages?.data ?? []) {
-      const fromId = m.from?.id
+      const fromId = m.from?.id ?? null
       if (fromId && ownIds.has(fromId)) continue // outbound (our own reply)
-      inbound++
-      if (fromId) senders.add(fromId)
-      if (m.created_time) {
-        const key = dateKeyTaipei(m.created_time)
-        const pt = daily.get(key) ?? { date: key, ig: 0, fb: 0 }
-        if (platform === 'IG') pt.ig++; else pt.fb++
-        daily.set(key, pt)
-      }
+      out.push({ platform, convId: c.id, fromId, timeMs: m.created_time ? new Date(m.created_time).getTime() : null })
     }
   }
-  return { inbound, senders }
+  return out
+}
+
+// Resolve the [startMs, endMs] window from the range params.
+function resolveWindow(range: string, since: string | null, until: string | null, inbound: InboundMsg[]) {
+  const now = Date.now()
+  let endMs = now
+  let startMs: number
+  if (range === 'custom' && since) {
+    startMs = Date.parse(`${since}T00:00:00+08:00`)
+    endMs = until ? Date.parse(`${until}T23:59:59+08:00`) : now
+  } else if (range === '90d') {
+    startMs = now - 90 * DAY
+  } else if (range === 'all') {
+    const times = inbound.map(m => m.timeMs).filter((t): t is number => t != null)
+    startMs = times.length ? times.reduce((a, b) => Math.min(a, b), now) : now - 30 * DAY
+  } else {
+    startMs = now - 30 * DAY // default 30d
+  }
+  if (!Number.isFinite(startMs)) startMs = now - 30 * DAY
+  if (!Number.isFinite(endMs)) endMs = now
+  if (endMs - startMs > MAX_DAYS * DAY) startMs = endMs - MAX_DAYS * DAY // cap series length
+  return { startMs, endMs }
 }
 
 export async function GET(req: NextRequest) {
@@ -138,7 +154,6 @@ export async function GET(req: NextRequest) {
   if (!accessToken) return NextResponse.json({ error: 'No page access token' }, { status: 400 })
 
   const ownIds = new Set<string>([pageId, ...(igUserId ? [igUserId] : [])])
-  const daily = new Map<string, DailyPoint>()
   const recent: RecentItem[] = []
 
   const [fbRes, igRes] = await Promise.all([
@@ -146,29 +161,64 @@ export async function GET(req: NextRequest) {
     fetchConversations(pageId, 'instagram', accessToken),
   ])
 
-  const fbReduced = reduceConversations(fbRes.convs, 'FB', ownIds, daily, recent)
-  const igReduced = reduceConversations(igRes.convs, 'IG', ownIds, daily, recent)
+  const inbound = collectInbound(fbRes.convs, 'FB', ownIds, recent)
+    .concat(collectInbound(igRes.convs, 'IG', ownIds, recent))
+
+  const range = req.nextUrl.searchParams.get('range') ?? '30d'
+  const since = req.nextUrl.searchParams.get('since')
+  const until = req.nextUrl.searchParams.get('until')
+  const { startMs, endMs } = resolveWindow(range, since, until, inbound)
+
+  // Window + bucket per platform in one pass. `daily` holds per-day message
+  // counts; `dayUsers` holds per-day distinct senders (for the 人數 lines).
+  const daily = new Map<string, DailyPoint>()
+  const dayUsers = new Map<string, Set<string>>() // key = `${dateKey}|${platform}`
+  const windowStat = (platform: 'IG' | 'FB') => {
+    const senders = new Set<string>()
+    const convs = new Set<string>()
+    let count = 0
+    for (const m of inbound) {
+      if (m.platform !== platform || m.timeMs == null || m.timeMs < startMs || m.timeMs > endMs) continue
+      count++
+      convs.add(m.convId)
+      if (m.fromId) senders.add(m.fromId)
+      const key = dateKeyTaipei(new Date(m.timeMs).toISOString())
+      const pt = daily.get(key) ?? { date: key, fbMsg: 0, igMsg: 0, fbUsers: 0, igUsers: 0 }
+      if (platform === 'IG') pt.igMsg++; else pt.fbMsg++
+      daily.set(key, pt)
+      if (m.fromId) {
+        const uk = `${key}|${platform}`
+        let s = dayUsers.get(uk)
+        if (!s) { s = new Set<string>(); dayUsers.set(uk, s) }
+        s.add(m.fromId)
+      }
+    }
+    return { count, senders, convCount: convs.size }
+  }
+  const fbW = windowStat('FB')
+  const igW = windowStat('IG')
 
   const fbStat: PlatformStat = {
     available: !fbRes.error, error: fbRes.error,
-    conversations: fbRes.convs.length, inboundMessages: fbReduced.inbound, uniqueSenders: fbReduced.senders.size,
+    conversations: fbW.convCount, inboundMessages: fbW.count, uniqueSenders: fbW.senders.size,
   }
   const igStat: PlatformStat = {
     available: !igRes.error, error: igRes.error,
-    conversations: igRes.convs.length, inboundMessages: igReduced.inbound, uniqueSenders: igReduced.senders.size,
+    conversations: igW.convCount, inboundMessages: igW.count, uniqueSenders: igW.senders.size,
   }
 
-  // Last DAYS days, oldest→newest, zero-filled.
+  // Zero-filled daily series across the window, oldest→newest.
+  const nDays = Math.min(MAX_DAYS, Math.max(1, Math.floor((endMs - startMs) / DAY) + 1))
   const dailySeries: DailyPoint[] = []
-  const today = new Date()
-  for (let i = DAYS - 1; i >= 0; i--) {
-    const d = new Date(today)
-    d.setDate(d.getDate() - i)
-    const key = dateKeyTaipei(d.toISOString())
-    dailySeries.push(daily.get(key) ?? { date: key, ig: 0, fb: 0 })
+  for (let i = 0; i < nDays; i++) {
+    const key = dateKeyTaipei(new Date(startMs + i * DAY).toISOString())
+    const pt = daily.get(key) ?? { date: key, fbMsg: 0, igMsg: 0, fbUsers: 0, igUsers: 0 }
+    pt.fbUsers = dayUsers.get(`${key}|FB`)?.size ?? 0
+    pt.igUsers = dayUsers.get(`${key}|IG`)?.size ?? 0
+    dailySeries.push(pt)
   }
 
-  const allSenders = new Set<string>(Array.from(fbReduced.senders).concat(Array.from(igReduced.senders)))
+  const allSenders = new Set<string>(Array.from(fbW.senders).concat(Array.from(igW.senders)))
   recent.sort((a, b) => (b.lastTime ?? '').localeCompare(a.lastTime ?? ''))
 
   return NextResponse.json({
@@ -180,6 +230,6 @@ export async function GET(req: NextRequest) {
     byPlatform: { IG: igStat, FB: fbStat },
     daily: dailySeries,
     recent: recent.slice(0, 30),
-    windowDays: DAYS,
+    windowDays: nDays,
   })
 }
