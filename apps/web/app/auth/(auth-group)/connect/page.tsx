@@ -10,7 +10,9 @@ const SCOPES = [
   'pages_show_list',
   'pages_read_engagement',
   'pages_read_user_content', // needed for reactions/comments/shares on /{page}/posts (Graph #10 without it)
-  'pages_manage_posts', // needed to read the Page Stories edge (/{page}/stories)
+  // pages_manage_posts 已移除（原用於讀 FB Page Stories edge）：它是「發文/管理」等級的
+  // 高風險權限卻只拿來讀，且 FB 限動 insights 恆 0、App Review 展示價值低、會拖累整批審查。
+  // 日後若確定要 FB 限動且 Meta 開放其數據，再單獨補送。詳見 docs/meta-app-review.md。
   'read_insights',
   'instagram_basic',
   'instagram_manage_insights',
