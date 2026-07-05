@@ -3,6 +3,10 @@
 > 目標：通過 App Review，讓 App 從 Development mode 轉 Live，不再需要逐一邀請測試人員。
 > 本輪範圍：**FB/IG 核心 8 權限**，移除 `pages_manage_posts`（見文末決策）。
 > 日期基準：2026-07-04。
+>
+> ✅ **狀態：已於 2026-07-05 送出 App Review（app `832755139382467`）**，等 Meta 審查結果。
+> 審查期間你仍是 app admin，開發模式下功能照常。若被退件，多半是測試帳號流程或
+> Business Verification（`business_management`）——依退件說明補件後重送。
 
 ---
 
