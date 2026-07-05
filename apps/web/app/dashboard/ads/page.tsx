@@ -469,13 +469,9 @@ export default function AdsPage() {
     return unsub
   }, [router])
 
-  useEffect(() => {
-    const parts = adData.overview.dateRange?.split(' ~ ')
-    if (parts?.length === 2 && parts[0] && parts[1]) {
-      setDateFrom(parts[0])
-      setDateTo(parts[1])
-    }
-  }, [adData.overview.dateRange])
+  // NOTE: intentionally do NOT sync the picker to adData.overview.dateRange —
+  // the overview should always default to the last 30 days (today → 30 days ago),
+  // per the initial dateFrom/dateTo state. Users can still pick other ranges.
 
   async function handleSync(since?: string, until?: string) {
     // Respect the user's selected range exactly — do NOT force the end date to today.
