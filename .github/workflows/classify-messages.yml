@@ -1,0 +1,27 @@
+name: Classify Messages (Top Questions)
+
+on:
+  schedule:
+    # 每 6 小時一次，預熱「常見問題分類」快取（與頁面 FRESH_MS=6h 對齊）
+    - cron: '30 */6 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  classify-messages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pre-warm message intent classification for all pages
+        run: |
+          body=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST https://tm-contentloop.vercel.app/api/cron/classify-messages \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          status=$(echo "$body" | grep "HTTP_STATUS:" | cut -d: -f2)
+          response=$(echo "$body" | grep -v "HTTP_STATUS:")
+          echo "Response status: $status"
+          echo "Response body: $response"
+          if [ "$status" != "200" ]; then
+            echo "Classify-messages failed with status $status"
+            exit 1
+          fi
+          echo "Classify-messages completed successfully"
