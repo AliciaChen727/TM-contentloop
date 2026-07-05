@@ -20,7 +20,11 @@ interface Config {
   meetingTime: string
   meetingLocation: string
   scheduleSheetUrl: string
+  replyModel: 'standard' | 'advanced'
+  corrections: Correction[]
 }
+interface Correction { text: string; fromMessage?: string; createdAt?: string; by?: string }
+interface PreviewResult { action: 'reply' | 'handoff'; text: string; intent: string; model?: string; groundingUsed: string[] }
 
 export default function FaqSettingsPage() {
   const router = useRouter()
@@ -36,17 +40,30 @@ export default function FaqSettingsPage() {
   const [saEmail, setSaEmail] = useState('')
   const [syncingSheet, setSyncingSheet] = useState(false)
   const [sheetErr, setSheetErr] = useState('')
+  const [previewInput, setPreviewInput] = useState('')
+  const [previewAsked, setPreviewAsked] = useState('')
+  const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+  const [feedbackReason, setFeedbackReason] = useState('')
+  const [feedbackSent, setFeedbackSent] = useState(false)
 
   const load = useCallback(async (t: string, pid: string) => {
     setLoading(true)
     try {
       const res = await fetch(`/api/messages/faq?pageId=${encodeURIComponent(pid)}`, { headers: { Authorization: `Bearer ${t}` } })
       const d = await res.json()
-      if (res.ok) { setCfg({ answers: {}, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '', ...d.config }); setIntents(d.intents ?? []) }
+      if (res.ok) { setCfg({ answers: {}, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '', replyModel: 'standard', corrections: [], ...d.config }); setIntents(d.intents ?? []) }
       fetch('/api/messages/faq/sheet', { headers: { Authorization: `Bearer ${t}` } })
         .then(r => r.ok ? r.json() : null).then(d => { if (d?.email) setSaEmail(d.email) }).catch(() => {})
     } finally { setLoading(false) }
   }, [])
+
+  // Firebase ID tokens expire after ~1h; always fetch a fresh one before an API
+  // call (getIdToken auto-refreshes) so long-open pages don't hit "Invalid token".
+  async function freshToken(): Promise<string> {
+    return (await auth.currentUser?.getIdToken()) ?? token
+  }
 
   async function syncSheet() {
     if (!cfg?.scheduleSheetUrl) return
@@ -54,7 +71,7 @@ export default function FaqSettingsPage() {
     try {
       const res = await fetch('/api/messages/faq/sheet', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await freshToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, sheetUrl: cfg.scheduleSheetUrl }),
       })
       const d = await res.json()
@@ -62,6 +79,43 @@ export default function FaqSettingsPage() {
       setCfg(c => c ? { ...c, scheduleEntries: d.entries ?? [] } : c)
     } catch { setSheetErr(L('同步失敗', 'Sync failed')) }
     finally { setSyncingSheet(false) }
+  }
+
+  async function sendFeedback(rating: 'up' | 'down') {
+    setFeedback(rating)
+    if (rating === 'up') { void submitFeedback('up', ''); setFeedbackSent(true) }
+  }
+  async function submitFeedback(rating: 'up' | 'down', reason: string) {
+    if (!previewResult) return
+    try {
+      const res = await fetch('/api/messages/faq/feedback', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await freshToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, message: previewAsked, reply: previewResult.text, intent: previewResult.intent, model: previewResult.model, action: previewResult.action, rating, reason }),
+      })
+      const d = await res.json().catch(() => ({}))
+      // Keep client cfg in sync so a later "Save" doesn't clobber the new correction.
+      if (d.addedCorrection && reason.trim()) {
+        setCfg(c => c ? { ...c, corrections: [...(c.corrections ?? []), { text: reason.trim(), fromMessage: previewAsked, createdAt: new Date().toISOString() }] } : c)
+      }
+    } catch { /* best-effort */ }
+  }
+
+  async function runPreview() {
+    if (!previewInput.trim()) return
+    setPreviewing(true); setPreviewResult(null); setPreviewAsked(previewInput.trim())
+    setFeedback(null); setFeedbackReason(''); setFeedbackSent(false)
+    try {
+      const res = await fetch('/api/messages/faq/preview', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await freshToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, message: previewInput }),
+      })
+      const d = await res.json()
+      if (res.ok) setPreviewResult(d as PreviewResult)
+      else setPreviewResult({ action: 'handoff', text: d.error ?? L('預覽失敗', 'Preview failed'), intent: 'other', groundingUsed: [] })
+    } catch { setPreviewResult({ action: 'handoff', text: L('預覽失敗', 'Preview failed'), intent: 'other', groundingUsed: [] }) }
+    finally { setPreviewing(false) }
   }
 
   function onCsvFile(file: File) {
@@ -100,7 +154,7 @@ export default function FaqSettingsPage() {
     try {
       const res = await fetch('/api/messages/faq', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await freshToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, ...cfg }),
       })
       if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
@@ -117,12 +171,13 @@ export default function FaqSettingsPage() {
         <h1 className="text-lg font-bold text-gray-900">{L('AI 自動回覆設定', 'AI auto-reply settings')}</h1>
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
         {loading && <p className="text-sm text-gray-400">{L('讀取中…', 'Loading…')}</p>}
         {!loading && !pageId && <p className="text-sm text-gray-400">{L('請先在私訊分析頁選擇粉專。', 'Pick a page on the Messages page first.')}</p>}
 
         {!loading && cfg && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <div className="flex-1 space-y-6">
             <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-xs text-amber-700">
               {L('這裡設定的是 AI 客服 agent 的知識與答案。目前為「設定階段」——尚未實際自動回覆用戶（webhook／發送在下一階段開啟）。',
                  'This configures the AI agent\'s knowledge and answers. It is not sending replies yet (webhook/sending comes in the next phase).')}
@@ -150,6 +205,18 @@ export default function FaqSettingsPage() {
                 <p className="mb-1 text-sm font-semibold text-gray-700">{L('補充知識（自由填寫）', 'Extra knowledge (free text)')}</p>
                 <p className="mb-1 text-xs text-gray-400">{L('AI 生成回覆時會參考這些內容，避免亂編。', 'The AI grounds its replies on this to avoid making things up.')}</p>
                 <textarea className={`${field} h-28 resize-y`} value={cfg.knowledgeBase} onChange={e => setCfg({ ...cfg, knowledgeBase: e.target.value })} placeholder={L('例：我們每週四晚上 7:30 在 XX 咖啡；來賓可免費體驗兩次…', 'e.g. We meet every Thu 7:30pm at XX Cafe; guests get 2 free trials…')} />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-semibold text-gray-700">{L('回覆品質', 'Reply quality')}</p>
+                <div className="flex gap-2">
+                  {([['standard', L('標準（快、省）', 'Standard')], ['advanced', L('進階（更細緻）', 'Advanced')]] as const).map(([v, label]) => (
+                    <button key={v} onClick={() => setCfg({ ...cfg, replyModel: v })}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${cfg.replyModel === v ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-400">{L('標準 = Claude Haiku；進階 = Claude Sonnet（品質更好、較慢較貴）', 'Standard = Claude Haiku; Advanced = Claude Sonnet')}</p>
               </div>
             </section>
 
@@ -255,6 +322,29 @@ export default function FaqSettingsPage() {
               })()}
             </section>
 
+            {/* Corrections learned from downvotes (T1) */}
+            <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-gray-700">{L('🧠 AI 學到的更正', '🧠 Learned corrections')}</p>
+              <p className="mb-3 text-xs text-gray-400">{L('在右側試回覆按 👎 並寫下正確資訊，就會自動加到這裡；AI 每次回覆都會優先參考。', 'Downvote a test reply and add the correct info — it lands here and the AI always uses it.')}</p>
+              {(cfg.corrections?.length ?? 0) === 0 ? (
+                <p className="py-3 text-center text-xs text-gray-300">{L('目前沒有更正紀錄', 'No corrections yet')}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {cfg.corrections.map((c, i) => (
+                    <li key={i} className="flex items-start gap-2 rounded-lg border border-gray-100 bg-gray-50 p-2 text-xs">
+                      <span className="mt-0.5 text-indigo-400">✎</span>
+                      <div className="flex-1">
+                        <p className="text-gray-700">{c.text}</p>
+                        {c.fromMessage && <p className="mt-0.5 text-[10px] text-gray-400">{L('來自問題：', 'from: ')}{c.fromMessage}</p>}
+                      </div>
+                      <button onClick={() => setCfg({ ...cfg, corrections: cfg.corrections.filter((_, j) => j !== i) })} className="text-gray-300 hover:text-red-500">✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-[10px] text-gray-400">{L('※ 刪除後記得按「儲存設定」。', '※ Click Save after removing.')}</p>
+            </section>
+
             {/* Fallback */}
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <p className="mb-1 text-sm font-semibold text-gray-700">{L('無法回答時的訊息', 'Fallback message')}</p>
@@ -267,6 +357,86 @@ export default function FaqSettingsPage() {
               </button>
               {saved && <span className="text-sm text-green-600">{L('已儲存 ✓', 'Saved ✓')}</span>}
             </div>
+
+            </div>
+
+            {/* Right: chat-style dry-run preview (sticky) */}
+            <aside className="lg:w-96 lg:shrink-0 lg:sticky lg:top-20">
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" style={{ height: 'calc(100vh - 140px)', maxHeight: 640 }}>
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="text-sm font-semibold text-gray-800">{L('🧪 試回覆', '🧪 Test reply')}</p>
+                  <p className="text-[11px] leading-relaxed text-gray-400">{L('僅內部測試（不會真的發送）。先把左側的 agent 知識與答案填完，資訊越充分，AI 越知道怎麼回；填完按「儲存設定」再測。', 'Internal test only (not sent). Fill in the agent knowledge & answers on the left first — the more complete, the better the AI replies. Save settings, then test.')}</p>
+                </div>
+
+                {/* Conversation area */}
+                <div className="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-4">
+                  {!previewResult && !previewing && (
+                    <p className="mt-10 text-center text-xs text-gray-400">{L('在下面輸入用戶可能問的問題，看看 AI 會怎麼回 👇', 'Type a question below to see the AI reply 👇')}</p>
+                  )}
+                  {previewAsked && (
+                    <div className="flex justify-end">
+                      <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-indigo-500 px-3 py-2 text-sm text-white">{previewAsked}</div>
+                    </div>
+                  )}
+                  {previewing && (
+                    <div className="flex justify-start">
+                      <div className="rounded-2xl rounded-bl-sm border border-gray-100 bg-white px-3 py-2 text-sm text-gray-400">{L('輸入中…', 'typing…')}</div>
+                    </div>
+                  )}
+                  {previewResult && (
+                    <div className="flex flex-col items-start">
+                      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-gray-100 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm">{previewResult.text}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-1 text-[10px]">
+                        <span className={`rounded px-1.5 py-0.5 font-semibold ${previewResult.action === 'reply' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                          {previewResult.action === 'reply' ? L('AI 回覆', 'AI reply') : L('轉真人', 'Hand off')}
+                        </span>
+                        <span className="text-gray-400">{previewResult.intent}</span>
+                        {previewResult.model && <span className="text-gray-300">{previewResult.model.includes('sonnet') ? 'Sonnet' : 'Haiku'}</span>}
+                        {previewResult.groundingUsed.length > 0 && <span className="text-gray-300">· {previewResult.groundingUsed.join(', ')}</span>}
+                        {/* feedback */}
+                        <span className="ml-1 flex items-center gap-1">
+                          <button onClick={() => sendFeedback('up')} className={`rounded px-1 ${feedback === 'up' ? 'text-green-600' : 'text-gray-300 hover:text-green-500'}`} aria-label="good">👍</button>
+                          <button onClick={() => sendFeedback('down')} className={`rounded px-1 ${feedback === 'down' ? 'text-red-500' : 'text-gray-300 hover:text-red-500'}`} aria-label="bad">👎</button>
+                        </span>
+                      </div>
+                      {feedbackSent && (
+                        <p className="mt-1 pl-1 text-[10px] text-gray-400">
+                          {feedback === 'down' && feedbackReason.trim()
+                            ? L('已加入知識庫，下次同問題會參考 ✓', 'Added to knowledge — next time it\'ll use this ✓')
+                            : L('感謝回饋 🙏', 'Thanks 🙏')}
+                        </p>
+                      )}
+                      {feedback === 'down' && !feedbackSent && (
+                        <div className="mt-1 flex w-full items-center gap-1 pl-1">
+                          <input
+                            value={feedbackReason}
+                            onChange={e => setFeedbackReason(e.target.value)}
+                            placeholder={L('哪裡不好？（可選）', 'What was wrong? (optional)')}
+                            className="flex-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] outline-none focus:border-red-200"
+                          />
+                          <button onClick={() => { void submitFeedback('down', feedbackReason); setFeedbackSent(true) }} className="rounded-full bg-gray-900 px-2.5 py-1 text-[11px] font-semibold text-white">{L('送出', 'Send')}</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Messenger-style input */}
+                <div className="flex items-center gap-2 border-t border-gray-100 bg-white p-3">
+                  <input
+                    value={previewInput}
+                    onChange={e => setPreviewInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') runPreview() }}
+                    placeholder={L('輸入訊息…', 'Type a message…')}
+                    className="flex-1 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700 outline-none focus:border-indigo-300 focus:bg-white"
+                  />
+                  <button onClick={runPreview} disabled={previewing || !previewInput.trim()}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-white transition hover:bg-indigo-600 disabled:opacity-40" aria-label="send">
+                    ➤
+                  </button>
+                </div>
+              </div>
+            </aside>
           </div>
         )}
       </div>

@@ -276,6 +276,25 @@ Agent 核心（platform-agnostic）：(用戶訊息, 粉專知識庫) → 回覆
 - **設定頁加「回覆品質：標準 / 進階」開關** → 對應 haiku / sonnet，存 `faqBot/config.replyModel`。
 - **路由邏輯**：分類(flash) → 命中排程/自訂/意圖/知識 → 用 replyModel 生成 → 否則轉真人。所有 outbound 存檔可審閱。
 
+### 8.8 Grounding 修正（脆弱點）+ AI 優化迴圈（回饋 → 改進）
+
+**🐛 已知脆弱點（要先修）：grounding 被單一意圖卡死。**
+現況 `replyAgent` 只餵「被分類到的那個意圖」的答案。分類跑掉（例：「有提供餐點嗎」被歸 `other` 而非 `event_content`）→ 漏掉該格答案 → 誤轉真人。
+**修法**：grounding 改「**全餵**」——把**所有啟用的意圖答案（附主題標籤）+ 補充知識 + 排程事實**一起給 LLM，讓它自己挑相關資訊；意圖分類只留給「排程注入 + 分析統計」，**不再用來 gate 答案**。附「若都不相關才轉真人」指示（LLM 輸出 `[[HANDOFF]]` sentinel → action=handoff）。→ 更 RAG、抗分類雜訊。
+
+**AI 優化迴圈（三層，由確定到自動）：**
+| 層 | 機制 | 生效 | 狀態 |
+|----|------|------|------|
+| **T1 更正即知識** | 倒讚寫更正 → 一鍵/自動存進 `faqBot/config.corrections[]`（一律納入 grounding） | **當下、確定** | 要做 |
+| **T2 回饋週報** | 統計最常被倒讚的意圖/問句 → 提示 owner「這幾題該補答案」；可 AI 建議草稿，owner 一鍵採納進答案/知識 | 半自動 | 之後 |
+| **T3 few-shot 自我學習** | 讚=正例、倒讚+更正=負例/修正例，存向量檢索；回覆時檢索相似歷史當 few-shot 回填 prompt（同 Phase 3 evaluator/feedbackRetrieval） | 自動、漸進 | 之後 |
+
+- **`corrections[]`**（T1）：`{ text, fromMessage, createdAt, by }`；`replyAgent` 永遠把 corrections 併進 grounding（優先序高於一般知識）。→ 倒讚更正**下一次同問題就生效**。
+- 回饋已存 `faqBot/config/feedbackItems`（rating/reason/message/reply/intent），T2/T3 直接用這份。
+- **決策順序（修正後）**：排程(程式) → corrections → 所有意圖答案 + 補充知識（全餵 LLM）→ 都不相關 → 轉真人。
+
+**建議先做**：①grounding 全餵（修脆弱點，餐點問題當下就好）②T1 更正即知識（讓倒讚真的有用）。T2/T3 累積回饋後再上。
+
 ---
 
 ## 9. 建議順序（更新版）

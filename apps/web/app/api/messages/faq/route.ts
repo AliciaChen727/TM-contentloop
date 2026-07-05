@@ -22,11 +22,13 @@ interface FaqConfig {
   meetingTime: string     // 例：週四 19:30–21:30
   meetingLocation: string
   scheduleSheetUrl: string // 記住來源 Google Sheet 網址，方便重新同步
+  replyModel: 'standard' | 'advanced' // 標準=haiku / 進階=sonnet
+  corrections: { text: string; fromMessage?: string; createdAt?: string; by?: string }[] // T1：倒讚更正即知識
 }
 
 const DEFAULT_FALLBACK = '感謝您的訊息！我們會盡快由專人回覆您 🙏'
 const DEFAULT_PERSONA = '親切、簡潔、有禮貌，用「我們」自稱，像分會小編。'
-const emptyConfig = (): FaqConfig => ({ enabled: false, humanHandoffEnabled: true, fallbackMessage: DEFAULT_FALLBACK, answers: {}, knowledgeBase: '', persona: DEFAULT_PERSONA, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '' })
+const emptyConfig = (): FaqConfig => ({ enabled: false, humanHandoffEnabled: true, fallbackMessage: DEFAULT_FALLBACK, answers: {}, knowledgeBase: '', persona: DEFAULT_PERSONA, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '', replyModel: 'standard', corrections: [] })
 
 // Only page admins (connected the page) or super-admins may read/write bot config.
 async function assertAdmin(uid: string, pageId: string): Promise<boolean> {
@@ -87,6 +89,16 @@ export async function POST(req: NextRequest) {
     meetingTime: String(body.meetingTime ?? '').slice(0, 200),
     meetingLocation: String(body.meetingLocation ?? '').slice(0, 300),
     scheduleSheetUrl: String(body.scheduleSheetUrl ?? '').slice(0, 500),
+    replyModel: body.replyModel === 'advanced' ? 'advanced' : 'standard',
+    corrections: (Array.isArray(body.corrections) ? body.corrections : [])
+      .filter((c: { text?: unknown }) => typeof c?.text === 'string' && c.text.trim())
+      .map((c: { text: string; fromMessage?: unknown; createdAt?: unknown; by?: unknown }) => ({
+        text: c.text.slice(0, 500),
+        fromMessage: String(c.fromMessage ?? '').slice(0, 300),
+        createdAt: String(c.createdAt ?? ''),
+        by: String(c.by ?? ''),
+      }))
+      .slice(0, 100),
   }
 
   await adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config')
