@@ -7,6 +7,8 @@ import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { MessageStats } from '@/components/dashboard/MessageStats'
 import type { MessagesData } from '@/components/dashboard/MessageStats'
+import { TopQuestions } from '@/components/dashboard/TopQuestions'
+import type { TopIntent } from '@/components/dashboard/TopQuestions'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 
 interface PageInfo { pageId: string; pageName: string }
@@ -25,6 +27,9 @@ export default function MessagesPage() {
   const [range, setRange] = useState<Range>('30d')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [topIntents, setTopIntents] = useState<TopIntent[]>([])
+  const [classifying, setClassifying] = useState(false)
+  const [topComputedAt, setTopComputedAt] = useState<number | null>(null)
 
   // Auth + load managed/viewer pages, default to the last-selected page.
   useEffect(() => {
@@ -72,6 +77,32 @@ export default function MessagesPage() {
     if (range === 'custom' && (!customStart || !customEnd)) return
     load(idToken, selectedPageId, range, customStart, customEnd)
   }, [idToken, selectedPageId, range, customStart, customEnd, load])
+
+  // Classify inbound messages into "Top questions" (server-side; text never leaves
+  // the server). Runs after the page/range settles; classification is cached so
+  // repeat runs are cheap. Custom range maps to the nearest preset window server-side.
+  const classify = useCallback(async (token: string, pageId: string, r: Range, force = false) => {
+    setClassifying(true)
+    if (!force) { setTopIntents([]); setTopComputedAt(null) }
+    try {
+      const res = await fetch('/api/messages/classify', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, range: r === 'custom' ? 'all' : r, lang: L('zh', 'en'), force }),
+      })
+      if (!res.ok) return
+      const d = await res.json()
+      setTopIntents((d.topIntents ?? []) as TopIntent[])
+      setTopComputedAt(d.computedAt ?? null)
+    } catch { /* Top-questions is best-effort; stats still render */ }
+    finally { setClassifying(false) }
+  }, [L])
+
+  useEffect(() => {
+    if (!idToken || !selectedPageId) return
+    if (range === 'custom' && (!customStart || !customEnd)) return
+    classify(idToken, selectedPageId, range)
+  }, [idToken, selectedPageId, range, customStart, customEnd, classify])
 
   function onPageChange(pageId: string) {
     setSelectedPageId(pageId)
@@ -162,6 +193,16 @@ export default function MessagesPage() {
           </div>
         )}
 
+        {data && !loading && (
+          <div className="mb-6">
+            <TopQuestions
+              intents={topIntents}
+              loading={classifying}
+              computedAt={topComputedAt}
+              onRefresh={() => classify(idToken, selectedPageId, range, true)}
+            />
+          </div>
+        )}
         {data && !loading && <MessageStats data={data} />}
       </div>
 
