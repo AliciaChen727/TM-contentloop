@@ -103,6 +103,31 @@ export async function POST(req: NextRequest) {
       for (const snap of snaps) if (snap.exists) existingById.set(snap.id, snap.data()!)
     }
 
+    // Reach ("views"): fetch the new post_media_view per post. Meta REMOVED the
+    // post_impressions_* family on 2026-06-15 → replaced by the "views" family.
+    // This is total VIEWS (impressions-like), not unique reach (the unique variant
+    // is no longer offered at post level). Best-effort + logged; a failure must
+    // never fail the sync. Chunked parallel to avoid hammering the API on pages
+    // with many posts.
+    const mediaViews = new Map<string, number>()
+    const VIEW_CHUNK = 40
+    for (let i = 0; i < writable.length; i += VIEW_CHUNK) {
+      await Promise.all(writable.slice(i, i + VIEW_CHUNK).map(async post => {
+        try {
+          const u = new URL(`${BASE}/${post.id}/insights`)
+          u.searchParams.set('metric', 'post_media_view')
+          u.searchParams.set('period', 'lifetime')
+          u.searchParams.set('access_token', accessToken!)
+          const r = await fetch(u)
+          const d = await r.json()
+          if (d.error) { console.warn(`[fb/sync] post_media_view error for ${post.id}:`, JSON.stringify(d.error)); return }
+          for (const item of (d.data ?? []) as { name: string; values: { value: number }[] }[]) {
+            if (item.name === 'post_media_view') mediaViews.set(post.id, item.values?.[0]?.value ?? 0)
+          }
+        } catch (e) { console.warn(`[fb/sync] post_media_view exception for ${post.id}:`, e) }
+      }))
+    }
+
     let batch = adminDb.batch()
     let ops = 0
     for (const post of writable) {
@@ -122,7 +147,7 @@ export async function POST(req: NextRequest) {
           reactions: Math.max(prev.reactions ?? 0, r ?? 0),
           comments: Math.max(prev.comments ?? 0, c ?? 0),
           shares: Math.max(prev.shares ?? 0, s ?? 0),
-          reach: prev.reach ?? 0, // preserve reach written by cron; not fetched here
+          reach: Math.max(prev.reach ?? 0, mediaViews.get(post.id) ?? 0), // now fetched here (post_media_view)
         },
       }
       batch.set(fbPostsCol.doc(post.id), record, { merge: true })

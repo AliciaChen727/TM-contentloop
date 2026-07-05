@@ -80,6 +80,7 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState('')
   const [idToken, setIdToken] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string, since?: string, until?: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
@@ -328,6 +329,30 @@ export default function DashboardPage() {
 
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
 
+  // Manual "sync latest data" — refresh FB + IG posts (incl. reach via post_media_view)
+  // for the current page, then refetch. FB/IG sync are per-page and use the caller's own
+  // token, so only admins of this page can meaningfully trigger it.
+  async function handleSync() {
+    if (!selectedPageId || syncing) return
+    setSyncing(true)
+    try {
+      const u = auth.currentUser
+      if (!u) return
+      const token = await u.getIdToken()
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      const body = JSON.stringify({ pageId: selectedPageId })
+      await Promise.all([
+        fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).catch(() => null),
+        fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).catch(() => null),
+      ])
+      const since = days === 0 && dateMode === 'preset' ? undefined : dateBounds.start
+      const until = days === 0 && dateMode === 'preset' ? undefined : dateBounds.end
+      await fetchPosts(token, selectedPageId, since, until)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -437,7 +462,18 @@ export default function DashboardPage() {
                   <DateField value={customEnd} onChange={setCustomEnd} style={dateInputStyle} />
                 </div>
               )}
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>{L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                {isAdmin && (
+                  <button
+                    onClick={handleSync}
+                    disabled={syncing}
+                    style={{ fontSize: 11.5, fontWeight: 600, padding: '5px 10px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', color: 'var(--ad-text2)', cursor: syncing ? 'wait' : 'pointer', opacity: syncing ? 0.6 : 1 }}
+                  >
+                    {syncing ? L('↻ 同步中⋯', '↻ Syncing…') : L('↻ 同步最新資料', '↻ Sync latest data')}
+                  </button>
+                )}
+                <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>{L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}</span>
+              </div>
             </div>
 
             {/* Summary Strip */}

@@ -46,25 +46,32 @@ async function syncFbForUser(uid: string, accessToken: string, pageId: string): 
     const reactions = post.reactions?.summary?.total_count ?? 0
     const comments = post.comments?.summary?.total_count ?? 0
     const shares = post.shares?.count ?? 0
-    let reach = 0, paidReach = 0, organicReach = 0
+    // Reach: Meta REMOVED the whole post_impressions_* family on 2026-06-15 (all
+    // API versions) → those metrics now return #100 "not a valid insights metric".
+    // Replacement = the new "views" family: `post_media_view` = total views
+    // (impressions-like). ⚠️ The unique/reach variant (post_media_view_unique) is
+    // no longer offered at post level, so this is VIEWS (can exceed unique reach),
+    // not unique reach. Confirmed working on v19–v22. Old code silently swallowed
+    // the #100 (no error check) → reach stuck at 0 for months; now we log it.
+    let reach = 0
     try {
       const insUrl = new URL(`${BASE}/${post.id}/insights`)
-      insUrl.searchParams.set('metric', 'post_impressions_unique,post_impressions_paid_unique,post_impressions_organic_unique')
+      insUrl.searchParams.set('metric', 'post_media_view')
       insUrl.searchParams.set('period', 'lifetime')
       insUrl.searchParams.set('access_token', accessToken)
       const insRes = await fetch(insUrl)
       const insData = await insRes.json()
-      const vals: Record<string, unknown> = {}
-      for (const item of (insData.data ?? []) as { name: string; values: { value: unknown }[] }[]) {
-        vals[item.name] = item.values?.[0]?.value ?? 0
+      if (insData.error) {
+        console.warn(`[cron/sync] FB post_media_view error for ${post.id}:`, JSON.stringify(insData.error))
+      } else {
+        for (const item of (insData.data ?? []) as { name: string; values: { value: unknown }[] }[]) {
+          if (item.name === 'post_media_view') reach = (item.values?.[0]?.value as number) ?? 0
+        }
       }
-      reach = (vals.post_impressions_unique as number) ?? 0
-      paidReach = (vals.post_impressions_paid_unique as number) ?? 0
-      organicReach = (vals.post_impressions_organic_unique as number) ?? 0
-    } catch {
-      // reach unavailable this run; engagement (plain fields) is unaffected.
+    } catch (e) {
+      console.warn(`[cron/sync] FB insights exception for ${post.id}:`, e)
     }
-    return { ...post, insights: { reactions, reach, comments, shares, paidReach, organicReach } }
+    return { ...post, insights: { reactions, reach, comments, shares } }
   }))
 
   const userRef = adminDb.collection('users').doc(uid)

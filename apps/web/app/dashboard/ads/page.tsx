@@ -908,7 +908,7 @@ export default function AdsPage() {
             </button>
           )}
           {canSync && <button className="ads-btn" onClick={() => handleSync()} disabled={syncing} style={{ fontSize: 12.5, padding: '6px 12px', border: '1px solid var(--ad-border)', borderRadius: 8, background: 'var(--ad-surface)', cursor: syncing ? 'wait' : 'pointer', color: syncError ? 'var(--ad-red, #e53e3e)' : 'var(--ad-text2)' }}>
-            {syncing ? L('同步中⋯', 'Syncing…') : syncError ? `⚠ ${syncError}` : L('↻ 同步廣告資料', '↻ Sync ad data')}
+            {syncing ? L('同步中⋯', 'Syncing…') : syncError ? `⚠ ${syncError}` : L('↻ 同步最新資料', '↻ Sync latest data')}
           </button>}
           <div style={{ position: 'relative' }}>
             <button className="ads-btn primary" onClick={() => setShowExportMenu(p => !p)}>
