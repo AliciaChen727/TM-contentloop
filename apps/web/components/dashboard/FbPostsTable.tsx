@@ -87,7 +87,7 @@ export function FbPostsTable({ posts, onAskAI }: { posts: FbPost[]; onAskAI?: (q
           <tr>
             <SortTh k="createdTime" label={L('日期', 'Date')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <th style={{ textAlign: 'left' }}>{L('內容', 'Content')}</th>
-            <SortTh k="reach" label={L('觸及', 'Reach')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh k="reach" label={L('觀看', 'Views')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="reactions" label={L('按讚', 'Likes')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="comments" label={L('留言', 'Comments')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh k="shares" label={L('分享', 'Shares')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />

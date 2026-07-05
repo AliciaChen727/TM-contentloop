@@ -18,7 +18,7 @@ export interface DailyPoint {
 }
 
 const METRICS = [
-  { key: 'reach',          label: '總觸擊',      en: 'Reach',          color: '#3B6FD4', isInt: true,  disabled: false },
+  { key: 'reach',          label: '總觸及',      en: 'Reach',          color: '#3B6FD4', isInt: true,  disabled: false },
   { key: 'likes',          label: '總按讚',      en: 'Likes',          color: '#2E8B57', isInt: true,  disabled: false },
   { key: 'comments',       label: '留言',        en: 'Comments',       color: '#C96A1A', isInt: true,  disabled: false },
   { key: 'engRate',        label: '互動率%',     en: 'Engagement%',    color: '#7C3AED', isInt: false, disabled: false },
@@ -80,7 +80,7 @@ export function ContentChart({ data }: { data: DailyPoint[] }) {
           )
         })}
         {activeKeys.includes('engRate') && (
-          <span style={{ fontSize: 10.5, color: 'var(--ad-text3)', marginLeft: 'auto' }}>{L('互動率 = (按讚+留言+分享) ÷ 觸擊', 'Engagement = (likes+comments+shares) ÷ reach')}</span>
+          <span style={{ fontSize: 10.5, color: 'var(--ad-text3)', marginLeft: 'auto' }}>{L('互動率 = (按讚+留言+分享) ÷ 總觸及', 'Engagement = (likes+comments+shares) ÷ reach')}</span>
         )}
       </div>
 

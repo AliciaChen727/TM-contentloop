@@ -480,9 +480,9 @@ export default function DashboardPage() {
             <div className="ads-posts-summary-strip" style={{ marginBottom: 20 }}>
               {[
                 { label: L('總貼文數', 'Total posts'), value: stats.totalPosts, sub: L(`${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文`, `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} posts`) },
-                { label: L('總觸擊', 'Total reach'), value: fmtBig(stats.totalReach), sub: L('FB + IG 貼文', 'FB + IG posts') },
+                { label: L('總觸及', 'Total reach'), value: fmtBig(stats.totalReach), sub: L('FB 觀看 + IG 觸及', 'FB views + IG reach') },
                 { label: L('總按讚', 'Total likes'), value: fmtBig(stats.totalLikes), sub: L(`留言 ${stats.totalComments} · 分享 ${stats.totalShares}`, `${stats.totalComments} comments · ${stats.totalShares} shares`) },
-                { label: L('平均互動率', 'Avg engagement'), value: `${stats.avgEngRate.toFixed(2)}%`, sub: L('(按讚+留言+分享)/觸及', '(likes+comments+shares)/reach') },
+                { label: L('平均互動率', 'Avg engagement'), value: `${stats.avgEngRate.toFixed(2)}%`, sub: L('(按讚+留言+分享)/總觸及', '(likes+comments+shares)/reach') },
                 { label: L('追蹤數', 'Followers'), value: followerSummary.total > 0 ? fmtBig(followerSummary.total) : '—', sub: followerSummary.total > 0 ? L(`本區間 ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}`, `this period ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}`) : L('尚未同步', 'Not synced') },
               ].map(s => (
                 <div key={s.label} className="ads-posts-sum-card">
