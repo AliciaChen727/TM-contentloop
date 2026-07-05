@@ -26,6 +26,7 @@ interface Config {
 interface Correction { text: string; fromMessage?: string; createdAt?: string; by?: string }
 interface PreviewResult { action: 'reply' | 'handoff'; text: string; intent: string; model?: string; groundingUsed: string[] }
 interface FeedbackStats { up: number; down: number; total: number; topDownIntents: { intent: string; up: number; down: number }[]; recentDown: { message: string; reason: string; intent: string; createdAt: string }[] }
+interface InboxItem { platform: 'IG' | 'FB'; text: string; action: 'reply' | 'handoff'; reply: string; intent: string; wouldSend: boolean; createdAt: string }
 
 export default function FaqSettingsPage() {
   const router = useRouter()
@@ -50,11 +51,16 @@ export default function FaqSettingsPage() {
   const [feedbackReason, setFeedbackReason] = useState('')
   const [feedbackSent, setFeedbackSent] = useState(false)
   const [fbStats, setFbStats] = useState<FeedbackStats | null>(null)
+  const [inbox, setInbox] = useState<InboxItem[]>([])
 
   const loadFbStats = useCallback(async (t: string, pid: string) => {
     try {
       const res = await fetch(`/api/messages/faq/feedback?pageId=${encodeURIComponent(pid)}`, { headers: { Authorization: `Bearer ${t}` } })
       if (res.ok) setFbStats(await res.json())
+    } catch { /* best-effort */ }
+    try {
+      const r2 = await fetch(`/api/messages/faq/inbox?pageId=${encodeURIComponent(pid)}`, { headers: { Authorization: `Bearer ${t}` } })
+      if (r2.ok) setInbox((await r2.json()).items ?? [])
     } catch { /* best-effort */ }
   }, [])
 
@@ -193,9 +199,35 @@ export default function FaqSettingsPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
             <div className="flex-1 space-y-6">
             <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-xs text-amber-700">
-              {L('這裡設定的是 AI 客服 agent 的知識與答案。目前為「設定階段」——尚未實際自動回覆用戶（webhook／發送在下一階段開啟）。',
-                 'This configures the AI agent\'s knowledge and answers. It is not sending replies yet (webhook/sending comes in the next phase).')}
+              {L('這裡設定的是 AI 客服 agent 的知識與答案。目前為「設定階段」——尚未實際自動回覆用戶（webhook 已接、發送在下一階段開啟）。',
+                 'This configures the AI agent\'s knowledge and answers. Webhook is connected but replies are NOT sent yet (sending comes in the next phase).')}
             </div>
+
+            {/* Inbox: real messages received via webhook (dry-run) */}
+            {inbox.length > 0 && (
+              <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <p className="text-sm font-semibold text-gray-700">{L('📥 收到的私訊（試跑，未發送）', '📥 Received DMs (dry-run, not sent)')}</p>
+                <p className="mb-3 text-xs text-gray-400">{L('真實用戶私訊進來時，AI「會怎麼回」都記在這（目前不會真的送出）。', 'Shows what the AI WOULD reply to real inbound DMs — nothing is actually sent yet.')}</p>
+                <ul className="max-h-80 space-y-2 overflow-y-auto">
+                  {inbox.map((m, i) => (
+                    <li key={i} className="rounded-lg border border-gray-100 p-3 text-xs">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${m.platform === 'IG' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>{m.platform}</span>
+                        <span className="text-gray-700">{m.text}</span>
+                        <span className="ml-auto text-[10px] text-gray-300">{m.createdAt.slice(5, 16).replace('T', ' ')}</span>
+                      </div>
+                      <div className="mt-1 flex items-start gap-2 rounded bg-gray-50 p-2">
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${m.action === 'reply' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                          {m.action === 'reply' ? L('會回', 'reply') : L('轉真人', 'handoff')}
+                        </span>
+                        <span className="text-gray-600">{m.reply}</span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-gray-300">{m.intent}{m.wouldSend ? L(' · 啟用後會自動送出', ' · would auto-send when enabled') : ''}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {/* Global toggles */}
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
