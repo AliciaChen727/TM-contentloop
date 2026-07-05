@@ -248,6 +248,28 @@ Agent 核心（platform-agnostic）：(用戶訊息, 粉專知識庫) → 回覆
 - 完成 **Business Verification**。
 - `/privacy` 補「自動回覆如何運作、訊息如何處理」。
 
+### 8.5 例會排程輸入（現況 + 未來）
+- **現況（5-2a 已做）**：貼上（Google Sheet/Excel 複製 = TSV，或自由文字）→ `lib/messages/parseSchedule.ts` 抓日期 → 存 `faqBot/config.scheduleEntries`；`nextMeeting()` 算「今天後最近一場」。
+- **未來選項（擇一或並存）**：
+  1. **CSV 上傳解析**：owner 從 Excel 另存 CSV → 上傳 → 解析（沿用既有 `import-csv` 概念，較貼上穩定）。
+  2. **Google Sheets API 自動同步**：接 Sheets API（Google OAuth 或 owner 分享唯讀）定期抓，免每週重貼。屬**較大整合**（另一條 OAuth/權限），效益高但工程重，待排程真的常變動再做。
+
+### 8.6 知識庫涵蓋非常規活動（自訂問答）
+- 8 個意圖是「常規類別」。**非常規/一次性活動**（特別講座、台韓交流會、比賽…）用兩層涵蓋：
+  1. **補充知識（free text，5-2a 已有）**：owner 隨手寫任何活動資訊，agent grounding 時一併參考——已能處理大部分臨時問題。
+  2. **自訂問答（未來 5-2b+ 加）**：`faqBot/config.customFaqs: [{keywords[], question, answer, enabled}]`，讓 owner 針對「反覆被問的特定一次性活動」建結構化 Q&A；agent 先比對 customFaqs，再落回 8 意圖答案，再落回補充知識。
+- **agent 決策順序**：例會排程（deterministic）→ 自訂問答 → 意圖答案 → 補充知識 grounding →（都不足）轉真人。
+
+### 8.7 回覆品質 + 模型路由（任務路由）
+| 任務 | 模型 | 理由 |
+|------|------|------|
+| 意圖分類（已上線） | `gemini-2.5-flash`（thinkingBudget 0） | 便宜快、結構化 |
+| 「下次例會」等日期/事實 | **純程式**（`nextMeeting()`） | 100% 正確，不讓 LLM 算日期 |
+| **回覆生成（5-2b）— 標準** | **`claude-haiku-4-5`**（預設） | 便宜、品牌語氣安全，grounded FAQ 綽綽有餘 |
+| **回覆生成 — 進階** | `claude-sonnet-4-6`（owner 可切） | 難題/細緻語氣；貴一點 |
+- **設定頁加「回覆品質：標準 / 進階」開關** → 對應 haiku / sonnet，存 `faqBot/config.replyModel`。
+- **路由邏輯**：分類(flash) → 命中排程/自訂/意圖/知識 → 用 replyModel 生成 → 否則轉真人。所有 outbound 存檔可審閱。
+
 ---
 
 ## 9. 建議順序（更新版）
