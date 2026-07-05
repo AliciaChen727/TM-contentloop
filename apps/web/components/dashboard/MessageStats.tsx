@@ -13,12 +13,23 @@ export interface PlatformStat {
 }
 export interface DailyPoint { date: string; fbMsg: number; igMsg: number; fbUsers: number; igUsers: number }
 export interface RecentItem { platform: 'IG' | 'FB'; name: string; lastTime: string | null; messageCount: number }
+export interface Responsiveness { firstReplyMedianMin: number | null; replyRate: number | null; repliedConvs: number; totalConvs: number }
 export interface MessagesData {
   totals: { conversations: number; inboundMessages: number; uniqueSenders: number }
   byPlatform: { IG: PlatformStat; FB: PlatformStat }
   daily: DailyPoint[]
   recent: RecentItem[]
+  hourly?: number[]
+  responsiveness?: Responsiveness
   windowDays: number
+}
+
+// minutes → compact human label
+function fmtMinutes(min: number | null, L: (zh: string, en: string) => string): string {
+  if (min == null) return '—'
+  if (min < 60) return `${min} ${L('分', 'min')}`
+  if (min < 60 * 24) return `${(min / 60).toFixed(1)} ${L('小時', 'h')}`
+  return `${(min / 1440).toFixed(1)} ${L('天', 'd')}`
 }
 
 function StatCard({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
@@ -86,6 +97,51 @@ function DailyChart({ daily }: { daily: DailyPoint[] }) {
   )
 }
 
+function ResponsivenessCard({ r }: { r: Responsiveness }) {
+  const { L } = useLang()
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <p className="text-sm font-semibold text-gray-700">{L('回覆表現', 'Responsiveness')}</p>
+      <p className="mb-3 text-xs text-gray-400">{L('對方私訊後多快收到第一則回覆', 'How fast the first reply goes out')}</p>
+      <div className="flex gap-8">
+        <div>
+          <p className="text-2xl font-bold text-gray-900">{fmtMinutes(r.firstReplyMedianMin, L)}</p>
+          <p className="mt-1 text-xs text-gray-400">{L('首次回覆（中位）', 'First reply (median)')}</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold text-gray-900">{r.replyRate != null ? `${Math.round(r.replyRate * 100)}%` : '—'}</p>
+          <p className="mt-1 text-xs text-gray-400">{L(`回覆率（${r.repliedConvs}/${r.totalConvs}）`, `Reply rate (${r.repliedConvs}/${r.totalConvs})`)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PeakHours({ hourly }: { hourly: number[] }) {
+  const { L } = useLang()
+  const max = Math.max(1, ...hourly)
+  const peak = hourly.reduce((best, c, h) => (c > hourly[best] ? h : best), 0)
+  const hasData = hourly.some(c => c > 0)
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <p className="text-sm font-semibold text-gray-700">{L('尖峰時段', 'Peak hours')}</p>
+      <p className="mb-3 text-xs text-gray-400">
+        {hasData ? L(`最多私訊在 ${peak}:00–${peak + 1}:00`, `Busiest around ${peak}:00–${peak + 1}:00`) : L('此區間無私訊', 'No messages in range')}
+      </p>
+      <div className="flex h-24 items-end gap-px">
+        {hourly.map((c, h) => (
+          <div key={h} className="flex-1" title={`${h}:00 — ${c}`}>
+            <div className="w-full rounded-t-sm bg-indigo-300" style={{ height: `${(c / max) * 100}%`, minHeight: c > 0 ? 2 : 0 }} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[9px] text-gray-300">
+        <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
+      </div>
+    </div>
+  )
+}
+
 export function MessageStats({ data }: { data: MessagesData }) {
   const { L } = useLang()
   const { totals, byPlatform, daily, recent } = data
@@ -97,6 +153,14 @@ export function MessageStats({ data }: { data: MessagesData }) {
         <StatCard label={L('對話數', 'Conversations')} value={totals.conversations} hint={L('IG + FB 合計', 'IG + FB combined')} />
         <StatCard label={L('發問人數', 'Unique senders')} value={totals.uniqueSenders} hint={L('不重複帳號', 'distinct accounts')} />
       </div>
+
+      {/* Responsiveness + peak hours */}
+      {(data.responsiveness || data.hourly) && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {data.responsiveness && <ResponsivenessCard r={data.responsiveness} />}
+          {data.hourly && <PeakHours hourly={data.hourly} />}
+        </div>
+      )}
 
       {/* Per-platform availability / breakdown */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

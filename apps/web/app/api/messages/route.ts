@@ -41,6 +41,11 @@ function dateKeyTaipei(iso: string): string {
   }).format(new Date(iso))
 }
 
+// Hour-of-day (0–23) in Taipei time, for the peak-hours histogram.
+function hourTaipei(ms: number): number {
+  return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', hour12: false }).format(new Date(ms)).slice(0, 2)) % 24
+}
+
 async function fetchConversations(
   pageId: string, platform: 'messenger' | 'instagram', token: string,
 ): Promise<{ convs: RawConv[]; error?: string }> {
@@ -221,6 +226,33 @@ export async function GET(req: NextRequest) {
   const allSenders = new Set<string>(Array.from(fbW.senders).concat(Array.from(igW.senders)))
   recent.sort((a, b) => (b.lastTime ?? '').localeCompare(a.lastTime ?? ''))
 
+  // Peak hours: inbound messages (in window) bucketed by hour-of-day (Taipei).
+  const hourly = new Array(24).fill(0) as number[]
+  for (const m of inbound) {
+    if (m.timeMs == null || m.timeMs < startMs || m.timeMs > endMs) continue
+    hourly[hourTaipei(m.timeMs)]++
+  }
+
+  // First-reply responsiveness: per conversation, the gap from the first inbound
+  // (in window) to the first outbound after it. Median is reported (robust to the
+  // odd conversation answered days later). Limited by MSG_LIMIT recent messages.
+  const gaps: number[] = []
+  let totalConvs = 0, repliedConvs = 0
+  for (const c of fbRes.convs.concat(igRes.convs)) {
+    const seq = (c.messages?.data ?? [])
+      .map(m => ({ t: m.created_time ? new Date(m.created_time).getTime() : NaN, out: !!(m.from?.id && ownIds.has(m.from.id)) }))
+      .filter(m => Number.isFinite(m.t))
+      .sort((a, b) => a.t - b.t)
+    const firstIn = seq.find(m => !m.out && m.t >= startMs && m.t <= endMs)
+    if (!firstIn) continue
+    totalConvs++
+    const firstOut = seq.find(m => m.out && m.t > firstIn.t)
+    if (firstOut) { repliedConvs++; gaps.push((firstOut.t - firstIn.t) / 60000) }
+  }
+  gaps.sort((a, b) => a - b)
+  const firstReplyMedianMin = gaps.length ? Math.round(gaps[Math.floor(gaps.length / 2)]) : null
+  const replyRate = totalConvs > 0 ? repliedConvs / totalConvs : null
+
   return NextResponse.json({
     totals: {
       conversations: fbStat.conversations + igStat.conversations,
@@ -230,6 +262,8 @@ export async function GET(req: NextRequest) {
     byPlatform: { IG: igStat, FB: fbStat },
     daily: dailySeries,
     recent: recent.slice(0, 30),
+    hourly,
+    responsiveness: { firstReplyMedianMin, replyRate, repliedConvs, totalConvs },
     windowDays: nDays,
   })
 }
