@@ -199,9 +199,24 @@ users/{uid}/pages/{pageId}/messageStats/daily__{YYYY-MM-DD}
 
 ---
 
-## 8. 詳細計畫 — 5-2 FAQ Chatbot（讀寫）範圍
+## 8. 詳細計畫 — 5-2 AI Agent 自動回覆（讀寫）範圍
 
 > **前置**：5-1 擴充上線、累積夠資料知道「最常被問什麼」後才做。messaging **寫入**（Send API）+ webhook + **商家驗證** → 單獨 App Review。
+
+### 8.0 定位與架構（2026-07-05 修訂：AI agent + 平台無關）
+不做「死板固定模板」，做 **AI agent**：以 owner 填的知識庫（per-intent 答案 + 補充知識 + 語氣/persona）為 **grounding**，用 LLM **生成**自然回覆（RAG-style，grounded 以防亂編）；沒把握/無對應知識 → 轉真人（不亂答）。
+
+**平台無關架構（為了未來 LINE）**：
+```
+Agent 核心（platform-agnostic）：(用戶訊息, 粉專知識庫) → 回覆文字
+   ├── Meta adapter：Send API（FB Messenger / IG DM）← 本階段
+   └── LINE adapter：LINE Messaging API              ← 未來評估後接
+```
+核心只產「回覆文字」，發送交平台 adapter → 加 LINE 不用重寫核心、只加一個 adapter。
+
+**LINE 可行性評估**：技術可行（LINE Messaging API + webhook + reply/push）。需 LINE 官方帳號 + Messaging API channel + channel access token + 設 webhook。**不需 Meta App Review、不需商家驗證**（LINE 自有體系，可能比 Meta 那條更快上線）。屬獨立 adapter 刀，與 Meta 完全分開，不影響現階段。
+
+**建置子刀**：5-2a FAQ/知識庫設定 UI（零風險、無 Meta 設定，✅ 進行中）→ 5-2b webhook + agent 回覆引擎（dry-run 不真發）→ 5-2c 真發送（Send API，owner 逐頁開啟）→ 5-2d（未來）LINE adapter。
 
 ### 8.1 In scope（第一版刻意保守）
 1. **Webhook 接收**（Firebase Cloud Function）：訂閱 `messages` 事件；驗 `hub.verify_token` + `X-Hub-Signature-256`（App Secret）。收到 inbound → 存 Firestore（沿用 7.2 model）→ 分類 intent。

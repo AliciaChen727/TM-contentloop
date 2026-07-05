@@ -137,6 +137,12 @@ export default function MessagesPage() {
             {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
           </select>
         )}
+        <button
+          onClick={() => router.push('/dashboard/messages/faq')}
+          className="ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-indigo-300 hover:text-indigo-600"
+        >
+          🤖 {L('AI 自動回覆設定', 'AI auto-reply')}
+        </button>
       </header>
 
       <div className="mx-auto max-w-5xl px-6 py-8">
