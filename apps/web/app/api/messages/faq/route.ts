@@ -21,11 +21,12 @@ interface FaqConfig {
   scheduleEntries: ScheduleEntry[]
   meetingTime: string     // 例：週四 19:30–21:30
   meetingLocation: string
+  scheduleSheetUrl: string // 記住來源 Google Sheet 網址，方便重新同步
 }
 
 const DEFAULT_FALLBACK = '感謝您的訊息！我們會盡快由專人回覆您 🙏'
 const DEFAULT_PERSONA = '親切、簡潔、有禮貌，用「我們」自稱，像分會小編。'
-const emptyConfig = (): FaqConfig => ({ enabled: false, humanHandoffEnabled: true, fallbackMessage: DEFAULT_FALLBACK, answers: {}, knowledgeBase: '', persona: DEFAULT_PERSONA, scheduleEntries: [], meetingTime: '', meetingLocation: '' })
+const emptyConfig = (): FaqConfig => ({ enabled: false, humanHandoffEnabled: true, fallbackMessage: DEFAULT_FALLBACK, answers: {}, knowledgeBase: '', persona: DEFAULT_PERSONA, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '' })
 
 // Only page admins (connected the page) or super-admins may read/write bot config.
 async function assertAdmin(uid: string, pageId: string): Promise<boolean> {
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
     scheduleEntries,
     meetingTime: String(body.meetingTime ?? '').slice(0, 200),
     meetingLocation: String(body.meetingLocation ?? '').slice(0, 300),
+    scheduleSheetUrl: String(body.scheduleSheetUrl ?? '').slice(0, 500),
   }
 
   await adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config')

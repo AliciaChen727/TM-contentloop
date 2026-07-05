@@ -248,11 +248,17 @@ Agent 核心（platform-agnostic）：(用戶訊息, 粉專知識庫) → 回覆
 - 完成 **Business Verification**。
 - `/privacy` 補「自動回覆如何運作、訊息如何處理」。
 
-### 8.5 例會排程輸入（現況 + 未來）
-- **現況（5-2a 已做）**：貼上（Google Sheet/Excel 複製 = TSV，或自由文字）→ `lib/messages/parseSchedule.ts` 抓日期 → 存 `faqBot/config.scheduleEntries`；`nextMeeting()` 算「今天後最近一場」。
-- **未來選項（擇一或並存）**：
-  1. **CSV 上傳解析**：owner 從 Excel 另存 CSV → 上傳 → 解析（沿用既有 `import-csv` 概念，較貼上穩定）。
-  2. **Google Sheets API 自動同步**：接 Sheets API（Google OAuth 或 owner 分享唯讀）定期抓，免每週重貼。屬**較大整合**（另一條 OAuth/權限），效益高但工程重，待排程真的常變動再做。
+### 8.5 例會排程輸入（已做三種匯入）
+三種匯入殊途同歸（都 → `parseSchedule` → `faqBot/config.scheduleEntries` → `nextMeeting()` 算下次）：
+1. **貼上**（Google Sheet/Excel 複製 = TSV，或自由文字）。
+2. **CSV 上傳**（client 端讀檔，逗號轉 tab 後解析；`page.tsx` `onCsvFile`）。
+3. **Google Sheets 同步**（SA-share，非 OAuth）：`lib/messages/sheetsClient.ts`（`GoogleAuth` + scope `spreadsheets.readonly`，讀 gid→title→values，flatten→parseSchedule）+ `app/api/messages/faq/sheet`（GET 回 SA email、POST 同步）。sheetUrl 存 `config.scheduleSheetUrl` 可重同步。
+
+**🔑 SA-share 交付規則（多管理者必讀）**：
+- **所有粉專管理者都共用「同一個」service account email** 當檢視者（與 GA4 同帳號 `firebase-adminsdk-fbsvc@contentloop-dev.iam.gserviceaccount.com`，即 `FIREBASE_ADMIN_CLIENT_EMAIL`）。每人只把**自己的表**授唯讀；ContentLoop 只讀有被共用的表；sheetUrl 存 per-page、只有該頁 admin 能同步。
+- **前置（一次性）**：GCP 專案 `contentloop-dev` 需**啟用 Google Sheets API**。
+- **未來可換專用最小權限 SA**：程式已支援 `GA_SA_CLIENT_EMAIL`/`GA_SA_PRIVATE_KEY`（`sheetsServiceAccountEmail()` 與 `resolveSa` 同邏輯，優先專用 SA）。換了之後設定頁會顯示新 email，管理者改共用給新帳號即可。設定頁 UI 已寫明此規則。
+- **殘留風險（小）**：知道某張「已共用給 SA」的表網址的 admin，理論上可同步進自己粉專。對排程資料風險低；放更敏感資料再加「網址綁定粉專」驗證。
 
 ### 8.6 知識庫涵蓋非常規活動（自訂問答）
 - 8 個意圖是「常規類別」。**非常規/一次性活動**（特別講座、台韓交流會、比賽…）用兩層涵蓋：

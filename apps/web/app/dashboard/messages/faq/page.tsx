@@ -19,6 +19,7 @@ interface Config {
   scheduleEntries: ParsedEntry[]
   meetingTime: string
   meetingLocation: string
+  scheduleSheetUrl: string
 }
 
 export default function FaqSettingsPage() {
@@ -32,15 +33,46 @@ export default function FaqSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [paste, setPaste] = useState('')
+  const [saEmail, setSaEmail] = useState('')
+  const [syncingSheet, setSyncingSheet] = useState(false)
+  const [sheetErr, setSheetErr] = useState('')
 
   const load = useCallback(async (t: string, pid: string) => {
     setLoading(true)
     try {
       const res = await fetch(`/api/messages/faq?pageId=${encodeURIComponent(pid)}`, { headers: { Authorization: `Bearer ${t}` } })
       const d = await res.json()
-      if (res.ok) { setCfg({ answers: {}, scheduleEntries: [], meetingTime: '', meetingLocation: '', ...d.config }); setIntents(d.intents ?? []) }
+      if (res.ok) { setCfg({ answers: {}, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '', ...d.config }); setIntents(d.intents ?? []) }
+      fetch('/api/messages/faq/sheet', { headers: { Authorization: `Bearer ${t}` } })
+        .then(r => r.ok ? r.json() : null).then(d => { if (d?.email) setSaEmail(d.email) }).catch(() => {})
     } finally { setLoading(false) }
   }, [])
+
+  async function syncSheet() {
+    if (!cfg?.scheduleSheetUrl) return
+    setSyncingSheet(true); setSheetErr('')
+    try {
+      const res = await fetch('/api/messages/faq/sheet', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, sheetUrl: cfg.scheduleSheetUrl }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setSheetErr(d.error ?? L('同步失敗', 'Sync failed')); return }
+      setCfg(c => c ? { ...c, scheduleEntries: d.entries ?? [] } : c)
+    } catch { setSheetErr(L('同步失敗', 'Sync failed')) }
+    finally { setSyncingSheet(false) }
+  }
+
+  function onCsvFile(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      // CSV → treat commas as cell separators so parseSchedule finds dates.
+      const parsed = parseSchedule(String(reader.result ?? '').replace(/,/g, '\t'))
+      if (parsed.length) setCfg(c => c ? { ...c, scheduleEntries: parsed } : c)
+    }
+    reader.readAsText(file)
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async user => {
@@ -160,9 +192,42 @@ export default function FaqSettingsPage() {
                   <input className={field} value={cfg.meetingLocation} onChange={e => setCfg({ ...cfg, meetingLocation: e.target.value })} placeholder={L('例：XX 咖啡 2 樓', 'e.g. XX Cafe 2F')} />
                 </div>
               </div>
+              {/* Import: Google Sheet */}
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold text-gray-600">{L('① 從 Google Sheet 同步', '① Sync from Google Sheet')}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  {L('先把你的表「共用（檢視者）」給下面這個服務帳號，ContentLoop 才讀得到：', 'Share your sheet (Viewer) with this service account so ContentLoop can read it:')}
+                </p>
+                {saEmail && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <code className="flex-1 truncate rounded bg-white px-2 py-1 text-[11px] text-gray-600">{saEmail}</code>
+                    <button onClick={() => navigator.clipboard?.writeText(saEmail)} className="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-500 hover:text-indigo-600">{L('複製', 'Copy')}</button>
+                  </div>
+                )}
+                <p className="mt-1.5 text-[11px] leading-relaxed text-gray-400">
+                  {L('※ 所有粉專管理者都是共用「這同一個」帳號——你只是把自己的表授予唯讀，不會影響其他資料。ContentLoop 只讀有被共用的表。（未來若改用專用服務帳號，此處會顯示新的 email，屆時再共用給新帳號即可。）',
+                     '※ Every Page admin shares with this same account — you only grant read access to your own sheet. ContentLoop can only read sheets that were shared. (If we switch to a dedicated service account later, this email will change and you can re-share to the new one.)')}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <input className={`${field} flex-1`} value={cfg.scheduleSheetUrl} onChange={e => setCfg({ ...cfg, scheduleSheetUrl: e.target.value })} placeholder="https://docs.google.com/spreadsheets/d/…" />
+                  <button onClick={syncSheet} disabled={syncingSheet || !cfg.scheduleSheetUrl} className="shrink-0 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 disabled:opacity-60">
+                    {syncingSheet ? L('同步中…', 'Syncing…') : L('同步', 'Sync')}
+                  </button>
+                </div>
+                {sheetErr && <p className="mt-1 text-xs text-red-500">{sheetErr}</p>}
+              </div>
+
+              {/* Import: CSV upload */}
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold text-gray-600">{L('② 上傳 CSV', '② Upload CSV')}</p>
+                <p className="mt-1 mb-2 text-xs text-gray-400">{L('從 Excel／Sheet 另存 CSV 後上傳。', 'Export CSV from Excel/Sheets and upload.')}</p>
+                <input type="file" accept=".csv,text/csv" onChange={e => { const f = e.target.files?.[0]; if (f) onCsvFile(f) }} className="text-xs text-gray-500" />
+              </div>
+
+              {/* Import: paste */}
               <div>
-                <p className="mb-1 text-xs font-medium text-gray-500">{L('貼上排程日期', 'Paste schedule dates')}</p>
-                <textarea className={`${field} h-24 resize-y`} value={paste} onChange={e => setPaste(e.target.value)} placeholder={L('貼上含日期的內容，例：#683 2026/7/3 ⏎ #684 2026/7/17…', 'Paste rows/dates, e.g. #683 2026/7/3 ⏎ #684 2026/7/17…')} />
+                <p className="mb-1 text-xs font-semibold text-gray-600">{L('③ 或直接貼上', '③ Or paste')}</p>
+                <textarea className={`${field} h-20 resize-y`} value={paste} onChange={e => setPaste(e.target.value)} placeholder={L('貼上含日期的內容，例：#683 2026/7/3 ⏎ #684 2026/7/17…', 'Paste rows/dates, e.g. #683 2026/7/3 ⏎ #684 2026/7/17…')} />
                 <button
                   onClick={() => { const parsed = parseSchedule(paste); if (parsed.length) { setCfg({ ...cfg, scheduleEntries: parsed }); setPaste('') } }}
                   className="mt-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-indigo-300 hover:text-indigo-600"
