@@ -25,12 +25,14 @@ interface Config {
 }
 interface Correction { text: string; fromMessage?: string; createdAt?: string; by?: string }
 interface PreviewResult { action: 'reply' | 'handoff'; text: string; intent: string; model?: string; groundingUsed: string[] }
+interface FeedbackStats { up: number; down: number; total: number; topDownIntents: { intent: string; up: number; down: number }[]; recentDown: { message: string; reason: string; intent: string; createdAt: string }[] }
 
 export default function FaqSettingsPage() {
   const router = useRouter()
   const { L } = useLang()
   const [token, setToken] = useState('')
   const [pageId, setPageId] = useState('')
+  const [pageName, setPageName] = useState('')
   const [intents, setIntents] = useState<IntentMeta[]>([])
   const [cfg, setCfg] = useState<Config | null>(null)
   const [loading, setLoading] = useState(true)
@@ -47,6 +49,14 @@ export default function FaqSettingsPage() {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const [feedbackReason, setFeedbackReason] = useState('')
   const [feedbackSent, setFeedbackSent] = useState(false)
+  const [fbStats, setFbStats] = useState<FeedbackStats | null>(null)
+
+  const loadFbStats = useCallback(async (t: string, pid: string) => {
+    try {
+      const res = await fetch(`/api/messages/faq/feedback?pageId=${encodeURIComponent(pid)}`, { headers: { Authorization: `Bearer ${t}` } })
+      if (res.ok) setFbStats(await res.json())
+    } catch { /* best-effort */ }
+  }, [])
 
   const load = useCallback(async (t: string, pid: string) => {
     setLoading(true)
@@ -56,8 +66,9 @@ export default function FaqSettingsPage() {
       if (res.ok) { setCfg({ answers: {}, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '', replyModel: 'standard', corrections: [], ...d.config }); setIntents(d.intents ?? []) }
       fetch('/api/messages/faq/sheet', { headers: { Authorization: `Bearer ${t}` } })
         .then(r => r.ok ? r.json() : null).then(d => { if (d?.email) setSaEmail(d.email) }).catch(() => {})
+      loadFbStats(t, pid)
     } finally { setLoading(false) }
-  }, [])
+  }, [loadFbStats])
 
   // Firebase ID tokens expire after ~1h; always fetch a fresh one before an API
   // call (getIdToken auto-refreshes) so long-open pages don't hit "Invalid token".
@@ -98,6 +109,7 @@ export default function FaqSettingsPage() {
       if (d.addedCorrection && reason.trim()) {
         setCfg(c => c ? { ...c, corrections: [...(c.corrections ?? []), { text: reason.trim(), fromMessage: previewAsked, createdAt: new Date().toISOString() }] } : c)
       }
+      loadFbStats(await freshToken(), pageId)
     } catch { /* best-effort */ }
   }
 
@@ -134,6 +146,7 @@ export default function FaqSettingsPage() {
       const t = await user.getIdToken(); setToken(t)
       const pid = typeof window !== 'undefined' ? (localStorage.getItem('selectedPageId') ?? '') : ''
       setPageId(pid)
+      setPageName(typeof window !== 'undefined' ? (localStorage.getItem('selectedPageName') ?? '') : '')
       if (pid) load(t, pid)
       else setLoading(false)
     })
@@ -169,6 +182,7 @@ export default function FaqSettingsPage() {
         <button onClick={() => router.push('/dashboard/messages')} className="text-sm text-gray-400 transition-colors hover:text-gray-700">← {L('返回私訊分析', 'Messages')}</button>
         <span className="text-gray-200">|</span>
         <h1 className="text-lg font-bold text-gray-900">{L('AI 自動回覆設定', 'AI auto-reply settings')}</h1>
+        {pageName && <span className="truncate text-sm text-gray-400">· {pageName}</span>}
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-8">
@@ -322,29 +336,6 @@ export default function FaqSettingsPage() {
               })()}
             </section>
 
-            {/* Corrections learned from downvotes (T1) */}
-            <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <p className="text-sm font-semibold text-gray-700">{L('🧠 AI 學到的更正', '🧠 Learned corrections')}</p>
-              <p className="mb-3 text-xs text-gray-400">{L('在右側試回覆按 👎 並寫下正確資訊，就會自動加到這裡；AI 每次回覆都會優先參考。', 'Downvote a test reply and add the correct info — it lands here and the AI always uses it.')}</p>
-              {(cfg.corrections?.length ?? 0) === 0 ? (
-                <p className="py-3 text-center text-xs text-gray-300">{L('目前沒有更正紀錄', 'No corrections yet')}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {cfg.corrections.map((c, i) => (
-                    <li key={i} className="flex items-start gap-2 rounded-lg border border-gray-100 bg-gray-50 p-2 text-xs">
-                      <span className="mt-0.5 text-indigo-400">✎</span>
-                      <div className="flex-1">
-                        <p className="text-gray-700">{c.text}</p>
-                        {c.fromMessage && <p className="mt-0.5 text-[10px] text-gray-400">{L('來自問題：', 'from: ')}{c.fromMessage}</p>}
-                      </div>
-                      <button onClick={() => setCfg({ ...cfg, corrections: cfg.corrections.filter((_, j) => j !== i) })} className="text-gray-300 hover:text-red-500">✕</button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-2 text-[10px] text-gray-400">{L('※ 刪除後記得按「儲存設定」。', '※ Click Save after removing.')}</p>
-            </section>
-
             {/* Fallback */}
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <p className="mb-1 text-sm font-semibold text-gray-700">{L('無法回答時的訊息', 'Fallback message')}</p>
@@ -360,9 +351,9 @@ export default function FaqSettingsPage() {
 
             </div>
 
-            {/* Right: chat-style dry-run preview (sticky) */}
-            <aside className="lg:w-96 lg:shrink-0 lg:sticky lg:top-20">
-              <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" style={{ height: 'calc(100vh - 140px)', maxHeight: 640 }}>
+            {/* Right: chat-style dry-run preview + feedback insights (sticky) */}
+            <aside className="space-y-4 lg:sticky lg:top-20 lg:w-96 lg:shrink-0">
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" style={{ height: 'calc(100vh - 380px)', minHeight: 360, maxHeight: 520 }}>
                 <div className="border-b border-gray-100 px-4 py-3">
                   <p className="text-sm font-semibold text-gray-800">{L('🧪 試回覆', '🧪 Test reply')}</p>
                   <p className="text-[11px] leading-relaxed text-gray-400">{L('僅內部測試（不會真的發送）。先把左側的 agent 知識與答案填完，資訊越充分，AI 越知道怎麼回；填完按「儲存設定」再測。', 'Internal test only (not sent). Fill in the agent knowledge & answers on the left first — the more complete, the better the AI replies. Save settings, then test.')}</p>
@@ -436,6 +427,55 @@ export default function FaqSettingsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Learning & feedback (T1 corrections + T2 insights) — under test-reply */}
+              {((cfg.corrections?.length ?? 0) > 0 || (fbStats?.total ?? 0) > 0) && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-gray-800">{L('🧠 學習與回饋', '🧠 Learning & feedback')}</p>
+                  <p className="mb-3 text-[11px] text-gray-400">{L('按 👎 寫下正確資訊 → AI 下次優先參考。', 'Downvote + correct → the AI uses it next time.')}</p>
+
+                  {/* Corrections the AI learned */}
+                  {(cfg.corrections?.length ?? 0) > 0 && (
+                    <div className="mb-3">
+                      <p className="mb-1 text-[11px] font-medium text-gray-500">{L(`AI 學到的更正（${cfg.corrections.length}）`, `Learned corrections (${cfg.corrections.length})`)}</p>
+                      <ul className="max-h-36 space-y-1 overflow-y-auto">
+                        {cfg.corrections.map((c, i) => (
+                          <li key={i} className="flex items-start gap-1.5 rounded-lg border border-gray-100 bg-gray-50 p-2 text-[11px]">
+                            <span className="mt-0.5 text-indigo-400">✎</span>
+                            <span className="flex-1 text-gray-700">{c.text}</span>
+                            <button onClick={() => setCfg({ ...cfg, corrections: cfg.corrections.filter((_, j) => j !== i) })} className="text-gray-300 hover:text-red-500">✕</button>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-[10px] text-gray-400">{L('※ 刪除後記得按「儲存設定」。', '※ Save after removing.')}</p>
+                    </div>
+                  )}
+
+                  {/* Feedback stats */}
+                  {fbStats && fbStats.total > 0 && (
+                    <div className="border-t border-gray-100 pt-3">
+                      <div className="mb-2 flex items-center gap-3 text-sm">
+                        <span className="text-green-600">👍 {fbStats.up}</span>
+                        <span className="text-red-500">👎 {fbStats.down}</span>
+                        <span className="text-[11px] text-gray-400">{L('共', 'total')} {fbStats.total}</span>
+                        {fbStats.topDownIntents.slice(0, 3).map(t => (
+                          <span key={t.intent} className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] text-red-500">{t.intent}·{t.down}</span>
+                        ))}
+                      </div>
+                      {fbStats.recentDown.length > 0 && (
+                        <ul className="max-h-36 space-y-1 overflow-y-auto">
+                          {fbStats.recentDown.slice(0, 8).map((r, i) => (
+                            <li key={i} className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-[11px]">
+                              <p className="text-gray-700">Q：{r.message || '—'}</p>
+                              {r.reason && <p className="mt-0.5 text-indigo-500">{L('更正：', 'fix: ')}{r.reason}</p>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </aside>
           </div>
         )}

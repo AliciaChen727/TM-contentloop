@@ -47,8 +47,9 @@ export async function generateReply(opts: {
   todayIso: string
   anthropicKey: string | null
   geminiKey: string | null
+  fewShot?: { question: string; reply: string }[]   // T3：過去被讚的類似回覆（風格參考）
 }): Promise<AgentResult> {
-  const { message, config, todayIso, anthropicKey, geminiKey } = opts
+  const { message, config, todayIso, anthropicKey, geminiKey, fewShot } = opts
 
   // Classify intent — used for schedule injection + analytics only (NOT to gate answers).
   let intent: IntentKey = 'other'
@@ -95,12 +96,16 @@ export async function generateReply(opts: {
 - 「可用資訊」裡任何一段只要能回答用戶問題就用它作答，不要因為分類標籤而忽略相關內容。
 - 若「可用資訊」完全無法回答用戶的問題，請「只輸出」：[[HANDOFF]]（不要其他任何字）。
 - 不要出現「根據資料」「as an AI」「作為 AI」這類字眼。`
+  const fewShotBlock = (fewShot ?? []).length > 0
+    ? `\n\n過去類似問題的良好回覆（風格參考，勿照抄、以「可用資訊」為準）：\n${fewShot!.map(f => `Q：${f.question}\nA：${f.reply}`).join('\n---\n')}`
+    : ''
   const userContent = `用戶訊息：「${message}」
 
 可用資訊：
-${grounding.join('\n\n')}
+${grounding.join('\n\n')}${fewShotBlock}
 
 請據此自然地回覆用戶（若都不相關則只輸出 [[HANDOFF]]）。`
+  if ((fewShot ?? []).length > 0) groundingUsed.push('fewshot')
   try {
     const anthropic = new Anthropic({ apiKey: anthropicKey })
     const res = await anthropic.messages.create({ model, max_tokens: 400, system, messages: [{ role: 'user', content: userContent }] })

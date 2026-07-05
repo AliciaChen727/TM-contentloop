@@ -4,6 +4,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import { generateReply, type AgentConfig } from '@/lib/messages/replyAgent'
+import { getFewShot } from '@/lib/messages/feedbackFewShot'
 
 // Dry-run preview: run the AI agent on a sample message and return what it WOULD
 // reply. No webhook, no sending — for the owner to tune answers/knowledge.
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
   const geminiKey = process.env.GEMINI_API_KEY ?? (await getUserApiKey(uid, 'gemini')) ?? null
   const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
 
-  const result = await generateReply({ message, config, todayIso, anthropicKey, geminiKey })
+  const fewShot = await getFewShot(pageId, message, geminiKey).catch(() => [])
+  const result = await generateReply({ message, config, todayIso, anthropicKey, geminiKey, fewShot })
   return NextResponse.json(result)
 }
