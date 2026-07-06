@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           <li style={{ marginBottom: 6 }}><strong>Account information:</strong> Your name and email address obtained through Google or Facebook login.</li>
           <li style={{ marginBottom: 6 }}><strong>Facebook Page data:</strong> Page access tokens, post performance metrics (reach, impressions, engagement, clicks), and ad insights — only for Pages you explicitly authorize.</li>
           <li style={{ marginBottom: 6 }}><strong>Instagram data:</strong> Basic profile information and post insights for Instagram Business accounts linked to your authorized Facebook Page.</li>
-          <li style={{ marginBottom: 6 }}><strong>Usage data:</strong> Feature usage logs for improving the service (e.g., number of AI-generated images or videos).</li>
+          <li style={{ marginBottom: 6 }}><strong>Usage data:</strong> Feature usage logs for improving the service (e.g., number of AI-generated images or videos). We use Google Analytics 4, which sets cookies to measure aggregate product usage such as page views, returning visits, and which features are clicked. This is limited to product-improvement analytics — we do not send your message content, tokens, or the personal data of your Page&apos;s followers to Google Analytics.</li>
         </ul>
       </section>
 
@@ -51,6 +51,7 @@ export default function PrivacyPage() {
           <li style={{ marginBottom: 6 }}>Meta Graph API — fetching Facebook and Instagram insights</li>
           <li style={{ marginBottom: 6 }}>Anthropic Claude API — AI-powered content suggestions</li>
           <li style={{ marginBottom: 6 }}>Google Cloud Vertex AI — AI image and video generation</li>
+          <li style={{ marginBottom: 6 }}>Google Analytics 4 (Google) — aggregate product usage analytics (uses cookies)</li>
         </ul>
       </section>
 

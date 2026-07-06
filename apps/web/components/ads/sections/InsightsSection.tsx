@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface PostSummary {
   postSnippet: string
@@ -450,6 +451,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
         throw new Error(e.error ?? L('報告生成失敗', 'Report generation failed'))
       }
       const repData = await repRes.json()
+      trackEvent('report_generated', { forced: forceRegen, period: periodType })
       setReport(repData.report)
       setGeneratedAt(repData.generatedAt)
       setFromCache(false)
@@ -536,6 +538,7 @@ export function InsightsSection({ pageId, onAskAI }: { pageId: string; onAskAI?:
             </button>
             {summary && (
               <button onClick={() => {
+                trackEvent('report_exported', { format: 'pdf' })
                 const win = window.open('', '_blank')
                 if (!win) return
                 win.document.write(buildPrintHTML(summary, report, en))

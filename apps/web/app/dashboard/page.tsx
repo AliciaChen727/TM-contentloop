@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { trackEvent } from '@/lib/analytics/track'
 import { FbPostsTable } from '@/components/dashboard/FbPostsTable'
 import { FbCsvImport } from '@/components/dashboard/FbCsvImport'
 import { FbMdImport } from '@/components/dashboard/FbMdImport'
@@ -326,6 +327,7 @@ export default function DashboardPage() {
   const [skInitPrompt, setSkInitPrompt] = useState('')
   const [skAutoSend, setSkAutoSend] = useState(false)
   const openSidekick = useCallback((prompt = '', autoSend = false) => {
+    trackEvent('sidekick_opened', { context: 'content', auto: autoSend })
     setSkInitPrompt(prompt)
     setSkAutoSend(autoSend)
     setSkOpen(true)
@@ -372,6 +374,7 @@ export default function DashboardPage() {
   // token, so only admins of this page can meaningfully trigger it.
   async function handleSync() {
     if (!selectedPageId || syncing) return
+    trackEvent('sync_clicked', { context: 'content' })
     setSyncing(true)
     try {
       const u = auth.currentUser

@@ -22,6 +22,7 @@ import { InsightsSection } from '@/components/ads/sections/InsightsSection'
 import type { NavId, Post, AdData, LabelEntry, Experiment, DiagItem, AiDiagCard } from '@/components/ads/types'
 import { useLang, type Lang } from '@/lib/i18n/LanguageProvider'
 import { DateField } from '@/components/ui/DateField'
+import { trackEvent } from '@/lib/analytics/track'
 
 const NAV: { id: NavId; icon: string; badge?: string }[] = [
   { id: 'overview', icon: 'chart' },
@@ -234,6 +235,10 @@ export default function AdsPage() {
     const s = new URLSearchParams(window.location.search).get('section')
     if (s && NAV.some(n => n.id === s)) setActive(s as NavId)
   }, [])
+  // The ads dashboard is a single route with client-side nav sections, so GA sees
+  // one pageview. Emit a section_view event on each section so per-section usage
+  // (洞察報告 / 診斷 / 素材…) is measurable.
+  useEffect(() => { trackEvent('section_view', { section: active }) }, [active])
   const [skOpen, setSkOpen] = useState(false)
   const [skInitPrompt, setSkInitPrompt] = useState('')
   const [skAutoSend, setSkAutoSend] = useState(false)
@@ -474,6 +479,7 @@ export default function AdsPage() {
   // per the initial dateFrom/dateTo state. Users can still pick other ranges.
 
   async function handleSync(since?: string, until?: string) {
+    trackEvent('sync_clicked', { context: 'ads' })
     // Respect the user's selected range exactly — do NOT force the end date to today.
     const syncFrom = since ?? dateFrom
     const syncTo = until ?? dateTo
@@ -653,12 +659,14 @@ export default function AdsPage() {
   }
 
   const openSidekick = useCallback((prompt = '', autoSend = false) => {
+    trackEvent('sidekick_opened', { context: 'ads', auto: autoSend })
     setSkInitPrompt(prompt)
     setSkAutoSend(autoSend)
     setSkOpen(true)
   }, [])
 
   function exportJSON() {
+    trackEvent('report_exported', { format: 'json' })
     const payload = {
       exportedAt: new Date().toISOString(),
       page: selectedPageName || 'unknown',
@@ -705,6 +713,7 @@ export default function AdsPage() {
   }
 
   function exportCSV() {
+    trackEvent('report_exported', { format: 'csv' })
     const s = adData.overview.summary
     const lines: string[] = []
     const row = (...cols: (string | number | undefined)[]) =>

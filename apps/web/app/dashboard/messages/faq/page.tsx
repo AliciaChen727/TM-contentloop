@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { parseSchedule, nextMeeting, type ParsedEntry } from '@/lib/messages/parseSchedule'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface IntentMeta { key: string; zh: string; en: string }
 interface Answer { answer: string; enabled: boolean }
@@ -188,7 +189,7 @@ export default function FaqSettingsPage() {
         headers: { Authorization: `Bearer ${await freshToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, ...cfg }),
       })
-      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+      if (res.ok) { trackEvent('faq_saved', { enabled: cfg.enabled === true }); setSaved(true); setTimeout(() => setSaved(false), 2500) }
     } finally { setSaving(false) }
   }
 
