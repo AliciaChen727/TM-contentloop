@@ -124,7 +124,8 @@ export default function LinksPage() {
   if (loading) return <LoadingScreen fullscreen />
 
   // Aggregate per-device clicks + registrations across all links on this page.
-  const DEVICE_ORDER = ['iOS', 'Android', 'Windows', 'Mac', 'Linux', 'Other']
+  // New fine-grained buckets first; legacy 'iOS'/'Android' kept so pre-split clicks still show.
+  const DEVICE_ORDER = ['iPhone', 'iPad', 'Android 手機', 'Android 平板', 'Windows', 'Mac', 'Linux', 'iOS', 'Android', 'Other']
   const devAgg: Record<string, { clicks: number; conversions: number }> = {}
   for (const l of links) {
     for (const [dev, n] of Object.entries(l.deviceClicks ?? {})) {

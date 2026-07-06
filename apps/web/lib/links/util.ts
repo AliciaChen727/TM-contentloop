@@ -27,8 +27,12 @@ export function isBotUA(ua: string): boolean {
 // Coarse device/UA label for the click log (no fingerprinting, just a category).
 export function uaCategory(ua: string): string {
   const u = (ua || '').toLowerCase()
-  if (/iphone|ipad|ipod/.test(u)) return 'iOS'
-  if (/android/.test(u)) return 'Android'
+  // Split by device (not just OS) so the links page distinguishes phone vs tablet,
+  // aligned with the Meta ads `impression_device` labels. Check iPad before iPhone;
+  // Android phones carry the "mobile" token, tablets don't.
+  if (/ipad/.test(u)) return 'iPad'
+  if (/iphone|ipod/.test(u)) return 'iPhone'
+  if (/android/.test(u)) return /mobile/.test(u) ? 'Android 手機' : 'Android 平板'
   if (/macintosh|mac os/.test(u)) return 'Mac'
   if (/windows/.test(u)) return 'Windows'
   if (/linux/.test(u)) return 'Linux'
