@@ -14,6 +14,9 @@ export interface DailyPoint {
   shares: number
   engRate: number
   followers: number
+  followersFb: number
+  followersIg: number
+  followersTh: number
   followerGrowth: number
 }
 
@@ -22,7 +25,10 @@ const METRICS = [
   { key: 'likes',          label: '總按讚',      en: 'Likes',          color: '#2E8B57', isInt: true,  disabled: false },
   { key: 'comments',       label: '留言',        en: 'Comments',       color: '#C96A1A', isInt: true,  disabled: false },
   { key: 'engRate',        label: '互動率%',     en: 'Engagement%',    color: '#7C3AED', isInt: false, disabled: false },
-  { key: 'followers',      label: '追蹤數',      en: 'Followers',      color: '#E91E63', isInt: true,  disabled: false },
+  { key: 'followers',      label: '總追蹤數',    en: 'Followers',      color: '#E91E63', isInt: true,  disabled: false },
+  { key: 'followersFb',    label: 'FB 追蹤',     en: 'FB followers',   color: '#1877F2', isInt: true,  disabled: false },
+  { key: 'followersIg',    label: 'IG 追蹤',     en: 'IG followers',   color: '#C13584', isInt: true,  disabled: false },
+  { key: 'followersTh',    label: 'Threads 追蹤', en: 'Threads followers', color: '#111111', isInt: true, disabled: false },
   { key: 'followerGrowth', label: '追蹤成長率%', en: 'Follower growth%', color: '#FF5722', isInt: false, disabled: false },
 ]
 

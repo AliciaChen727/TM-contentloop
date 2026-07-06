@@ -6,7 +6,6 @@ import { adminDb } from '@/lib/firebase/admin'
 import { GRAPH, getThreadsToken } from '@/lib/threads/client'
 
 const POST_METRICS = 'views,likes,replies,reposts,quotes,shares'
-const ACCOUNT_METRICS = 'views,likes,replies,reposts,quotes,followers_count'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function metricMap(data: any): Record<string, number> {
@@ -43,17 +42,31 @@ export async function syncThreadsForPage(
     }
   }))
 
-  let account: Record<string, number> = {}
+  // Followers: `followers_count` is a total_value account metric. It must be
+  // fetched ALONE (mixing it with time-series metrics like views needs since/until
+  // and 400s the whole call) and via `me/` — the stored threadsUserId can be stale.
+  let followersCount: number | null = null
   try {
-    const accRes = await fetch(`${GRAPH}/v1.0/${tok.threadsUserId}/threads_insights?metric=${ACCOUNT_METRICS}&access_token=${encodeURIComponent(t)}`)
+    const accRes = await fetch(`${GRAPH}/v1.0/me/threads_insights?metric=followers_count&access_token=${encodeURIComponent(t)}`)
     const acc = await accRes.json()
-    if (accRes.ok && !acc.error) account = metricMap(acc)
+    if (accRes.ok && !acc.error) {
+      const v = acc?.data?.[0]?.total_value?.value
+      if (typeof v === 'number') followersCount = v
+    }
   } catch { /* optional */ }
 
   await adminDb.collection('pages').doc(pageId).collection('threadsInsights').doc('latest').set({
-    threadsUserId: tok.threadsUserId, posts, account, postCount: posts.length,
+    threadsUserId: tok.threadsUserId, posts, followersCount, postCount: posts.length,
     syncedAt: new Date().toISOString(),
   }, { merge: true })
+
+  // Threads gives no follower HISTORY, so we snapshot today's count daily to build
+  // a trend going forward (pages/{pageId}/threadsStats/{YYYY-MM-DD}).
+  if (followersCount !== null) {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' })
+    await adminDb.collection('pages').doc(pageId).collection('threadsStats').doc(today)
+      .set({ date: today, followers: followersCount, snapshotAt: new Date().toISOString() }, { merge: true })
+  }
 
   return { ok: true, postCount: posts.length }
 }

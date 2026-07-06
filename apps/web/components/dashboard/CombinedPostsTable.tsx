@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { TablePager } from './TablePager'
+import type { ThreadsPost } from './ThreadsPostsTable'
 
 const PAGE_SIZE = 200
 
@@ -27,8 +28,7 @@ interface CombinedRow {
   date: string
   content: string
   permalink: string
-  fbOnly: boolean
-  igOnly: boolean
+  plats: { fb: boolean; ig: boolean; th: boolean }
   reach: number
   likes: number
   comments: number
@@ -41,8 +41,12 @@ type SortKey = 'date' | 'reach' | 'likes' | 'comments' | 'saved' | 'shares' | 'v
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 
+function platLabel(plats: { fb: boolean; ig: boolean; th: boolean }): string {
+  return [plats.fb && 'FB', plats.ig && 'IG', plats.th && 'TH'].filter(Boolean).join('+')
+}
+
 function buildPostPrompt(row: CombinedRow, en: boolean): string {
-  const platform = row.fbOnly ? 'Facebook' : row.igOnly ? 'Instagram' : 'FB+IG'
+  const platform = platLabel(row.plats)
   const engRate = row.reach > 0 ? ((row.likes + row.comments + row.shares) / row.reach * 100).toFixed(2) : '0.00'
   if (en) return `Please analyze this post:\nDate: ${row.date} | Platform: ${platform}\nContent: ${row.content.slice(0, 100)}\nReach: ${fmt(row.reach)} | Likes: ${row.likes} | Comments: ${row.comments} | Saves: ${row.saved} | Shares: ${row.shares} | Plays: ${row.views}\nEngagement: ${engRate}%\n\nPlease give a performance diagnosis and specific optimization suggestions.`
   return `請分析這篇貼文：\n日期：${row.date}｜平台：${platform}\n內容：${row.content.slice(0, 100)}\n觸及：${fmt(row.reach)}｜按讚：${row.likes}｜留言：${row.comments}｜收藏：${row.saved}｜分享：${row.shares}｜播放：${row.views}\n互動率：${engRate}%\n\n請給出這篇貼文的成效診斷和具體優化建議。`
@@ -69,12 +73,12 @@ function SortTh({ k, label, sortKey, sortDir, onSort }: {
 }
 
 function PlatBadge({ row }: { row: CombinedRow }) {
-  if (row.fbOnly) return <span className="ads-posts-platform-badge fb" style={{ marginLeft: 6 }}>FB</span>
-  if (row.igOnly) return <span className="ads-posts-platform-badge ig" style={{ marginLeft: 6 }}>IG</span>
-  return <span className="ads-posts-platform-badge both" style={{ marginLeft: 6 }}>FB+IG</span>
+  const count = [row.plats.fb, row.plats.ig, row.plats.th].filter(Boolean).length
+  const cls = count > 1 ? 'both' : row.plats.fb ? 'fb' : row.plats.ig ? 'ig' : 'both'
+  return <span className={`ads-posts-platform-badge ${cls}`} style={{ marginLeft: 6 }}>{platLabel(row.plats)}</span>
 }
 
-export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbPost[]; igPosts: IgPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
+export function CombinedPostsTable({ fbPosts, igPosts, threadsPosts = [], onAskAI }: { fbPosts: FbPost[]; igPosts: IgPost[]; threadsPosts?: ThreadsPost[]; onAskAI?: (q: string, autoSend?: boolean) => void }) {
   const { L, lang } = useLang()
   const en = lang === 'en'
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -82,7 +86,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
   const [page, setPage] = useState(1)
 
   const rows = useMemo<CombinedRow[]>(() => {
-    const byDate = new Map<string, { fb?: FbPost; ig?: IgPost }>()
+    const byDate = new Map<string, { fb?: FbPost; ig?: IgPost; th?: ThreadsPost }>()
     for (const fb of fbPosts) {
       const d = fb.createdTime.slice(0, 10)
       const entry = byDate.get(d) ?? {}
@@ -93,20 +97,25 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
       const entry = byDate.get(d) ?? {}
       if (!entry.ig) byDate.set(d, { ...entry, ig })
     }
-    return Array.from(byDate.entries()).map(([date, { fb, ig }]) => ({
+    for (const th of threadsPosts) {
+      const d = th.timestamp.slice(0, 10)
+      const entry = byDate.get(d) ?? {}
+      if (!entry.th) byDate.set(d, { ...entry, th })
+    }
+    // Threads reach == its views; it has no saves and no video "plays" column.
+    return Array.from(byDate.entries()).map(([date, { fb, ig, th }]) => ({
       date,
-      content: ig?.caption || fb?.message || (en ? '(no text)' : '（無文字內容）'),
-      permalink: ig?.permalink || fb?.permalink || '',
-      fbOnly: !!fb && !ig,
-      igOnly: !fb && !!ig,
-      reach: (fb?.insights.reach ?? 0) + (ig?.insights.reach ?? 0),
-      likes: (fb?.insights.reactions ?? 0) + (ig?.insights.likes ?? 0),
-      comments: (fb?.insights.comments ?? 0) + (ig?.insights.comments ?? 0),
+      content: ig?.caption || fb?.message || th?.text || (en ? '(no text)' : '（無文字內容）'),
+      permalink: ig?.permalink || fb?.permalink || th?.permalink || '',
+      plats: { fb: !!fb, ig: !!ig, th: !!th },
+      reach: (fb?.insights.reach ?? 0) + (ig?.insights.reach ?? 0) + (th?.insights.views ?? 0),
+      likes: (fb?.insights.reactions ?? 0) + (ig?.insights.likes ?? 0) + (th?.insights.likes ?? 0),
+      comments: (fb?.insights.comments ?? 0) + (ig?.insights.comments ?? 0) + (th?.insights.comments ?? 0),
       saved: ig?.insights.saved ?? 0,
-      shares: (fb?.insights.shares ?? 0) + (ig?.insights.shares ?? 0),
+      shares: (fb?.insights.shares ?? 0) + (ig?.insights.shares ?? 0) + (th?.insights.shares ?? 0),
       views: ig?.insights.views ?? 0,
     }))
-  }, [fbPosts, igPosts])
+  }, [fbPosts, igPosts, threadsPosts, en])
 
   // Reset to first page when the data set or sort changes.
   useEffect(() => { setPage(1) }, [rows, sortKey, sortDir])
@@ -182,7 +191,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, onAskAI }: { fbPosts: FbP
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.likes)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.comments)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>
-                {row.igOnly || !row.fbOnly ? fmt(row.saved) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
+                {row.plats.ig ? fmt(row.saved) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.shares)}</td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>

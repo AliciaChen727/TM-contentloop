@@ -12,6 +12,8 @@ import { IgPostsTable } from '@/components/dashboard/IgPostsTable'
 import { IgStoriesTable } from '@/components/dashboard/IgStoriesTable'
 import type { IgStory } from '@/components/dashboard/IgStoriesTable'
 import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
+import { ThreadsPostsTable } from '@/components/dashboard/ThreadsPostsTable'
+import type { ThreadsPost } from '@/components/dashboard/ThreadsPostsTable'
 import { ContentChart } from '@/components/dashboard/ContentChart'
 import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
@@ -34,7 +36,7 @@ interface IgPost {
   insights: { reach: number; likes: number; comments: number; saved: number; shares: number; views: number }
 }
 
-type Tab = 'fb' | 'ig' | 'combined'
+type Tab = 'fb' | 'ig' | 'combined' | 'threads'
 
 const fmtBig = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toLocaleString('zh-TW')
 
@@ -61,8 +63,13 @@ export default function DashboardPage() {
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [fbPosts, setFbPosts] = useState<FbPost[]>([])
   const [igPosts, setIgPosts] = useState<IgPost[]>([])
+  const [threadsPosts, setThreadsPosts] = useState<ThreadsPost[]>([])
   const [igStories, setIgStories] = useState<IgStory[]>([])
   const [followerStats, setFollowerStats] = useState<{ date: string; total: number; net: number }[]>([])
+  const [igFollowerStats, setIgFollowerStats] = useState<{ date: string; total: number; net: number }[]>([])
+  const [thFollowerStats, setThFollowerStats] = useState<{ date: string; total: number; net: number }[]>([])
+  const [igFollowers, setIgFollowers] = useState<number | null>(null)
+  const [thFollowers, setThFollowers] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('combined')
   const [typeFilter, setTypeFilter] = useState<'all' | 'post' | 'reels' | 'stories'>('all')
@@ -91,14 +98,16 @@ export default function DashboardPage() {
     if (since) range.set('since', since)
     if (until) range.set('until', until)
     const rqs = range.toString() ? `?${range.toString()}` : '' // posts: date-range filtered
-    const [fbRes, igRes, storiesRes, fbStoriesRes] = await Promise.all([
+    const [fbRes, igRes, threadsRes, storiesRes, fbStoriesRes] = await Promise.all([
       fetch(`/api/insights/fb${rqs}`, { headers }),
       fetch(`/api/insights/ig${rqs}`, { headers }),
+      fetch(`/api/insights/threads${rqs}`, { headers }),
       fetch(`/api/insights/ig/stories${qs}`, { headers }),
       fetch(`/api/insights/fb/stories${qs}`, { headers }),
     ])
     if (fbRes.ok) { const d = await fbRes.json(); setFbPosts((d.posts ?? []).filter((p: FbPost) => p.message?.trim())); setFollowerStats(d.followerStats ?? []) }
-    if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []) }
+    if (igRes.ok) { const d = await igRes.json(); setIgPosts(d.posts ?? []); setIgFollowers(d.followersCount ?? null); setIgFollowerStats(d.followerStats ?? []) }
+    if (threadsRes.ok) { const d = await threadsRes.json(); setThreadsPosts(d.posts ?? []); setThFollowers(d.followersCount ?? null); setThFollowerStats(d.followerStats ?? []) }
     // Tag platform so the combined stories table can distinguish FB vs IG.
     const ig = storiesRes.ok ? ((await storiesRes.json()).stories ?? []) : []
     const fb = fbStoriesRes.ok ? ((await fbStoriesRes.json()).stories ?? []) : []
@@ -192,17 +201,21 @@ export default function DashboardPage() {
     const d = p.timestamp.slice(0, 10); return d >= dateBounds.start && d <= dateBounds.end
   }), [igPosts, dateBounds])
 
+  const rangedThreads = useMemo(() => threadsPosts.filter(p => {
+    const d = p.timestamp.slice(0, 10); return d >= dateBounds.start && d <= dateBounds.end
+  }), [threadsPosts, dateBounds])
+
   // Summary stats from ranged posts
   const stats = useMemo(() => {
-    const totalReach = rangedFb.reduce((s, p) => s + (p.insights?.reach ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.reach ?? 0), 0)
-    const totalLikes = rangedFb.reduce((s, p) => s + (p.insights?.reactions ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.likes ?? 0), 0)
-    const totalComments = rangedFb.reduce((s, p) => s + (p.insights?.comments ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.comments ?? 0), 0)
-    const totalShares = rangedFb.reduce((s, p) => s + (p.insights?.shares ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.shares ?? 0), 0)
+    const totalReach = rangedFb.reduce((s, p) => s + (p.insights?.reach ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.reach ?? 0), 0) + rangedThreads.reduce((s, p) => s + (p.insights?.views ?? 0), 0)
+    const totalLikes = rangedFb.reduce((s, p) => s + (p.insights?.reactions ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.likes ?? 0), 0) + rangedThreads.reduce((s, p) => s + (p.insights?.likes ?? 0), 0)
+    const totalComments = rangedFb.reduce((s, p) => s + (p.insights?.comments ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.comments ?? 0), 0) + rangedThreads.reduce((s, p) => s + (p.insights?.comments ?? 0), 0)
+    const totalShares = rangedFb.reduce((s, p) => s + (p.insights?.shares ?? 0), 0) + rangedIg.reduce((s, p) => s + (p.insights?.shares ?? 0), 0) + rangedThreads.reduce((s, p) => s + (p.insights?.shares ?? 0), 0)
     const avgEngRate = totalReach > 0 ? ((totalLikes + totalComments + totalShares) / totalReach * 100) : 0
     const reelsCount = rangedIg.filter(p => p.mediaType === 'REELS' || p.mediaType === 'VIDEO').length
-    const total = rangedFb.length + rangedIg.length
+    const total = rangedFb.length + rangedIg.length + rangedThreads.length
     return { totalReach, totalLikes, totalComments, totalShares, avgEngRate, totalPosts: total, reelsCount }
-  }, [rangedFb, rangedIg])
+  }, [rangedFb, rangedIg, rangedThreads])
 
   // Follower summary: current total + net change across the selected range
   const followerSummary = useMemo(() => {
@@ -229,21 +242,33 @@ export default function DashboardPage() {
       const e = byDate.get(d) ?? { reach: 0, likes: 0, comments: 0, shares: 0 }
       byDate.set(d, { ...e, reach: e.reach + (ig.insights?.reach ?? 0), likes: e.likes + (ig.insights?.likes ?? 0), comments: e.comments + (ig.insights?.comments ?? 0), shares: e.shares + (ig.insights?.shares ?? 0) })
     }
-    // Union follower-stat dates so the follower trend shows even on days without posts
-    const followerByDate = new Map(followerStats.map(s => [s.date, s]))
-    for (const s of followerStats) {
+    for (const th of threadsPosts) {
+      const d = th.timestamp.slice(0, 10)
+      const e = byDate.get(d) ?? { reach: 0, likes: 0, comments: 0, shares: 0 }
+      byDate.set(d, { ...e, reach: e.reach + (th.insights?.views ?? 0), likes: e.likes + (th.insights?.likes ?? 0), comments: e.comments + (th.insights?.comments ?? 0), shares: e.shares + (th.insights?.shares ?? 0) })
+    }
+    // Union follower-stat dates (FB + IG + TH) so the trend shows even on days without posts
+    const fbByDate = new Map(followerStats.map(s => [s.date, s]))
+    const igByDate = new Map(igFollowerStats.map(s => [s.date, s]))
+    const thByDate = new Map(thFollowerStats.map(s => [s.date, s]))
+    for (const s of [...followerStats, ...igFollowerStats, ...thFollowerStats]) {
       if (!byDate.has(s.date)) byDate.set(s.date, { reach: 0, likes: 0, comments: 0, shares: 0 })
     }
 
-    let lastTotal = 0 // carry forward last known follower total across gap days
+    // Carry forward each platform's last known follower total across gap days.
+    let lastFb = 0, lastIg = 0, lastTh = 0
     return Array.from(byDate.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([fullDate, d]) => {
-        const fs = followerByDate.get(fullDate)
-        const total = fs?.total ?? lastTotal
-        const net = fs?.net ?? 0
-        if (fs?.total) lastTotal = fs.total
-        const prevTotal = total - net
+        const fb = fbByDate.get(fullDate); if (fb?.total) lastFb = fb.total
+        const ig = igByDate.get(fullDate); if (ig?.total) lastIg = ig.total
+        const th = thByDate.get(fullDate); if (th?.total) lastTh = th.total
+        const followersFb = fb?.total ?? lastFb
+        const followersIg = ig?.total ?? lastIg
+        const followersTh = th?.total ?? lastTh
+        const followers = followersFb + followersIg + followersTh
+        const net = (fb?.net ?? 0) + (ig?.net ?? 0) + (th?.net ?? 0)
+        const prevTotal = followers - net
         return {
           fullDate,
           date: fullDate.slice(5).replace('-', '/'),
@@ -252,12 +277,15 @@ export default function DashboardPage() {
           comments: d.comments,
           shares: d.shares,
           engRate: d.reach > 0 ? Number(((d.likes + d.comments + d.shares) / d.reach * 100).toFixed(2)) : 0,
-          followers: total,
+          followers,
+          followersFb,
+          followersIg,
+          followersTh,
           followerGrowth: prevTotal > 0 ? Number((net / prevTotal * 100).toFixed(2)) : 0,
         }
       })
       .filter(p => p.fullDate >= dateBounds.start && p.fullDate <= dateBounds.end)
-  }, [fbPosts, igPosts, followerStats, dateBounds])
+  }, [fbPosts, igPosts, threadsPosts, followerStats, igFollowerStats, thFollowerStats, dateBounds])
 
   // Table-filtered posts (type + search, independent of date range)
   const filteredFb = useMemo(() => {
@@ -274,6 +302,14 @@ export default function DashboardPage() {
     if (search) arr = arr.filter(p => p.caption.toLowerCase().includes(search.toLowerCase()))
     return arr
   }, [igPosts, typeFilter, search])
+
+  // Threads: no Reels/Stories concept — hide under those type filters; else search on text.
+  const filteredThreads = useMemo(() => {
+    if (typeFilter === 'reels' || typeFilter === 'stories') return []
+    let arr = threadsPosts
+    if (search) arr = arr.filter(p => p.text.toLowerCase().includes(search.toLowerCase()))
+    return arr
+  }, [threadsPosts, typeFilter, search])
 
   // Stories are their own capped list, NOT bound to the posts' date range: IG
   // stories are 24h-ephemeral (always recent), but FB's Stories Archive returns
@@ -303,6 +339,8 @@ export default function DashboardPage() {
     if (found) setPageData({ pageId: found.pageId, pageName: found.pageName, igUserId: found.igUserId })
     setFbPosts([])
     setIgPosts([])
+    setThreadsPosts([])
+    setIgFollowers(null); setThFollowers(null); setIgFollowerStats([]); setThFollowerStats([])
     // The date-range effect refetches automatically when selectedPageId changes.
   }
 
@@ -480,10 +518,17 @@ export default function DashboardPage() {
             <div className="ads-posts-summary-strip" style={{ marginBottom: 20 }}>
               {[
                 { label: L('總貼文數', 'Total posts'), value: stats.totalPosts, sub: L(`${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} 貼文`, `${stats.reelsCount} Reels · ${stats.totalPosts - stats.reelsCount} posts`) },
-                { label: L('總觸及', 'Total reach'), value: fmtBig(stats.totalReach), sub: L('FB 觀看 + IG 觸及', 'FB views + IG reach') },
+                { label: L('總觸及', 'Total reach'), value: fmtBig(stats.totalReach), sub: threadsPosts.length > 0 ? L('FB 觀看 + IG 觸及 + TH 觀看', 'FB + IG + Threads views/reach') : L('FB 觀看 + IG 觸及', 'FB views + IG reach') },
                 { label: L('總按讚', 'Total likes'), value: fmtBig(stats.totalLikes), sub: L(`留言 ${stats.totalComments} · 分享 ${stats.totalShares}`, `${stats.totalComments} comments · ${stats.totalShares} shares`) },
                 { label: L('平均互動率', 'Avg engagement'), value: `${stats.avgEngRate.toFixed(2)}%`, sub: L('(按讚+留言+分享)/總觸及', '(likes+comments+shares)/reach') },
-                { label: L('追蹤數', 'Followers'), value: followerSummary.total > 0 ? fmtBig(followerSummary.total) : '—', sub: followerSummary.total > 0 ? L(`本區間 ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}`, `this period ${followerSummary.net >= 0 ? '+' : ''}${followerSummary.net}`) : L('尚未同步', 'Not synced') },
+                (() => {
+                  const fbF = followerSummary.total
+                  const igF = igFollowers ?? 0
+                  const thF = thFollowers ?? 0
+                  const totalF = fbF + igF + thF
+                  const parts = [`FB ${fbF}`, igFollowers != null ? `IG ${igF}` : null, thFollowers != null ? `TH ${thF}` : null].filter(Boolean).join(' · ')
+                  return { label: L('總追蹤數', 'Followers'), value: totalF > 0 ? fmtBig(totalF) : '—', sub: totalF > 0 ? parts : L('尚未同步', 'Not synced') }
+                })(),
               ].map(s => (
                 <div key={s.label} className="ads-posts-sum-card">
                   <div className="ads-posts-sum-label">{s.label}</div>
@@ -502,13 +547,18 @@ export default function DashboardPage() {
             {/* Table toolbar */}
             <div className="ads-posts-toolbar" style={{ marginBottom: 12 }}>
               <div className="ads-posts-platform-tabs">
-                <button onClick={() => setActiveTab('combined')} className={`ads-posts-platform-tab ${activeTab === 'combined' ? 'active' : ''}`}>FB + IG</button>
+                <button onClick={() => setActiveTab('combined')} className={`ads-posts-platform-tab ${activeTab === 'combined' ? 'active' : ''}`}>{threadsPosts.length > 0 ? 'FB + IG + TH' : 'FB + IG'}</button>
                 <button onClick={() => setActiveTab('fb')} className={`ads-posts-platform-tab ${activeTab === 'fb' ? 'active' : ''}`}>
                   Facebook <span className="badge">{fbPosts.length}</span>
                 </button>
                 <button onClick={() => setActiveTab('ig')} className={`ads-posts-platform-tab ${activeTab === 'ig' ? 'active' : ''}`}>
                   Instagram <span className="badge">{igPosts.length}</span>
                 </button>
+                {threadsPosts.length > 0 && (
+                  <button onClick={() => setActiveTab('threads')} className={`ads-posts-platform-tab ${activeTab === 'threads' ? 'active' : ''}`}>
+                    Threads <span className="badge">{threadsPosts.length}</span>
+                  </button>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {(['all', 'post', 'reels', 'stories'] as const).map(v => (
@@ -547,9 +597,10 @@ export default function DashboardPage() {
                   return <IgStoriesTable stories={filteredStories} onAskAI={askAI} />
                 }
                 return (<>
-                  {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} onAskAI={askAI} />}
+                  {activeTab === 'combined' && <CombinedPostsTable fbPosts={filteredFb} igPosts={filteredIg} threadsPosts={filteredThreads} onAskAI={askAI} />}
                   {activeTab === 'fb' && <FbPostsTable posts={filteredFb} onAskAI={askAI} />}
                   {activeTab === 'ig' && <IgPostsTable posts={filteredIg} onAskAI={askAI} />}
+                  {activeTab === 'threads' && <ThreadsPostsTable posts={filteredThreads} onAskAI={askAI} />}
                 </>)
               })()}
             </div>
