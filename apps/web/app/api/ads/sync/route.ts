@@ -521,6 +521,43 @@ export async function POST(req: NextRequest) {
   }
   const platformBreakdown = Array.from(platformAgg.values()).filter(p => p.spend > 0 || p.impressions > 0)
 
+  // ── Device breakdown (page-isolated). `impression_device` = which device the ad
+  // was shown on. Meta does NOT return `reach` with this breakdown (reach is
+  // person-deduplicated), so we compare on impressions/CTR/CPA/conversions, and it
+  // can't be combined with other breakdowns → separate request. ──
+  const DEVICE_LABELS: Record<string, string> = {
+    iphone: 'iPhone', ipad: 'iPad', android_smartphone: 'Android 手機',
+    android_tablet: 'Android 平板', desktop: '桌機',
+  }
+  const deviceResArray = await Promise.all(accounts.map(account => {
+    const url = new URL(`${BASE}/${account.id}/insights`)
+    url.searchParams.set('fields', 'ad_id,spend,clicks,impressions,actions,action_values')
+    url.searchParams.set('breakdowns', 'impression_device')
+    Object.entries(dateRange).forEach(([k, v]) => url.searchParams.set(k, v))
+    url.searchParams.set('level', 'ad')
+    url.searchParams.set('limit', '500')
+    url.searchParams.set('access_token', userAccessToken)
+    return fetch(url)
+  }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deviceRows: any[] = (await Promise.all(deviceResArray.map(r => r.json()))).flatMap((d: any) => d.data ?? [])
+  const deviceAgg = new Map<string, { device: string; spend: number; clicks: number; impressions: number; conversions: number; revenue: number }>()
+  for (const r of deviceRows) {
+    if (!filteredAdIds.has(r.ad_id)) continue // page isolation
+    const raw = ((r.impression_device as string) ?? '').toLowerCase()
+    const device = DEVICE_LABELS[raw] ?? '其他'
+    const e = deviceAgg.get(device) ?? { device, spend: 0, clicks: 0, impressions: 0, conversions: 0, revenue: 0 }
+    e.spend += parseFloat((r.spend as string) ?? '0')
+    e.clicks += parseInt((r.clicks as string) ?? '0')
+    e.impressions += parseInt((r.impressions as string) ?? '0')
+    e.conversions += parseActions((r.actions as MetaAction[]) ?? [], conversionType)
+    e.revenue += parseActions((r.action_values as MetaAction[]) ?? [], 'purchase')
+    deviceAgg.set(device, e)
+  }
+  const deviceBreakdown = Array.from(deviceAgg.values())
+    .filter(d => d.spend > 0 || d.impressions > 0)
+    .sort((a, b) => b.impressions - a.impressions)
+
   const dailyByDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
   for (const c of filteredDailyAds) {
     const date = c.date_start as string
@@ -741,6 +778,7 @@ export async function POST(req: NextRequest) {
     creativeTrends,
     demographics,
     platformBreakdown,
+    deviceBreakdown,
     funnelStages,
     adPostIds,
     adPostMetrics,

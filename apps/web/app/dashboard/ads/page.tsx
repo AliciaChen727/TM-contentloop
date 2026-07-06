@@ -176,6 +176,7 @@ function buildAdData(raw: any, lang: Lang = 'zh-TW'): AdData {
     creativeTrends: Array.isArray(raw.creativeTrends) ? raw.creativeTrends : [],
     demographics: Array.isArray(raw.demographics) ? raw.demographics : [],
     platformBreakdown: Array.isArray(raw.platformBreakdown) ? raw.platformBreakdown : [],
+    deviceBreakdown: Array.isArray(raw.deviceBreakdown) ? raw.deviceBreakdown : [],
     funnelStages: Array.isArray(raw.funnelStages) ? raw.funnelStages : [],
     budget: { ...MOCK_DATA.budget, adsets: realAdsets },
     bestTime: { ...MOCK_DATA.bestTime, weekly: realWeekly, hourly: realHourly },
@@ -984,7 +985,7 @@ export default function AdsPage() {
               />}
               {active === 'brand' && selectedPageId && idTokenRef && <BrandAssetsCard pageId={selectedPageId} idToken={idTokenRef} />}
               {active === 'trends' && <CreativeTrendsSection trends={adData.creativeTrends ?? []} dateFrom={dateFrom} dateTo={dateTo} conversionType={adData.conversionType} experiments={experiments} creativeLabels={creativeLabels} />}
-              {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} conversionType={adData.conversionType} />}
+              {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} deviceBreakdown={adData.deviceBreakdown ?? []} conversionType={adData.conversionType} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
               {active === 'time' && <BestTimeSection data={adData} />}
               {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} />}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { DemoBreakdown, FunnelStage } from '../types'
+import type { DemoBreakdown, FunnelStage, DeviceBreakdown } from '../types'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 
 // Funnel stages in canonical order (matches the API's audience-based classification).
@@ -37,7 +37,22 @@ const derive = (r: Row, hasPurchase: boolean) => ({
   // ROAS: revenue/spend for e-commerce; click-efficiency (conv per $) otherwise.
   roas: r.spend > 0 ? (hasPurchase ? r.revenue / r.spend : (r.conversions / r.spend) * 100) : 0,
   cpp: r.conversions > 0 ? r.spend / r.conversions : 0, // cost per purchase/conversion
+  cvr: r.clicks > 0 ? (r.conversions / r.clicks) * 100 : 0, // conversion rate (conv / click)
 })
+
+// Device table always surfaces impressions + conversions + CVR regardless of
+// whether the page sells — that's the whole point of the device comparison.
+function deviceColumns(en: boolean): { key: string; label: string; kind: Kind }[] {
+  return [
+    { key: 'impressions', label: en ? 'Impressions' : '曝光', kind: 'int' },
+    { key: 'clicks', label: en ? 'Clicks' : '點擊', kind: 'int' },
+    { key: 'ctr', label: 'CTR', kind: 'percent' },
+    { key: 'spend', label: en ? 'Spend' : '花費', kind: 'currency' },
+    { key: 'cpc', label: 'CPC', kind: 'currency' },
+    { key: 'conversions', label: en ? 'Conversions' : '轉換', kind: 'int' },
+    { key: 'cvr', label: en ? 'CVR' : '轉換率', kind: 'percent' },
+  ]
+}
 
 // Column set adapts to whether this page sells (purchase) or not.
 function columns(hasPurchase: boolean, en: boolean): { key: string; label: string; kind: Kind }[] {
@@ -98,15 +113,17 @@ function MetricTable({ rows, cols, hasPurchase, firstHeader }: {
   )
 }
 
-export function AudienceSection({ demographics = [], funnelStages = [], conversionType }: {
+export function AudienceSection({ demographics = [], funnelStages = [], deviceBreakdown = [], conversionType }: {
   demographics?: DemoBreakdown[]
   funnelStages?: FunnelStage[]
+  deviceBreakdown?: DeviceBreakdown[]
   conversionType?: string
 }) {
   const { L, lang } = useLang()
   const en = lang === 'en'
   const hasPurchase = conversionType === 'purchase'
   const cols = useMemo(() => columns(hasPurchase, en), [hasPurchase, en])
+  const deviceCols = useMemo(() => deviceColumns(en), [en])
 
   // Age × Gender: single table, one row per (age, gender), sorted by spend desc.
   const demoRows: Row[] = useMemo(() =>
@@ -126,7 +143,14 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
       .filter(r => r.spend > 0 || r.impressions > 0)
   }, [funnelStages, en])
 
-  const empty = demoRows.length === 0 && funnelRows.length === 0
+  // Device: one row per device bucket, sorted by impressions desc.
+  const deviceRows: Row[] = useMemo(() =>
+    deviceBreakdown
+      .map(d => ({ label: d.device, spend: d.spend, clicks: d.clicks, impressions: d.impressions, conversions: d.conversions, revenue: d.revenue }))
+      .sort((a, b) => b.impressions - a.impressions)
+  , [deviceBreakdown])
+
+  const empty = demoRows.length === 0 && funnelRows.length === 0 && deviceRows.length === 0
   if (empty) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: '#9A9490', fontSize: 13 }}>
@@ -159,6 +183,17 @@ export function AudienceSection({ demographics = [], funnelStages = [], conversi
         {funnelRows.length === 0
           ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>{L('所選區間內沒有漏斗階段資料。', 'No funnel data in the selected range.')}</div>
           : <MetricTable rows={funnelRows} cols={cols} hasPurchase={hasPurchase} firstHeader={L('漏斗階段', 'Funnel stage')} />}
+      </section>
+
+      {/* Device breakdown */}
+      <section>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ad-text, #2A2722)' }}>{L('各裝置成效', 'Performance by Device')}</h2>
+          <span style={{ fontSize: 11.5, color: '#9A9490' }}>{L('Meta 不提供依裝置的觸及,以曝光 / CTR / 轉換率比較(細分後樣本較小,僅供參考)', 'Meta gives no per-device reach; compared by impressions / CTR / CVR (small samples once split — indicative only)')}</span>
+        </div>
+        {deviceRows.length === 0
+          ? <div style={{ padding: 24, textAlign: 'center', color: '#9A9490', fontSize: 12.5, background: 'white', border: '1px solid var(--ad-border, #E2DED8)', borderRadius: 12 }}>{L('所選區間內沒有裝置資料。', 'No device data in the selected range.')}</div>
+          : <MetricTable rows={deviceRows} cols={deviceCols} hasPurchase={hasPurchase} firstHeader={L('裝置', 'Device')} />}
       </section>
     </div>
   )

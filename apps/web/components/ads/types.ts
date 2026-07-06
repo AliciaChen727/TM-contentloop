@@ -133,6 +133,7 @@ export interface AdData {
   creativeTrends?: CreativeTrend[]
   demographics?: DemoBreakdown[]
   platformBreakdown?: PlatformBreakdown[]
+  deviceBreakdown?: DeviceBreakdown[]
   funnelStages?: FunnelStage[]
 }
 
@@ -148,6 +149,15 @@ export interface PlatformBreakdown {
 export interface DemoBreakdown {
   age: string
   gender: string
+  spend: number
+  clicks: number
+  impressions: number
+  conversions: number
+  revenue: number
+}
+
+export interface DeviceBreakdown {
+  device: string
   spend: number
   clicks: number
   impressions: number
