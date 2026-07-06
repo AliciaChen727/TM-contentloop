@@ -377,12 +377,12 @@ export default function DashboardPage() {
                 <select
                   value={selectedPageId}
                   onChange={e => handlePageChange(e.target.value)}
-                  className="text-xs text-gray-500 font-medium border-0 bg-transparent cursor-pointer outline-none"
+                  className="text-sm text-gray-900 font-bold border-0 bg-transparent cursor-pointer outline-none"
                 >
                   {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
                 </select>
               ) : (
-                pageData && <p className="text-xs text-gray-500 font-medium">{pageData.pageName}</p>
+                pageData && <p className="text-sm text-gray-900 font-bold">{pageData.pageName}</p>
               )}
               {isAdmin && (addingPage ? (
                 <div className="flex items-center gap-1">
@@ -472,7 +472,7 @@ export default function DashboardPage() {
                     {syncing ? L('↻ 同步中⋯', '↻ Syncing…') : L('↻ 同步最新資料', '↻ Sync latest data')}
                   </button>
                 )}
-                <span style={{ fontSize: 11, color: 'var(--ad-text3)' }}>{L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}</span>
               </div>
             </div>
 
@@ -518,7 +518,7 @@ export default function DashboardPage() {
                 ))}
               </div>
               <input className="ads-posts-search" placeholder={L('搜尋貼文內容…', 'Search posts…')} value={search} onChange={e => setSearch(e.target.value)} />
-              <p style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ad-text3)' }}>{L('點擊欄位標題可排序', 'Click a column header to sort')}</p>
+              <p style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('點擊欄位標題可排序', 'Click a column header to sort')}</p>
             </div>
 
             <div className="rounded-2xl bg-white p-4 shadow-sm">
