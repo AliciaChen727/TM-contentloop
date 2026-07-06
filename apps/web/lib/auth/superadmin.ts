@@ -31,7 +31,15 @@ export async function resolvePageOwnerUid(pageId: string): Promise<string | null
 
   const earliestSnap = await adminDb.collection('pages').doc(pageId).collection('admins')
     .orderBy('addedAt', 'asc').limit(1).get()
-  return earliestSnap.empty ? null : earliestSnap.docs[0].id
+  if (!earliestSnap.empty) return earliestSnap.docs[0].id
+
+  // Legacy fallback: pages connected before the admins-registration flow existed
+  // have NO pages/{pageId}/admins subcollection — the only record of the owner is
+  // their metaTokens/{pageId} doc (which carries a `pageId` field). Resolve the
+  // data owner directly from there so super-admins/viewers still see the data.
+  const tokSnap = await adminDb.collectionGroup('metaTokens')
+    .where('pageId', '==', pageId).limit(1).get()
+  return tokSnap.empty ? null : (tokSnap.docs[0].ref.parent.parent?.id ?? null)
 }
 
 export interface SuperAdminPage { pageId: string; pageName: string; igUserId: string | null }
