@@ -144,7 +144,7 @@ export default function LinksPage() {
     <div className="mx-auto max-w-3xl p-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-800">🔗 {L('報名連結追蹤', 'Registration Link Tracking')}</h1>
-        <button onClick={() => router.push('/dashboard')} className="text-xs font-semibold text-gray-400 hover:text-gray-600">
+        <button onClick={() => router.push('/dashboard')} className="text-sm font-semibold text-gray-600 hover:text-gray-800">
           {L('← 回儀表板', '← Back')}
         </button>
       </div>
@@ -167,7 +167,7 @@ export default function LinksPage() {
       {/* Create */}
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
         <label className="mb-1 block text-xs font-semibold text-gray-600">{L('報名表連結', 'Registration form link')}</label>
-        <input value={destination} onChange={e => setDestination(e.target.value)} placeholder="https://forms.gle/..."
+        <input id="reg-form-input" value={destination} onChange={e => setDestination(e.target.value)} placeholder="https://forms.gle/..."
           className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
         <label className="mb-1 block text-xs font-semibold text-gray-600">{L('標籤（選填，方便辨認）', 'Label (optional)')}</label>
         <input value={label} onChange={e => setLabel(e.target.value)} placeholder={L('如：5/1 IG 貼文', 'e.g. May 1 IG post')}
@@ -208,12 +208,12 @@ export default function LinksPage() {
         : (
           <>
             <div className="mb-2 flex justify-end">
-              <button onClick={exportCsv} className="text-xs font-semibold text-gray-400 hover:text-gray-600">{L('⬇ 匯出 CSV', '⬇ Export CSV')}</button>
+              <button onClick={exportCsv} className="text-sm font-semibold text-gray-600 hover:text-gray-800">{L('⬇ 匯出 CSV', '⬇ Export CSV')}</button>
             </div>
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 text-left text-xs text-gray-400">
+                  <tr className="border-b border-gray-100 text-left text-[13px] text-gray-600">
                     <th className="px-4 py-2 font-semibold">{L('連結', 'Link')}</th>
                     <th className="px-3 py-2 text-center font-semibold">{L('點擊', 'Clicks')}</th>
                     <th className="px-3 py-2 text-center font-semibold">{L('完成', 'Done')}</th>
@@ -231,12 +231,12 @@ export default function LinksPage() {
                             {l.shortUrl.replace(/^https?:\/\//, '')}
                             <span className="ml-1 text-gray-400">{copied === l.shortUrl ? L('✓ 已複製', '✓ Copied') : '⧉'}</span>
                           </button>
-                          <div className="max-w-xs truncate text-[11px] text-gray-400">→ {l.destination}</div>
+                          <div className="max-w-xs truncate text-xs text-gray-500">→ {l.destination}</div>
                           {l.trackConversion && l.value > 0 && (
                             <div className="text-[11px] text-gray-500">{L('金額', 'Fee')} {l.value} {l.currency} · {L('營收', 'Revenue')} {l.conversionCount * l.value} {l.currency}</div>
                           )}
                           {l.trackConversion && (
-                            <button onClick={() => setOpenSetup(openSetup === l.slug ? '' : l.slug)} className="mt-1 text-[11px] font-semibold text-purple-500 hover:underline">
+                            <button onClick={() => setOpenSetup(openSetup === l.slug ? '' : l.slug)} className="mt-1.5 text-sm font-bold text-purple-700 hover:underline">
                               {openSetup === l.slug ? L('▾ 收起設定教學', '▾ Hide setup') : L('▸ 表單設定教學', '▸ Form setup steps')}
                             </button>
                           )}
@@ -247,7 +247,7 @@ export default function LinksPage() {
                           {l.trackConversion && l.clickCount > 0 ? `${Math.round((l.conversionCount / l.clickCount) * 100)}%` : '—'}
                         </td>
                         <td className="px-3 py-3 text-right">
-                          <button onClick={() => remove(l.slug)} className="text-xs text-gray-400 hover:text-red-500">{L('停用', 'Disable')}</button>
+                          <button onClick={() => remove(l.slug)} className="text-sm font-semibold text-gray-500 hover:text-red-500">{L('停用', 'Disable')}</button>
                         </td>
                       </tr>
                       {openSetup === l.slug && l.trackConversion && (
@@ -331,6 +331,24 @@ function GuideImg({ src, alt }: { src: string; alt: string }) {
   return <img src={src} alt={alt} className="w-full max-w-md rounded-lg border border-gray-200 shadow-sm" />
 }
 
+// Scroll the page's create-link form into view + focus the "報名表連結" input,
+// and flash a highlight so the user sees where to paste.
+function jumpToForm() {
+  const el = document.getElementById('reg-form-input') as HTMLInputElement | null
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('ring-2', 'ring-blue-400')
+  setTimeout(() => { el.focus(); el.classList.remove('ring-2', 'ring-blue-400') }, 1200)
+}
+
+function FormLink({ L }: { L: (zh: string, en: string) => string }) {
+  return (
+    <button type="button" onClick={jumpToForm} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900">
+      {L('報名表連結', 'form link')}
+    </button>
+  )
+}
+
 function SetupGuide({ link, copy, copied, L }: { link: LinkRow; copy: (s: string) => void; copied: string; L: (zh: string, en: string) => string }) {
   const webhook = link.webhookUrl ?? ''
   const trigger = `// 只需執行一次：建立「表單送出時」自動觸發器
@@ -399,7 +417,7 @@ ${trigger}`
             'Google Forms can’t redirect after submit, so the ② Conversion URL won’t work; use Apps Script to ping the webhook on submit. No form field needed — respondents see nothing.')}</p>
           <div>
             <p className="font-semibold text-gray-700">🟩 {L('地方一：ContentLoop（此頁上方）', 'Place 1: ContentLoop (top of page)')}</p>
-            <p className="ml-1">{L('把 Google 表單連結直接當「報名表連結」貼上，勾「追蹤報名完成」、填金額，產生短網址。', 'Paste your Google Form link as the form link, tick “Track completion”, set the fee, create the short link.')}</p>
+            <p className="ml-1">{L('把 Google 表單連結直接當「', 'Paste your Google Form link as the ')}<FormLink L={L} />{L('」貼上，勾「追蹤報名完成」、填金額，產生短網址。', ', tick “Track completion”, set the fee, create the short link.')}</p>
           </div>
           <div>
             <p className="font-semibold text-gray-700">🟨 {L('地方二：Apps Script（貼一次）', 'Place 2: Apps Script (one-time)')}</p>
@@ -454,7 +472,7 @@ ${trigger}`
           </div>
           <div>
             <p className="font-semibold text-gray-700">🟩 {L('地方二：ContentLoop（此頁上方）', 'Place 2: ContentLoop (top of page)')}</p>
-            <p className="ml-1">{L('把上面複製的「預填連結」（含 __CLID__）當「報名表連結」貼上，勾「追蹤報名完成」、填金額。', 'Paste the pre-filled link (with __CLID__) as the form link, tick “Track completion”, set the fee.')}</p>
+            <p className="ml-1">{L('把上面複製的「預填連結」（含 __CLID__）當「', 'Paste the pre-filled link (with __CLID__) as the ')}<FormLink L={L} />{L('」貼上，勾「追蹤報名完成」、填金額。', ', tick “Track completion”, set the fee.')}</p>
           </div>
           <div>
             <p className="font-semibold text-gray-700">🟨 {L('地方三：Apps Script（貼一次）', 'Place 3: Apps Script (one-time)')}</p>
