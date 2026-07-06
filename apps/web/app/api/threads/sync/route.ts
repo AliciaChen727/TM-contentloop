@@ -48,3 +48,24 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json({ ok: true, postCount: r.postCount })
 }
+
+// Lightweight status check: is Threads connected for this page? (token exists on
+// the caller's uid or the page owner's). Used by the connect card to show status.
+export async function GET(req: NextRequest) {
+  const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
+  if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let uid: string
+  try { uid = (await adminAuth.verifyIdToken(idToken)).uid }
+  catch { return NextResponse.json({ error: 'Invalid token' }, { status: 401 }) }
+
+  const pageId = req.nextUrl.searchParams.get('pageId') ?? ''
+  if (!pageId) return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
+  if (!(await canAccess(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  let tok = await getThreadsToken(uid, pageId)
+  if (!tok) {
+    const owner = await resolvePageOwnerUid(pageId)
+    if (owner) tok = await getThreadsToken(owner, pageId)
+  }
+  return NextResponse.json({ connected: !!tok, threadsUserId: tok?.threadsUserId ?? null })
+}

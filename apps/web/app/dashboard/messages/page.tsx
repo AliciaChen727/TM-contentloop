@@ -127,7 +127,7 @@ export default function MessagesPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/80 px-6 py-3 backdrop-blur">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-gray-400 transition-colors hover:text-gray-700">
+        <button onClick={() => router.push('/dashboard')} className="text-sm font-semibold text-gray-600 transition-colors hover:text-gray-800">
           ← {L('返回儀表板', 'Dashboard')}
         </button>
         <span className="text-gray-200">|</span>

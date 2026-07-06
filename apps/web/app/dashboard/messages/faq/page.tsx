@@ -198,10 +198,10 @@ export default function FaqSettingsPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/80 px-6 py-3 backdrop-blur">
-        <button onClick={() => router.push('/dashboard/messages')} className="text-sm text-gray-400 transition-colors hover:text-gray-700">← {L('返回私訊分析', 'Messages')}</button>
+        <button onClick={() => router.push('/dashboard/messages')} className="text-sm font-semibold text-gray-600 transition-colors hover:text-gray-800">← {L('返回私訊分析', 'Messages')}</button>
         <span className="text-gray-200">|</span>
         <h1 className="text-lg font-bold text-gray-900">{L('AI 自動回覆設定', 'AI auto-reply settings')}</h1>
-        {pageName && <span className="truncate text-sm text-gray-400">· {pageName}</span>}
+        {pageName && <span className="truncate text-sm font-bold text-gray-700">· {pageName}</span>}
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-8">
