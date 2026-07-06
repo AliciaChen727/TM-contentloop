@@ -272,3 +272,23 @@ body {
 .ads-sk-fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, var(--ad-blue), var(--ad-purple)); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(124,58,237,0.35); font-size: 20px; transition: all 0.2s; z-index: 150; }
 .ads-sk-fab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(124,58,237,0.45); }
 .ads-sk-fab.hidden { opacity: 0; pointer-events: none; }
+
+/* ── Loading screen (running cat) ── */
+.cl-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 48px 20px; }
+.cl-loading-track { position: relative; width: 200px; height: 46px; border-bottom: 2px dashed var(--ad-border, #E2DED8); }
+.cl-loading-cat { position: absolute; bottom: 3px; left: 0; font-size: 30px; line-height: 1; will-change: transform, left; animation: cl-run 2.4s cubic-bezier(.5,0,.5,1) infinite, cl-hop .42s ease-in-out infinite; }
+.cl-loading-dust { position: absolute; bottom: 4px; font-size: 12px; opacity: 0; animation: cl-dust 2.4s cubic-bezier(.5,0,.5,1) infinite; }
+.cl-loading-text { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .06em; color: var(--ad-text2, #5C5750); }
+.cl-loading-text::after { content: '⋯'; display: inline-block; width: 1.4em; text-align: left; animation: cl-dots 1.4s steps(4, jump-none) infinite; }
+
+@keyframes cl-run { 0% { left: 0; } 100% { left: calc(100% - 32px); } }
+/* scaleX(-1) flips 🐈 (faces left by default) to face right — the run direction. */
+@keyframes cl-hop { 0%, 100% { transform: translateY(0) scaleX(-1); } 45% { transform: translateY(-9px) scaleX(-1.06); } 55% { transform: translateY(-9px) scaleX(-1.06); } }
+@keyframes cl-dust { 0% { left: 0; opacity: 0; } 8% { opacity: .5; } 20% { opacity: 0; } 100% { left: calc(100% - 44px); opacity: 0; } }
+@keyframes cl-dots { 0% { content: ''; } 25% { content: '·'; } 50% { content: '··'; } 75% { content: '⋯'; } 100% { content: '⋯'; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cl-loading-cat { animation: cl-hop 1s ease-in-out infinite; left: calc(50% - 16px); }
+  .cl-loading-dust { display: none; }
+  .cl-loading-text::after { animation: none; content: '⋯'; }
+}

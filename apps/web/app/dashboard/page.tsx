@@ -23,6 +23,7 @@ import { ProfileMenu } from '@/components/ProfileMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingModal } from '@/components/OnboardingModal'
 import { DateField } from '@/components/ui/DateField'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null }
@@ -397,7 +398,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
+        <LoadingScreen />
       </main>
     )
   }

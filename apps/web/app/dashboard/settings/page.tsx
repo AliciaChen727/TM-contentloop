@@ -6,6 +6,7 @@ import { auth } from '@/lib/firebase/client'
 import { GaConnectCard } from '@/components/analytics/GaConnectCard'
 import { ThreadsConnectCard } from '@/components/analytics/ThreadsConnectCard'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
@@ -273,7 +274,7 @@ export default function SettingsPage() {
 
   if (loading) return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
-      <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
+      <LoadingScreen />
     </main>
   )
 

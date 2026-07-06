@@ -22,6 +22,7 @@ import { InsightsSection } from '@/components/ads/sections/InsightsSection'
 import type { NavId, Post, AdData, LabelEntry, Experiment, DiagItem, AiDiagCard } from '@/components/ads/types'
 import { useLang, type Lang } from '@/lib/i18n/LanguageProvider'
 import { DateField } from '@/components/ui/DateField'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { trackEvent } from '@/lib/analytics/track'
 
 const NAV: { id: NavId; icon: string; badge?: string }[] = [
@@ -767,7 +768,7 @@ export default function AdsPage() {
   if (!authed) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
+        <LoadingScreen />
       </main>
     )
   }
@@ -934,7 +935,7 @@ export default function AdsPage() {
         <main className="ads-content">
           {!dataLoaded ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-              <p style={{ fontSize: 14, color: 'var(--ad-text3)' }}>{L('載入中⋯⋯', 'Loading…')}</p>
+              <LoadingScreen />
             </div>
           ) : (
             <>

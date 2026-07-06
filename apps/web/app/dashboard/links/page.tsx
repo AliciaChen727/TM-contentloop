@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { CapiSetupWizard } from '@/components/links/CapiSetupWizard'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 interface LinkRow {
   slug: string
@@ -118,7 +119,7 @@ export default function LinksPage() {
     URL.revokeObjectURL(url)
   }
 
-  if (loading) return <div className="p-8 text-sm text-gray-400">{L('載入中…', 'Loading…')}</div>
+  if (loading) return <LoadingScreen fullscreen />
 
   return (
     <div className="mx-auto max-w-3xl p-6">

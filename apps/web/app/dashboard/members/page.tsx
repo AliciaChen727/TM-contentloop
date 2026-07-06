@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface Member {
@@ -123,7 +124,7 @@ export default function MembersPage() {
 
   if (loading) return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
-      <p className="text-sm text-gray-400">{L('載入中⋯⋯', 'Loading…')}</p>
+      <LoadingScreen />
     </main>
   )
 
