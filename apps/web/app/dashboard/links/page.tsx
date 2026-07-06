@@ -14,6 +14,8 @@ interface LinkRow {
   destination: string
   clickCount: number
   conversionCount: number
+  deviceClicks: Record<string, number>
+  deviceConversions: Record<string, number>
   value: number
   currency: string
   trackConversion: boolean
@@ -120,6 +122,22 @@ export default function LinksPage() {
   }
 
   if (loading) return <LoadingScreen fullscreen />
+
+  // Aggregate per-device clicks + registrations across all links on this page.
+  const DEVICE_ORDER = ['iOS', 'Android', 'Windows', 'Mac', 'Linux', 'Other']
+  const devAgg: Record<string, { clicks: number; conversions: number }> = {}
+  for (const l of links) {
+    for (const [dev, n] of Object.entries(l.deviceClicks ?? {})) {
+      (devAgg[dev] ??= { clicks: 0, conversions: 0 }).clicks += n
+    }
+    for (const [dev, n] of Object.entries(l.deviceConversions ?? {})) {
+      (devAgg[dev] ??= { clicks: 0, conversions: 0 }).conversions += n
+    }
+  }
+  const deviceRows = DEVICE_ORDER
+    .filter(d => devAgg[d])
+    .map(d => ({ device: d, ...devAgg[d] }))
+  const hasDeviceData = deviceRows.some(r => r.clicks > 0)
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -243,6 +261,35 @@ export default function LinksPage() {
                 </tbody>
               </table>
             </div>
+
+            {hasDeviceData && (
+              <div className="mt-6">
+                <h2 className="mb-1 text-sm font-bold text-gray-800">📱 {L('各裝置報名成效', 'Registrations by Device')}</h2>
+                <p className="mb-3 text-[11px] text-gray-500">{L('依點擊短連結時的裝置分組（第一方，不受 Meta 限制）。報名數需該連結有開「追蹤報名完成」。', 'Grouped by the device used to click the short link (first-party). Registrations require the link to have completion tracking on.')}</p>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50 text-gray-600">
+                        <th className="px-3 py-2 text-left font-semibold">{L('裝置', 'Device')}</th>
+                        <th className="px-3 py-2 text-center font-semibold">{L('點擊', 'Clicks')}</th>
+                        <th className="px-3 py-2 text-center font-semibold">{L('報名', 'Registrations')}</th>
+                        <th className="px-3 py-2 text-center font-semibold">{L('報名轉換率', 'Conversion rate')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deviceRows.map((r, i) => (
+                        <tr key={r.device} className={i < deviceRows.length - 1 ? 'border-b border-gray-50' : ''}>
+                          <td className="px-3 py-2.5 font-medium text-gray-800">{r.device}</td>
+                          <td className="px-3 py-2.5 text-center font-mono text-gray-800">{r.clicks}</td>
+                          <td className="px-3 py-2.5 text-center font-mono text-gray-800">{r.conversions || '—'}</td>
+                          <td className="px-3 py-2.5 text-center font-mono font-bold text-gray-800">{r.clicks > 0 && r.conversions > 0 ? `${Math.round((r.conversions / r.clicks) * 100)}%` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
     </div>

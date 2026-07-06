@@ -27,6 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
 
     const ua = req.headers.get('user-agent') ?? ''
     const bot = isBotUA(ua)
+    const uaCat = uaCategory(ua)
     const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim()
     const referer = req.headers.get('referer') ?? ''
 
@@ -45,14 +46,19 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     await Promise.all([
       clickRef.set({
         ts: FieldValue.serverTimestamp(),
-        uaCategory: uaCategory(ua),
+        uaCategory: uaCat,
         referer: referer.slice(0, 300),
         ipHash: hashIp(ip),
         isBot: bot,
         postId: (link.source?.postId as string) ?? null,
         ...(capiData ? { capi: capiData } : {}),
       }),
-      linkRef.set({ clickCount: FieldValue.increment(bot ? 0 : 1), lastClickAt: FieldValue.serverTimestamp() }, { merge: true }),
+      linkRef.set({
+        clickCount: FieldValue.increment(bot ? 0 : 1),
+        lastClickAt: FieldValue.serverTimestamp(),
+        // Per-device click tally (first-party device analytics; bots excluded).
+        ...(bot ? {} : { deviceClicks: { [uaCat]: FieldValue.increment(1) } }),
+      }, { merge: true }),
     ])
 
     // Build the destination, carrying cl_id when conversion tracking is on.

@@ -21,9 +21,23 @@ export async function recordConversion(
     const existing = await convRef.get()
     if (existing.exists) return { counted: false }
   }
+
+  // Attribute the conversion to the originating click's device bucket, so the
+  // links page can show per-device registration conversion (first-party, not
+  // subject to Meta's no-per-device-reach limit).
+  let uaCat: string | null = null
+  if (clickId) {
+    const clickSnap = await linkRef.collection('clicks').doc(clickId).get()
+    uaCat = (clickSnap.data()?.uaCategory as string) ?? null
+  }
+
   await Promise.all([
-    convRef.set({ ts: FieldValue.serverTimestamp(), clickId: clickId ?? null, via }),
-    linkRef.set({ conversionCount: FieldValue.increment(1), lastConversionAt: FieldValue.serverTimestamp() }, { merge: true }),
+    convRef.set({ ts: FieldValue.serverTimestamp(), clickId: clickId ?? null, via, ...(uaCat ? { uaCategory: uaCat } : {}) }),
+    linkRef.set({
+      conversionCount: FieldValue.increment(1),
+      lastConversionAt: FieldValue.serverTimestamp(),
+      ...(uaCat ? { deviceConversions: { [uaCat]: FieldValue.increment(1) } } : {}),
+    }, { merge: true }),
   ])
 
   // Best-effort: report to Meta. Never let a Meta failure affect the conversion.

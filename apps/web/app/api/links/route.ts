@@ -56,6 +56,8 @@ export async function GET(req: NextRequest) {
       postId: x.source?.postId ?? null,
       clickCount: x.clickCount ?? 0,
       conversionCount: x.conversionCount ?? 0,
+      deviceClicks: (x.deviceClicks ?? {}) as Record<string, number>,
+      deviceConversions: (x.deviceConversions ?? {}) as Record<string, number>,
       value: x.value ?? 0,
       currency: x.currency ?? 'TWD',
       trackConversion: track,
