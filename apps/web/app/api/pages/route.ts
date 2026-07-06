@@ -17,9 +17,14 @@ export async function GET(req: NextRequest) {
 
   const ownOnly = req.nextUrl.searchParams.get('ownOnly') === 'true'
 
-  // Super-admin: return every page in the system as owner-level access.
-  // Skip this when ownOnly=true so settings page only shows managed pages.
-  if (isSuperAdmin(uid) && !ownOnly) {
+  // Super-admin manages every page (god-mode), so return all pages regardless of
+  // ownOnly. Previously ownOnly skipped this branch and fell through to the
+  // super-admin's OWN metaTokens — which made settings/members/links see a
+  // DIFFERENT (smaller) page set than the content dashboard. When the content-
+  // selected page (e.g. one only visible via god-mode) wasn't in that smaller set,
+  // those pages silently fell back to their pages[0] AND overwrote selectedPageId,
+  // so the whole app jumped to the wrong club.
+  if (isSuperAdmin(uid)) {
     const allPages = await listAllPages()
     return NextResponse.json({ pages: allPages, isOwner: true, isAdmin: true })
   }

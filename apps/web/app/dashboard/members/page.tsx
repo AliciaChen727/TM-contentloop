@@ -52,11 +52,19 @@ export default function MembersPage() {
 
       // Check if admin via server (BFF — client never reads Firestore).
       const pagesRes = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
-      const adminPages: { pageId: string }[] = pagesRes.ok ? ((await pagesRes.json()).pages ?? []) : []
+      const adminPages: { pageId: string; pageName?: string }[] = pagesRes.ok ? ((await pagesRes.json()).pages ?? []) : []
       if (adminPages.length === 0) { router.replace('/dashboard'); return }
 
-      const pid = localStorage.getItem('selectedPageId') ?? adminPages[0].pageId
+      // Honor the currently-selected page, but only if it's one this user can manage;
+      // otherwise fall back to a managed page instead of silently loading a page the
+      // header name won't match.
+      const saved = localStorage.getItem('selectedPageId')
+      const active = adminPages.find(p => p.pageId === saved) ?? adminPages[0]
+      const pid = active.pageId
       setPageId(pid)
+      if (active.pageName) setPageName(active.pageName) // reliable name (API may return '' for god-mode pages)
+      localStorage.setItem('selectedPageId', pid)
+      if (active.pageName) localStorage.setItem('selectedPageName', active.pageName)
       await loadMembers(token, pid)
       setLoading(false)
     })

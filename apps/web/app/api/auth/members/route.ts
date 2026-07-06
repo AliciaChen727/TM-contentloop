@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 
@@ -31,15 +31,22 @@ export async function GET(req: NextRequest) {
   const uid = decoded ? await verifyAdmin(idToken, pageId) : null
   if (!uid || !decoded) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const [membersSnap, pendingSnap, tokensSnap, adminsSnap] = await Promise.all([
+  const [membersSnap, pendingSnap, adminsSnap] = await Promise.all([
     adminDb.collection('pages').doc(pageId).collection('members').get(),
     adminDb.collection('pages').doc(pageId).collection('pendingInvites').get(),
-    adminDb.collection('users').doc(decoded.uid).collection('metaTokens').get(),
     adminDb.collection('pages').doc(pageId).collection('admins').get(),
   ])
 
-  const pageDoc = tokensSnap.docs.find(d => d.id === pageId) ?? tokensSnap.docs.find(d => d.id === 'page')
-  const pageName: string = pageDoc?.data()?.pageName ?? ''
+  // Resolve the page name from the page's OWNER, not the caller's tokens. A
+  // super-admin (or any admin) viewing a page they didn't personally connect has
+  // no metaToken for it; the old caller-token lookup then fell back to the caller's
+  // legacy 'page' doc and showed the WRONG club name in the header.
+  let pageName = ''
+  const ownerUid = await resolvePageOwnerUid(pageId)
+  if (ownerUid) {
+    const ownerTok = await adminDb.collection('users').doc(ownerUid).collection('metaTokens').doc(pageId).get()
+    pageName = ownerTok.data()?.pageName ?? ''
+  }
 
   // Fetch Firebase Auth profiles for all admins in parallel
   const adminUsers = await Promise.all(
