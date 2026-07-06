@@ -107,6 +107,10 @@ export default function MessagesPage() {
   function onPageChange(pageId: string) {
     setSelectedPageId(pageId)
     localStorage.setItem('selectedPageId', pageId)
+    // Keep the name key in sync too, so pages that read it (e.g. the FAQ settings
+    // header) don't show a stale page name.
+    const found = pages.find(p => p.pageId === pageId)
+    if (found) localStorage.setItem('selectedPageName', found.pageName)
   }
 
   const rangeBtn = (r: Range, label: string) => (

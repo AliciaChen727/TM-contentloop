@@ -152,8 +152,20 @@ export default function FaqSettingsPage() {
       const t = await user.getIdToken(); setToken(t)
       const pid = typeof window !== 'undefined' ? (localStorage.getItem('selectedPageId') ?? '') : ''
       setPageId(pid)
-      setPageName(typeof window !== 'undefined' ? (localStorage.getItem('selectedPageName') ?? '') : '')
-      if (pid) load(t, pid)
+      // Resolve the page name authoritatively from /api/pages (not the loosely-coupled
+      // selectedPageName localStorage key, which some pages fail to keep in sync).
+      const fallbackName = typeof window !== 'undefined' ? (localStorage.getItem('selectedPageName') ?? '') : ''
+      setPageName(fallbackName)
+      if (pid) {
+        fetch('/api/pages', { headers: { Authorization: `Bearer ${t}` } })
+          .then(r => r.ok ? r.json() : { pages: [] })
+          .then(d => {
+            const found = (d.pages ?? []).find((p: { pageId: string }) => p.pageId === pid)
+            if (found?.pageName) setPageName(found.pageName)
+          })
+          .catch(() => { /* keep fallback name */ })
+        load(t, pid)
+      }
       else setLoading(false)
     })
     return unsub
