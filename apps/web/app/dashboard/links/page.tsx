@@ -536,11 +536,11 @@ function MetaCapiCard({ pageId, idToken, L }: { pageId: string; idToken: string;
       <button onClick={() => setOpen(o => !o)} className="flex w-full items-center justify-between text-left">
         <span className="text-sm font-bold text-gray-800">
           📈 {L('Meta 轉換回報 (ROAS)', 'Meta Conversion Reporting (ROAS)')}
-          <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${configured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          <span className={`ml-2 rounded-full px-2.5 py-1 text-xs font-bold ${configured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
             {configured ? L('已連線', 'Connected') : L('未設定', 'Not set')}
           </span>
         </span>
-        <span className="text-xs text-gray-400">{open ? '▾' : '▸'}</span>
+        <span className="text-xl font-bold text-gray-600">{open ? '▾' : '▸'}</span>
       </button>
       {open && (
         <div className="mt-3">
