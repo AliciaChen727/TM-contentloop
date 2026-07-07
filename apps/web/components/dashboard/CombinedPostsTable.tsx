@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { reachColor } from '@/lib/dashboard/reachColor'
 import { TablePager } from './TablePager'
 import type { ThreadsPost } from './ThreadsPostsTable'
 
@@ -185,7 +186,7 @@ export function CombinedPostsTable({ fbPosts, igPosts, threadsPosts = [], onAskA
                   </span>
                 )}
               </td>
-              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: row.reach > 200 ? 'var(--ad-green)' : undefined }}>
+              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: reachColor(row.reach) }}>
                 {row.reach > 0 ? fmt(row.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(row.likes)}</td>

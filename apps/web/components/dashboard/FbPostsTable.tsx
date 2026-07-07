@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { reachColor } from '@/lib/dashboard/reachColor'
 import { TablePager } from './TablePager'
 
 const PAGE_SIZE = 200
@@ -117,7 +118,7 @@ export function FbPostsTable({ posts, onAskAI }: { posts: FbPost[]; onAskAI?: (q
                   📝 {L('貼文', 'Post')}
                 </span>
               </td>
-              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: post.insights.reach > 200 ? 'var(--ad-green)' : undefined }}>
+              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: reachColor(post.insights.reach) }}>
                 {post.insights.reach > 0 ? fmt(post.insights.reach) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.reactions)}</td>

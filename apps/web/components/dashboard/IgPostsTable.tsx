@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { reachColor } from '@/lib/dashboard/reachColor'
 import { TablePager } from './TablePager'
 
 const PAGE_SIZE = 200
@@ -131,7 +132,7 @@ export function IgPostsTable({ posts, onAskAI }: { posts: IgPost[]; onAskAI?: (q
                     {post.caption || L('（無文字內容）', '(no text)')}
                   </a>
                 </td>
-                <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: post.insights.reach > 200 ? 'var(--ad-green)' : undefined }}>
+                <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: reachColor(post.insights.reach) }}>
                   {fmt(post.insights.reach)}
                 </td>
                 <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(post.insights.likes)}</td>

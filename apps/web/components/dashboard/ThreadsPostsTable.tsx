@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { reachColor } from '@/lib/dashboard/reachColor'
 import { TablePager } from './TablePager'
 
 const PAGE_SIZE = 200
@@ -108,7 +109,7 @@ export function ThreadsPostsTable({ posts, onAskAI }: { posts: ThreadsPost[]; on
                   </span>
                 )}
               </td>
-              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: p.insights.views > 200 ? 'var(--ad-green)' : undefined }}>
+              <td className="ads-posts-num" style={{ textAlign: 'right', fontWeight: 600, color: reachColor(p.insights.views) }}>
                 {p.insights.views > 0 ? fmt(p.insights.views) : <span style={{ color: 'var(--ad-text3)' }}>—</span>}
               </td>
               <td className="ads-posts-num" style={{ textAlign: 'right' }}>{fmt(p.insights.likes)}</td>
