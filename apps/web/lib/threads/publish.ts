@@ -99,6 +99,18 @@ async function fetchPermalink(token: string, mediaId: string): Promise<string | 
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
+// Wait until a just-published post is fetchable (= replyable). Video/carousel
+// posts finish processing async and reject replies with "resource does not
+// exist" until then. ~30 × 3s ≈ 90s budget. Best-effort (proceeds either way).
+async function waitPostReplyable(token: string, postId: string): Promise<void> {
+  for (let i = 0; i < 30; i++) {
+    const res = await fetch(`${API}/${postId}?fields=id&access_token=${encodeURIComponent(token)}`)
+    const j = await res.json().catch(() => ({}))
+    if (j.id) return
+    await sleep(3000)
+  }
+}
+
 // Publishes the (possibly multi-segment) post. On partial success (root live but
 // a reply failed) still returns rootId so the caller records it — never re-post
 // the root. `ok:false` with a rootId means "main post is live, replies partial".
@@ -136,14 +148,17 @@ export async function publishThreads(
   }
 
   const ids = [rootId]
-  // Remaining segments → text replies chained to the previous post. A just-
-  // published post (esp. carousel/video) takes time to become replyable, so
-  // retry with increasing backoff (~2s,4.5s,7s,9.5s ≈ 23s total per reply).
+  // A freshly-published post (esp. video/carousel) is NOT immediately replyable —
+  // GET/reply_to_id yields "resource does not exist" until it finishes processing.
+  // Root cause of prior reply failures: 23s wasn't enough. Poll until the post is
+  // fetchable (≈ up to 90s) BEFORE starting the reply chain.
+  if (parts.length > 1) await waitPostReplyable(token, rootId)
+  // Remaining segments → text replies chained to the previous post.
   let prev = rootId
   for (let i = 1; i < parts.length; i++) {
     let reply: { id?: string; error?: string } = { error: 'init' }
     for (let attempt = 0; attempt < 4 && (reply.error || !reply.id); attempt++) {
-      await sleep(2000 + attempt * 2500)
+      await sleep(2000 + attempt * 2000)
       reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false)
     }
     if (reply.error || !reply.id) {
