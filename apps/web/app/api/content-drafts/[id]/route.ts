@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
-import { getDraft, transitionDraft, editDraftContent, deleteDraft, writeAudit } from '@/lib/content/draftStore'
+import { getDraft, transitionDraft, editDraftContent, deleteDraft, scheduleDraft, unscheduleDraft, writeAudit } from '@/lib/content/draftStore'
 import { HUMAN_DRIVEN_STATUSES, type DraftStatus, type GeneratedContent } from '@/lib/content/draftTypes'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
@@ -60,12 +60,28 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const uid = await uidFromReq(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { pageId, status, generated } = (await req.json().catch(() => ({}))) as {
-    pageId?: string; status?: DraftStatus; generated?: GeneratedContent
+  const { pageId, status, generated, scheduleAt, unschedule } = (await req.json().catch(() => ({}))) as {
+    pageId?: string; status?: DraftStatus; generated?: GeneratedContent; scheduleAt?: number; unschedule?: boolean
   }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!status && !generated) return NextResponse.json({ error: 'status or generated required' }, { status: 400 })
+  if (!status && !generated && scheduleAt === undefined && !unschedule) {
+    return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+  }
+
+  // Scheduling (approved → scheduled) / cancel (scheduled → approved).
+  if (unschedule) {
+    const r = await unscheduleDraft(pageId, params.id)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
+    await writeAudit(pageId, params.id, 'unschedule', uid)
+    return NextResponse.json({ draft: r.draft })
+  }
+  if (scheduleAt !== undefined) {
+    const r = await scheduleDraft(pageId, params.id, scheduleAt)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
+    await writeAudit(pageId, params.id, 'schedule', uid, { at: scheduleAt })
+    return NextResponse.json({ draft: r.draft })
+  }
 
   if (generated) {
     const r = await editDraftContent(pageId, params.id, generated)

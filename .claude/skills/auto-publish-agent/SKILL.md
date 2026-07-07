@@ -52,8 +52,9 @@ failed | rejected | expired → draft（可復原重審）
 - [x] S1 草稿基建（型別/狀態機/store/API，已對 Firestore 驗證）
 - [x] S2 審核 UI（列表/分頁/核准·拒絕·編輯/composer）
 - [~] S3 進行中：`platformSpecs` + `validateDraft`（字數/hashtag/媒體硬限，composer 標紅擋存 + create API 422 守門）+ 稽核 log（`pages/{pageId}/publishAuditLog`）已完成。**待補**：killSwitch/automationSettings（發布端總開關，等 S4/S5）、禁詞 per-page 設定 UI（機制已在 `validateDraft` 的 `bannedWords`）
-- [ ] S4a Threads 發布（先鋒）→ S4b FB/IG 發布（等 App Review）
-- [ ] S5 排程（L2）→ S6 廣告寫入（Phase 4）→ S7 學習迴圈
+- [x] S4a Threads 發布（先鋒）— `lib/threads/publish`（建容器→publish、長文切回覆串需 `threads_manage_replies`、影片輪詢、topic_tag）+ `/api/content-drafts/[id]/publish`（冪等、部分失敗只記錯誤保留可重發）。⚠️ 授權必須在 HTTPS 正式站（localhost http 被 Threads 擋，error 1349187）。
+- [~] S5a Threads 排程（L2）— `scheduleDraft`/`unscheduleDraft` + `/api/cron/publish-scheduled`（每 15 分，GitHub Actions）+ Kill Switch/靜默時段（`automationStore`，台灣 UTC+8）。只做 Threads-only；多平台排程等 S4b。
+- [ ] S4b FB/IG 發布（等 App Review）→ S6 廣告寫入（Phase 4）→ S7 學習迴圈
 
 ## 每片交付紀律
 `tsc --noEmit` + `eslint` + `next build` 三關全綠 → localhost 給使用者測 → 回 OK 才 commit+push。build 前先停 dev（避免污染 .next）。純文件改動可豁免 localhost。

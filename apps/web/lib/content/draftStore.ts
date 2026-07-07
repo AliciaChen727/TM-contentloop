@@ -77,6 +77,12 @@ export async function listDrafts(pageId: string, opts?: { status?: DraftStatus; 
   return snap.docs.map(dd => fromDoc(pageId, dd.id, dd.data()))
 }
 
+// Status-only query (no orderBy → no composite index). Used by the cron.
+export async function listByStatus(pageId: string, status: DraftStatus): Promise<ContentDraft[]> {
+  const snap = await col(pageId).where('status', '==', status).get()
+  return snap.docs.map(dd => fromDoc(pageId, dd.id, dd.data()))
+}
+
 export async function getDraft(pageId: string, id: string): Promise<ContentDraft | null> {
   const dd = await col(pageId).doc(id).get()
   return dd.exists ? fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData) : null
@@ -126,6 +132,35 @@ export async function recordPublishOutcome(
   if (allDone) patch.status = 'published'
   await ref.set(patch, { merge: true })
   return { ok: true, draft: { ...current, ...patch, publishResults: results } as ContentDraft }
+}
+
+// Schedule an approved draft for auto-publish at `at` (epoch ms). approved→scheduled.
+export async function scheduleDraft(
+  pageId: string, id: string, at: number,
+): Promise<{ ok: true; draft: ContentDraft } | { ok: false; error: string; code: number }> {
+  const ref = col(pageId).doc(id)
+  const dd = await ref.get()
+  if (!dd.exists) return { ok: false, error: 'draft not found', code: 404 }
+  const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
+  if (!canTransition(current.status, 'scheduled')) return { ok: false, error: `cannot schedule from ${current.status}`, code: 409 }
+  if (!Number.isFinite(at) || at <= Date.now()) return { ok: false, error: '排程時間需為未來時間', code: 400 }
+  const patch = { status: 'scheduled' as DraftStatus, schedule: { mode: 'scheduled', at }, updatedAt: Date.now() }
+  await ref.set(patch, { merge: true })
+  return { ok: true, draft: { ...current, ...patch } as ContentDraft }
+}
+
+// Cancel a schedule → back to approved (ready for manual publish).
+export async function unscheduleDraft(
+  pageId: string, id: string,
+): Promise<{ ok: true; draft: ContentDraft } | { ok: false; error: string; code: number }> {
+  const ref = col(pageId).doc(id)
+  const dd = await ref.get()
+  if (!dd.exists) return { ok: false, error: 'draft not found', code: 404 }
+  const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
+  if (current.status !== 'scheduled') return { ok: false, error: 'not scheduled', code: 409 }
+  const patch = { status: 'approved' as DraftStatus, schedule: { mode: 'now' as const }, updatedAt: Date.now() }
+  await ref.set(patch, { merge: true })
+  return { ok: true, draft: { ...current, ...patch } as ContentDraft }
 }
 
 export async function editDraftContent(

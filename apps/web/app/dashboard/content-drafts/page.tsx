@@ -28,6 +28,8 @@ export default function ContentDraftsPage() {
   const [composing, setComposing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [publishingId, setPublishingId] = useState<string | null>(null)
+  const [killSwitch, setKillSwitch] = useState(false)
+  const [quiet, setQuiet] = useState<{ start: number; end: number } | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -59,6 +61,24 @@ export default function ContentDraftsPage() {
 
   useEffect(() => { if (idToken && selectedPageId) load(idToken, selectedPageId) }, [idToken, selectedPageId, load])
 
+  // Load per-page automation settings (Kill Switch + quiet hours).
+  useEffect(() => {
+    if (!idToken || !selectedPageId) return
+    fetch(`/api/content-drafts/automation?pageId=${encodeURIComponent(selectedPageId)}`, { headers: { Authorization: `Bearer ${idToken}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.settings) { setKillSwitch(!!d.settings.killSwitch); setQuiet(d.settings.quietHours ?? null) } })
+      .catch(() => {})
+  }, [idToken, selectedPageId])
+
+  const saveAutomation = useCallback(async (patch: { killSwitch?: boolean; quietHours?: { start: number; end: number } | null }) => {
+    setKillSwitch(v => patch.killSwitch ?? v)
+    if (patch.quietHours !== undefined) setQuiet(patch.quietHours)
+    await fetch('/api/content-drafts/automation', {
+      method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId: selectedPageId, ...patch }),
+    }).catch(() => {})
+  }, [idToken, selectedPageId])
+
   const create = useCallback(async (input: Omit<CreateDraftInput, 'pageId'>) => {
     setBusy(true)
     try {
@@ -71,7 +91,7 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false) }
   }, [idToken, selectedPageId, load, L])
 
-  const patch = useCallback(async (id: string, payload: { status?: DraftStatus; generated?: GeneratedContent }) => {
+  const patch = useCallback(async (id: string, payload: { status?: DraftStatus; generated?: GeneratedContent; scheduleAt?: number; unschedule?: boolean }) => {
     setBusy(true)
     try {
       const res = await fetch(`/api/content-drafts/${id}`, {
@@ -135,7 +155,26 @@ export default function ContentDraftsPage() {
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-8">
-        <p className="mb-4 text-sm text-gray-500">{L('Agent 生成的內容會先存為草稿，經你核准後才發布（Threads 授權後可先發）。', 'Agent-generated content lands here as drafts; nothing publishes until you approve.')}</p>
+        <p className="mb-3 text-sm text-gray-500">{L('Agent 生成的內容會先存為草稿，經你核准後才發布（Threads 授權後可先發）。', 'Agent-generated content lands here as drafts; nothing publishes until you approve.')}</p>
+
+        {/* Automation controls (S5a): Kill Switch + quiet hours for scheduled publishing. */}
+        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <span className="text-sm font-semibold text-gray-700">⚙️ {L('排程自動化', 'Automation')}</span>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input type="checkbox" checked={killSwitch} onChange={e => saveAutomation({ killSwitch: e.target.checked })} className="h-4 w-4 accent-red-600" />
+            <span className={killSwitch ? 'font-bold text-red-600' : 'text-gray-600'}>{killSwitch ? L('🛑 已暫停所有排程發布', '🛑 All scheduled publishing paused') : L('Kill Switch（暫停排程發布）', 'Kill Switch')}</span>
+          </label>
+          <span className="flex items-center gap-1 text-sm text-gray-600">
+            <span>{L('靜默時段', 'Quiet hours')}</span>
+            {quiet ? (<>
+              <span className="font-semibold">{String(quiet.start).padStart(2, '0')}:00–{String(quiet.end).padStart(2, '0')}:00</span>
+              <button onClick={() => saveAutomation({ quietHours: null })} className="ml-1 text-xs text-gray-400 hover:text-gray-600">✕</button>
+            </>) : (
+              <button onClick={() => saveAutomation({ quietHours: { start: 22, end: 8 } })} className="text-xs font-semibold text-indigo-600">＋ {L('設 22:00–08:00 不發', 'Set 22:00–08:00')}</button>
+            )}
+          </span>
+          <span className="text-xs text-gray-400">{L('（此時段內到期的排程會延到時段外才發）', '(due posts defer until outside this window)')}</span>
+        </div>
         <div className="mb-6 flex flex-wrap gap-2">
           {tabBtn('draft', L('待審', 'Draft'))}
           {tabBtn('approved', L('已核准', 'Approved'))}
@@ -152,7 +191,9 @@ export default function ContentDraftsPage() {
                 <DraftCard key={d.id} draft={d} busy={busy} publishing={publishingId === d.id}
                   onTransition={(id, status) => patch(id, { status })}
                   onEdit={(id, generated) => patch(id, { generated })}
-                  onPublish={publish} onDelete={remove} />
+                  onPublish={publish} onDelete={remove}
+                  onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
+                  onUnschedule={(id) => patch(id, { unschedule: true })} />
               ))}
             </div>
           )}
