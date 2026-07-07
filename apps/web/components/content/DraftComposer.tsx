@@ -175,7 +175,13 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                 <input type="checkbox" checked={alsoStory} onChange={e => setAlsoStory(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
                 <span>
                   <span className="block text-sm font-semibold text-gray-700">📸 {L('同時發佈限動 Story', 'Also post as Story')}</span>
-                  <span className="block text-xs text-gray-400">{L('把這則媒體同時發成 24 小時限動（IG／FB，時效性內容）。', 'Also publish this media as a 24h Story (IG/FB).')}</span>
+                  <span className="block text-xs text-gray-400">{L('把這則媒體同時發成 24 小時限動（時效性內容）。', 'Also publish this media as a 24h Story.')}</span>
+                  {alsoStory && (
+                    <span className="mt-1 block text-xs font-semibold text-pink-600">
+                      {L('限動將發佈到：', 'Story will post to: ')}
+                      {targets.filter(t => t === 'fb' || t === 'ig').map(t => t === 'ig' ? 'Instagram' : 'Facebook').join(L('、', ', '))}
+                    </span>
+                  )}
                 </span>
               </label>
             )}
