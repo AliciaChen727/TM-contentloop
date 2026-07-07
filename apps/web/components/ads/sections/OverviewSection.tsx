@@ -137,6 +137,29 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
     })
     .filter(r => r.spend > 0 || r.impressions > 0)
 
+  // Device breakdown (impression_device) — same source as the audience tab, shown
+  // compactly here. Meta gives no per-device reach, so we compare by impressions /
+  // CTR / conversion rate. Sorted by impressions desc; hide devices with no data.
+  const deviceRows = (data.deviceBreakdown ?? [])
+    .map(d => {
+      const clicks = d.clicks ?? 0, dImpr = d.impressions ?? 0, conversions = d.conversions ?? 0
+      return {
+        label: d.device, impressions: dImpr, clicks, conversions,
+        ctr: dImpr > 0 ? (clicks / dImpr) * 100 : 0,
+        cvr: clicks > 0 ? (conversions / clicks) * 100 : 0,
+      }
+    })
+    .filter(r => r.impressions > 0 || r.clicks > 0)
+    .sort((a, b) => b.impressions - a.impressions)
+  type DevCell = { key: string; label: string; kind: 'int' | 'percent' }
+  const deviceCols: DevCell[] = [
+    { key: 'impressions', label: L('曝光', 'Impr.'), kind: 'int' },
+    { key: 'clicks', label: L('點擊', 'Clicks'), kind: 'int' },
+    { key: 'ctr', label: 'CTR', kind: 'percent' },
+    { key: 'conversions', label: L('轉換', 'Conv.'), kind: 'int' },
+    { key: 'cvr', label: L('轉換率', 'CVR'), kind: 'percent' },
+  ]
+
   const adPosts = postsSource.filter(p => p.hasAd)
   const avgReach = reachPosts.length > 0 ? Math.round(reachPosts.reduce((s, p) => s + (p.reach ?? 0), 0) / reachPosts.length) : 0
   const topReach = reachPosts.length > 0 ? Math.max(...reachPosts.map(p => p.reach ?? 0)) : 0
@@ -221,6 +244,40 @@ export function OverviewSection({ data, onAskAI, posts, optimizationGoal }: { da
                       <td style={{ padding: '10px 16px', fontWeight: 500, whiteSpace: 'nowrap' }}>{row.label}</td>
                       {platformCols.map(c => (
                         <td key={c.key} style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{fmtPlat(vals[c.key] ?? 0, c.kind)}</td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {deviceRows.length > 0 && (
+        <div className="ads-card" style={{ overflow: 'hidden', marginTop: 16 }}>
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ad-border)' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('觀看廣告的裝置分佈', 'Ad views by device')}</span>
+            <span style={{ fontSize: 11, color: 'var(--ad-text3)', marginLeft: 8 }}>{L('Meta 不提供依裝置的觸及,以曝光 / CTR / 轉換率比較(細分後樣本較小,僅供參考)', 'Meta gives no per-device reach; compared by impressions / CTR / CVR (small samples once split — indicative only)')}</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--ad-border)' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>{L('裝置', 'Device')}</th>
+                  {deviceCols.map(c => (
+                    <th key={c.key} style={{ textAlign: 'right', padding: '10px 16px', color: 'var(--ad-text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {deviceRows.map((row, ri) => {
+                  const vals = row as unknown as Record<string, number>
+                  return (
+                    <tr key={row.label} style={{ borderBottom: ri < deviceRows.length - 1 ? '1px solid var(--ad-border)' : 'none' }}>
+                      <td style={{ padding: '10px 16px', fontWeight: 500, whiteSpace: 'nowrap' }}>{row.label}</td>
+                      {deviceCols.map(c => (
+                        <td key={c.key} style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-dm-mono)' }}>{c.kind === 'percent' ? `${(vals[c.key] ?? 0).toFixed(2)}%` : Math.round(vals[c.key] ?? 0).toLocaleString('zh-TW')}</td>
                       ))}
                     </tr>
                   )
