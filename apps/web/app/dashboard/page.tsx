@@ -387,6 +387,9 @@ export default function DashboardPage() {
       await Promise.all([
         fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).catch(() => null),
         fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).catch(() => null),
+        // Threads has a separate OAuth/token; include it so 一鍵同步 covers Threads
+        // too (was only synced by the daily cron before). No-op if not connected.
+        fetch('/api/threads/sync', { method: 'POST', headers, body }).catch(() => null),
       ])
       const since = days === 0 && dateMode === 'preset' ? undefined : dateBounds.start
       const until = days === 0 && dateMode === 'preset' ? undefined : dateBounds.end
