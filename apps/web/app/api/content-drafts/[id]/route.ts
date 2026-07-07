@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
-import { getDraft, transitionDraft, editDraftContent, writeAudit } from '@/lib/content/draftStore'
+import { getDraft, transitionDraft, editDraftContent, deleteDraft, writeAudit } from '@/lib/content/draftStore'
 import { HUMAN_DRIVEN_STATUSES, type DraftStatus, type GeneratedContent } from '@/lib/content/draftTypes'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
@@ -38,6 +38,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const draft = await getDraft(pageId, params.id)
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
   return NextResponse.json({ draft })
+}
+
+// DELETE /api/content-drafts/{id}?pageId= → permanently remove the draft.
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const uid = await uidFromReq(req)
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const pageId = req.nextUrl.searchParams.get('pageId')
+  if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
+  if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const ok = await deleteDraft(pageId, params.id)
+  if (!ok) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
+  await writeAudit(pageId, params.id, 'delete', uid)
+  return NextResponse.json({ ok: true })
 }
 
 // PATCH /api/content-drafts/{id} { pageId, status?, generated? }

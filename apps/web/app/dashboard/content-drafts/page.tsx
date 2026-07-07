@@ -7,7 +7,7 @@ import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { DraftCard } from '@/components/content/DraftCard'
 import { DraftComposer } from '@/components/content/DraftComposer'
-import type { ContentDraft, DraftStatus, GeneratedContent, CreateDraftInput } from '@/lib/content/draftTypes'
+import type { ContentDraft, DraftStatus, DraftTarget, GeneratedContent, CreateDraftInput } from '@/lib/content/draftTypes'
 
 interface PageInfo { pageId: string; pageName: string }
 type Tab = 'draft' | 'approved' | 'published' | 'other'
@@ -82,6 +82,33 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false) }
   }, [idToken, selectedPageId, load, L])
 
+  const publish = useCallback(async (id: string, platform: DraftTarget) => {
+    const label = platform === 'th' ? 'Threads' : platform
+    if (!window.confirm(L(`確定要立即發布到 ${label}？這會真的貼出貼文。`, `Publish to ${label} now? This posts for real.`))) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/content-drafts/${id}/publish`, {
+        method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: selectedPageId, platform }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setError(d.error ?? L('發布失敗', 'Publish failed')) }
+      await load(idToken, selectedPageId)
+    } finally { setBusy(false) }
+  }, [idToken, selectedPageId, load, L])
+
+  const remove = useCallback(async (id: string) => {
+    if (!window.confirm(L('確定刪除這則草稿？此動作無法復原。', 'Delete this draft? This cannot be undone.'))) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/content-drafts/${id}?pageId=${encodeURIComponent(selectedPageId)}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${idToken}` },
+      })
+      if (!res.ok) { const d = await res.json(); setError(d.error ?? L('刪除失敗', 'Delete failed')) }
+      await load(idToken, selectedPageId)
+    } finally { setBusy(false) }
+  }, [idToken, selectedPageId, load, L])
+
   const shown = drafts.filter(d => TAB_MATCH[tab].includes(d.status))
   const count = (t: Tab) => drafts.filter(d => TAB_MATCH[t].includes(d.status)).length
   const tabBtn = (t: Tab, label: string) => (
@@ -123,7 +150,8 @@ export default function ContentDraftsPage() {
               {shown.map(d => (
                 <DraftCard key={d.id} draft={d} busy={busy}
                   onTransition={(id, status) => patch(id, { status })}
-                  onEdit={(id, generated) => patch(id, { generated })} />
+                  onEdit={(id, generated) => patch(id, { generated })}
+                  onPublish={publish} onDelete={remove} />
               ))}
             </div>
           )}

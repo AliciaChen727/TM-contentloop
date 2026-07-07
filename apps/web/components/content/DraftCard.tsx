@@ -11,6 +11,11 @@ const PLAT_COLOR: Record<DraftTarget, string> = { fb: '#1877F2', ig: '#C13584', 
 const TH_LIMIT = 500
 const IG_HASHTAG_LIMIT = 30
 
+function firstPublishError(d: ContentDraft): string | undefined {
+  for (const t of d.target) { const e = d.publishResults?.[t]?.error; if (e) return e }
+  return undefined
+}
+
 function StatusPill({ status }: { status: DraftStatus }) {
   const { L } = useLang()
   const map: Record<DraftStatus, { text: string; bg: string; fg: string }> = {
@@ -28,10 +33,12 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, busy }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, busy }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent) => void
+  onPublish: (id: string, platform: DraftTarget) => void
+  onDelete: (id: string) => void
   busy: boolean
 }) {
   const { L } = useLang()
@@ -108,12 +115,29 @@ export function DraftCard({ draft, onTransition, onEdit, busy }: {
           <button disabled={busy} onClick={saveEdit} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{L('儲存', 'Save')}</button>
           <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600">{L('取消', 'Cancel')}</button>
         </>)}
-        {draft.status === 'approved' && (<>
-          <span className="rounded-lg bg-gray-50 px-3 py-1.5 text-xs text-gray-500">{L('待發布（Meta 授權後開放）', 'Awaiting publish (needs Meta scope)')}</span>
-          <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>
+        {(draft.status === 'approved' || draft.status === 'published') && (<>
+          {draft.target.map(t => {
+            const res = draft.publishResults?.[t]
+            if (res?.postId) {
+              return <a key={t} href={res.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
+            }
+            if (t === 'th') {
+              return <button key={t} disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">🚀 {L('發布到 Threads', 'Publish to Threads')}</button>
+            }
+            return <span key={t} className="rounded-lg bg-gray-50 px-3 py-1.5 text-xs text-gray-400">{PLAT_LABEL[t]} {L('待 App Review', 'pending review')}</span>
+          })}
+          {firstPublishError(draft) && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {firstPublishError(draft)}</span>}
+          {draft.status === 'approved' && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
         </>)}
         {(draft.status === 'rejected' || draft.status === 'expired' || draft.status === 'failed') && (
           <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('復原為草稿', 'Restore to draft')}</button>
+        )}
+        {!editing && (
+          <button disabled={busy} onClick={() => onDelete(draft.id)}
+            className="ml-auto flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h12M8 6V4.5A1.5 1.5 0 019.5 3h1A1.5 1.5 0 0112 4.5V6m2 0v9.5A1.5 1.5 0 0112.5 17h-5A1.5 1.5 0 016 15.5V6M8.5 9v5M11.5 9v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {L('刪除', 'Delete')}
+          </button>
         )}
       </div>
     </div>

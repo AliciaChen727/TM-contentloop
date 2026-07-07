@@ -5,8 +5,9 @@ import { adminAuth } from '@/lib/firebase/admin'
 import crypto from 'crypto'
 import { THREADS_APP_ID } from '@/lib/threads/client'
 
-// threads_manage_insights needed to read post/account metrics.
-const SCOPES = 'threads_basic,threads_manage_insights'
+// threads_manage_insights: read post/account metrics.
+// threads_content_publish: publish posts/replies (S4a real publishing).
+const SCOPES = 'threads_basic,threads_manage_insights,threads_content_publish'
 
 export async function GET(req: NextRequest) {
   const idToken = req.nextUrl.searchParams.get('idToken')

@@ -5,7 +5,7 @@
 import { randomUUID } from 'crypto'
 import { adminDb } from '@/lib/firebase/admin'
 import {
-  type ContentDraft, type CreateDraftInput, type DraftStatus,
+  type ContentDraft, type CreateDraftInput, type DraftStatus, type DraftTarget,
   canTransition,
 } from './draftTypes'
 
@@ -37,6 +37,7 @@ function fromDoc(pageId: string, id: string, d: FirebaseFirestore.DocumentData):
     createdByUid: d.createdByUid ?? '',
     approvedByUid: d.approvedByUid ?? null,
     publishResult: d.publishResult ?? null,
+    publishResults: d.publishResults ?? undefined,
     idempotencyKey: d.idempotencyKey ?? id,
     createdAt: d.createdAt ?? 0,
     updatedAt: d.updatedAt ?? 0,
@@ -81,6 +82,13 @@ export async function getDraft(pageId: string, id: string): Promise<ContentDraft
   return dd.exists ? fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData) : null
 }
 
+export async function deleteDraft(pageId: string, id: string): Promise<boolean> {
+  const ref = col(pageId).doc(id)
+  if (!(await ref.get()).exists) return false
+  await ref.delete()
+  return true
+}
+
 // Move a draft to a new status, enforcing the state machine. Returns the updated
 // draft, or an error string if the transition is illegal / draft missing.
 export async function transitionDraft(
@@ -99,6 +107,25 @@ export async function transitionDraft(
   if (to === 'draft') patch.approvedByUid = null   // 收回核准/重審 → 清核准者
   await ref.set(patch, { merge: true })
   return { ok: true, draft: { ...current, ...patch } as ContentDraft }
+}
+
+// Record a single platform's publish outcome. When every targeted platform has
+// a successful postId, the whole draft flips to `published`; otherwise status is
+// left as-is (partially published — user can publish the rest later).
+export async function recordPublishOutcome(
+  pageId: string, id: string, platform: DraftTarget,
+  result: { postId?: string; permalink?: string; error?: string },
+): Promise<{ ok: true; draft: ContentDraft } | { ok: false; error: string; code: number }> {
+  const ref = col(pageId).doc(id)
+  const dd = await ref.get()
+  if (!dd.exists) return { ok: false, error: 'draft not found', code: 404 }
+  const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
+  const results = { ...(current.publishResults ?? {}), [platform]: { ...result, at: Date.now() } }
+  const allDone = current.target.every(t => results[t]?.postId)
+  const patch: Record<string, unknown> = { publishResults: results, updatedAt: Date.now() }
+  if (allDone) patch.status = 'published'
+  await ref.set(patch, { merge: true })
+  return { ok: true, draft: { ...current, ...patch, publishResults: results } as ContentDraft }
 }
 
 export async function editDraftContent(
