@@ -209,7 +209,7 @@ export default function ContentDraftsPage() {
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-8">
-        <p className="mb-3 text-sm text-gray-500">{L('Agent 生成的內容會先存為草稿，經你核准後才發布（Threads 授權後可先發）。', 'Agent-generated content lands here as drafts; nothing publishes until you approve.')}</p>
+        <p className="mb-3 text-sm text-gray-500">{L('Agent 生成的內容會先存為草稿，經你核准後才發布。', 'Agent-generated content lands here as drafts; nothing publishes until you approve.')}</p>
 
         {/* Automation controls (S5a): Kill Switch + quiet hours for scheduled publishing. */}
         <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
