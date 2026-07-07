@@ -57,6 +57,7 @@ export interface ThreadsPublishInput {
   text: string
   mediaUrl?: string
   mediaType: MediaType
+  topicTag?: string      // Threads topic_tag (single, no # needed)
 }
 
 async function fetchPermalink(token: string, mediaId: string): Promise<string | undefined> {
@@ -74,25 +75,22 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 // the root. `ok:false` with a rootId means "main post is live, replies partial".
 export async function publishThreads(
   token: string, input: ThreadsPublishInput,
-): Promise<
-  | { ok: true; rootId: string; permalink?: string; ids: string[] }
-  | { ok: false; error: string; rootId?: string; permalink?: string; ids?: string[] }
-> {
+): Promise<{ ok: true; rootId: string; permalink?: string; ids: string[] } | { ok: false; error: string }> {
   const hasMedia = !!input.mediaUrl
   const tmt = toThreadsMediaType(input.mediaType, hasMedia)
   const isVideo = tmt === 'VIDEO'
   const segments = splitForThreads(input.text)
   const parts = segments.length ? segments : ['']
 
-  // Root post — carries the media (if any).
+  // Root post — carries the media (if any) + optional topic tag.
   const rootParams: Record<string, string> = { media_type: tmt, text: parts[0] }
+  if (input.topicTag?.trim()) rootParams.topic_tag = input.topicTag.trim()
   if (hasMedia && tmt === 'IMAGE') rootParams.image_url = input.mediaUrl!
   if (hasMedia && tmt === 'VIDEO') rootParams.video_url = input.mediaUrl!
   const root = await createAndPublish(token, rootParams, isVideo)
   if (root.error || !root.id) return { ok: false, error: root.error ?? 'publish failed' }
 
   const rootId = root.id
-  const permalink = await fetchPermalink(token, rootId)
   const ids = [rootId]
   // Remaining segments → text replies chained to the previous post. The just-
   // published post needs a moment to be replyable; small delay + one retry.
@@ -102,10 +100,13 @@ export async function publishThreads(
     let reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false)
     if (reply.error || !reply.id) { await sleep(2500); reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false) }
     if (reply.error || !reply.id) {
-      return { ok: false, error: `主貼已發布，但留言串第 ${i} 則失敗：${reply.error ?? 'unknown'}`, rootId, permalink, ids }
+      // Partial: main post is live but a reply failed. Report it — the draft
+      // stays re-publishable (user deletes on Threads then re-publishes).
+      return { ok: false, error: `主貼已發布，但留言串第 ${i} 則失敗：${reply.error ?? 'unknown'}（可到 Threads 刪除後從草稿重發）` }
     }
     ids.push(reply.id)
     prev = reply.id
   }
+  const permalink = await fetchPermalink(token, rootId)
   return { ok: true, rootId, permalink, ids }
 }

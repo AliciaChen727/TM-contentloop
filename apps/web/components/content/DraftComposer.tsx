@@ -33,6 +33,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const [tailored, setTailored] = useState(false)            // per-platform copy?
   const [perBody, setPerBody] = useState<Record<string, string>>({})  // caption per platform
   const [hashtags, setHashtags] = useState('')
+  const [threadsTopic, setThreadsTopic] = useState('')   // Threads topic_tag (single)
   const [mediaUrl, setMediaUrl] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')     // local objectURL for instant preview
   const [previewKind, setPreviewKind] = useState<'image' | 'video'>('image')
@@ -102,7 +103,12 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
       if (t !== 'th' && needsMedia) perPlatform[t]!.mediaUrl = mediaUrl
     }
     const canStory = needsMedia && (targets.includes('fb') || targets.includes('ig'))
-    onCreate({ target: targets, mediaType, generated: { perPlatform, ...(needsMedia ? { mediaUrl } : {}), ...(canStory && alsoStory ? { alsoStory: true } : {}) } })
+    const topic = targets.includes('th') && threadsTopic.trim() ? threadsTopic.trim().replace(/^#/, '') : ''
+    onCreate({ target: targets, mediaType, generated: {
+      perPlatform, ...(needsMedia ? { mediaUrl } : {}),
+      ...(canStory && alsoStory ? { alsoStory: true } : {}),
+      ...(topic ? { threadsTopicTag: topic } : {}),
+    } })
   }
 
   const showMedia = needsMedia && (previewUrl || mediaUrl)
@@ -171,6 +177,10 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
 
             {targets.length > 0 && (
               <input value={hashtags} onChange={e => setHashtags(e.target.value)} placeholder={L('Hashtags（套用所有平台，空白分隔；IG ≤30）', 'Hashtags (all platforms, space-separated; IG ≤30)')}
+                className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800" />
+            )}
+            {targets.includes('th') && (
+              <input value={threadsTopic} onChange={e => setThreadsTopic(e.target.value)} placeholder={L('Threads 主題標籤（選填，單一，用於分類/被搜尋）', 'Threads topic tag (optional, single)')}
                 className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800" />
             )}
 

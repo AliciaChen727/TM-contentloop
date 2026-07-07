@@ -54,14 +54,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!tok) return NextResponse.json({ error: 'Threads 未連接或未授權發布，請重新連接 Threads', connected: false }, { status: 400 })
 
   const text = draft.generated.perPlatform.th?.body ?? ''
-  const r = await publishThreads(tok.accessToken, { text, mediaUrl: draft.generated.mediaUrl, mediaType: draft.mediaType })
+  const r = await publishThreads(tok.accessToken, {
+    text, mediaUrl: draft.generated.mediaUrl, mediaType: draft.mediaType, topicTag: draft.generated.threadsTopicTag,
+  })
 
   if (!r.ok) {
-    // Partial: the main post IS live (r.rootId) but a reply failed. Record the
-    // rootId so we never re-post the main thread; surface the reply error.
-    await recordPublishOutcome(pageId, params.id, 'th', { postId: r.rootId, permalink: r.permalink, error: r.error })
-    await writeAudit(pageId, params.id, r.rootId ? 'publish:th:partial' : 'publish:th:failed', uid, { error: r.error, postId: r.rootId })
-    return NextResponse.json({ error: r.error, postId: r.rootId ?? null, partial: !!r.rootId }, { status: 502 })
+    // Record the error only (no postId) so the draft stays re-publishable — the
+    // user deletes any partial post on Threads and re-publishes from the draft.
+    await recordPublishOutcome(pageId, params.id, 'th', { error: r.error })
+    await writeAudit(pageId, params.id, 'publish:th:failed', uid, { error: r.error })
+    return NextResponse.json({ error: r.error }, { status: 502 })
   }
 
   const out = await recordPublishOutcome(pageId, params.id, 'th', { postId: r.rootId, permalink: r.permalink })
