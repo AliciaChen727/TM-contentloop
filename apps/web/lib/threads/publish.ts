@@ -118,6 +118,10 @@ export async function publishThreads(
   if (isCarousel) {
     const carousel = await createCarouselContainer(token, carouselUrls, parts[0], input.topicTag)
     if (carousel.error || !carousel.id) return { ok: false, error: carousel.error ?? 'carousel build failed' }
+    // The carousel PARENT also finalizes async (esp. with video children) — publishing
+    // before it's FINISHED yields "resource does not exist". Poll it first.
+    const ready = await waitReady(token, carousel.id)
+    if (!ready.ok) return { ok: false, error: ready.error ?? 'carousel not ready' }
     const pub = await post('me/threads_publish', { creation_id: carousel.id, access_token: token })
     if (pub.error || !pub.id) return { ok: false, error: pub.error ?? 'carousel publish failed' }
     rootId = pub.id
