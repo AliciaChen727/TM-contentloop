@@ -221,10 +221,20 @@ export default function ContentDraftsPage() {
           <span className="flex items-center gap-1 text-sm text-gray-600">
             <span>{L('靜默時段', 'Quiet hours')}</span>
             {quiet ? (<>
-              <span className="font-semibold">{String(quiet.start).padStart(2, '0')}:00–{String(quiet.end).padStart(2, '0')}:00</span>
+              {/* Editable start/end hour — adjust anytime. */}
+              <select value={quiet.start} onChange={e => saveAutomation({ quietHours: { start: Number(e.target.value), end: quiet.end } })}
+                className="rounded border border-gray-200 px-1 py-0.5 text-xs">
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+              </select>
+              <span>–</span>
+              <select value={quiet.end} onChange={e => saveAutomation({ quietHours: { start: quiet.start, end: Number(e.target.value) } })}
+                className="rounded border border-gray-200 px-1 py-0.5 text-xs">
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+              </select>
+              <span className="text-xs">{L('不發', 'no-post')}</span>
               <button onClick={() => saveAutomation({ quietHours: null })} className="ml-1 text-xs text-gray-400 hover:text-gray-600">✕</button>
             </>) : (
-              <button onClick={() => saveAutomation({ quietHours: { start: 22, end: 8 } })} className="text-xs font-semibold text-indigo-600">＋ {L('設 22:00–08:00 不發', 'Set 22:00–08:00')}</button>
+              <button onClick={() => saveAutomation({ quietHours: { start: 22, end: 8 } })} className="text-xs font-semibold text-indigo-600">＋ {L('設定不發時段', 'Set quiet hours')}</button>
             )}
           </span>
           <span className="text-xs text-gray-400">{L('（此時段內到期的排程會延到時段外才發）', '(due posts defer until outside this window)')}</span>
