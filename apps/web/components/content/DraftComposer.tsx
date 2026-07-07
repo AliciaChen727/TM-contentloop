@@ -34,10 +34,11 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const [perBody, setPerBody] = useState<Record<string, string>>({})  // caption per platform
   const [hashtags, setHashtags] = useState('')
   const [threadsTopic, setThreadsTopic] = useState('')   // Threads topic_tag (single)
-  const [mediaUrl, setMediaUrl] = useState('')
-  const [previewUrl, setPreviewUrl] = useState('')     // local objectURL for instant preview
-  const [previewKind, setPreviewKind] = useState<'image' | 'video'>('image')
+  // Media items: single (image/video) or up to 10 for a carousel.
+  const [media, setMedia] = useState<{ url: string; kind: 'image' | 'video'; preview: string }[]>([])
+  const [pasteUrl, setPasteUrl] = useState('')
   const [uploadPct, setUploadPct] = useState<number | null>(null)
+  const [uploadQueue, setUploadQueue] = useState<{ total: number; done: number } | null>(null)
   const [showAiSettings, setShowAiSettings] = useState(false)
   const [err, setErr] = useState('')
   const [previewPlat, setPreviewPlat] = useState<DraftTarget>('fb')
@@ -63,33 +64,57 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const thSegs = targets.includes('th') ? splitForThreads(withTags(eff('th'))) : []
   const thWillSplit = thSegs.length > 1
   const needsMedia = mediaType !== 'text'
-  const uploading = uploadPct !== null && uploadPct < 100
+  const isCarousel = mediaType === 'carousel'
+  const maxMedia = isCarousel ? 10 : 1
+  const uploading = uploadQueue !== null
+  const firstMediaUrl = media[0]?.url ?? ''
+  const mediaUrls = media.map(m => m.url)
+  // Carousel needs ≥2 items; single types need exactly 1.
+  const mediaReady = !needsMedia || (isCarousel ? media.length >= 2 : media.length >= 1)
   const bodiesReady = tailored ? targets.every(t => (perBody[t] ?? '').trim().length > 0) : body.trim().length > 0
   // Platform hard-limit validation (字數/hashtag/媒體) — blocks save on errors.
   const violations = validateItems(targets.map(t => ({
-    platform: t, text: eff(t), hashtags: tags, hasMedia: mediaUrl.trim().length > 0, mediaType,
+    platform: t, text: eff(t), hashtags: tags, hasMedia: media.length > 0, mediaType,
   })))
   const blocked = hasBlockingErrors(violations)
-  const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && (!needsMedia || mediaUrl.trim().length > 0)
+  const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && mediaReady
 
   function toggle(t: DraftTarget) {
     setTargets(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
   }
+  function onMediaTypeChange(m: MediaType) {
+    setMediaType(m)
+    if (m === 'text') setMedia([])
+    else if (m !== 'carousel') setMedia(cur => cur.slice(0, 1))   // single types keep 1
+  }
+  function removeMedia(i: number) { setMedia(cur => cur.filter((_, idx) => idx !== i)) }
+  function addPasteUrl() {
+    const url = pasteUrl.trim()
+    if (!url || media.length >= maxMedia) return
+    const kind: 'image' | 'video' = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url) ? 'video' : 'image'
+    setMedia(cur => [...cur, { url, kind, preview: url }]); setPasteUrl('')
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
     setErr('')
-    const kind: 'image' | 'video' = file.type.startsWith('video') ? 'video' : 'image'
-    setPreviewKind(kind)
-    setPreviewUrl(URL.createObjectURL(file))          // instant local preview
     const uid = auth.currentUser?.uid
     if (!uid) { setErr(L('請重新登入', 'Please re-login')); return }
-    try {
-      setUploadPct(0)
-      const url = await uploadDraftMedia(uid, file, pct => setUploadPct(pct))
-      setMediaUrl(url); setUploadPct(100)
-    } catch { setErr(L('上傳失敗', 'Upload failed')); setUploadPct(null) }
+    const batch = files.slice(0, maxMedia - media.length)
+    setUploadQueue({ total: batch.length, done: 0 })
+    for (const file of batch) {
+      const kind: 'image' | 'video' = file.type.startsWith('video') ? 'video' : 'image'
+      const preview = URL.createObjectURL(file)
+      try {
+        setUploadPct(0)
+        const url = await uploadDraftMedia(uid, file, pct => setUploadPct(pct))
+        setMedia(cur => [...cur, { url, kind, preview }]); setUploadPct(100)
+      } catch { setErr(L('上傳失敗', 'Upload failed')) }
+      setUploadQueue(q => q ? { ...q, done: q.done + 1 } : q)
+    }
+    setUploadQueue(null); setUploadPct(null)
+    if (fileRef.current) fileRef.current.value = ''   // allow re-selecting the same file
   }
 
   function submit() {
@@ -99,19 +124,19 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
       // (so the reply-chain split counts them); FB/IG carry them as a field.
       perPlatform[t] = t === 'th'
         ? { body: withTags(eff('th')) }
-        : { body: eff(t), ...(tags.length ? { hashtags: tags } : {}), ...(needsMedia ? { mediaUrl } : {}) }
-      if (t !== 'th' && needsMedia) perPlatform[t]!.mediaUrl = mediaUrl
+        : { body: eff(t), ...(tags.length ? { hashtags: tags } : {}), ...(needsMedia && firstMediaUrl ? { mediaUrl: firstMediaUrl } : {}) }
     }
     const canStory = needsMedia && (targets.includes('fb') || targets.includes('ig'))
     const topic = targets.includes('th') && threadsTopic.trim() ? threadsTopic.trim().replace(/^#/, '') : ''
     onCreate({ target: targets, mediaType, generated: {
-      perPlatform, ...(needsMedia ? { mediaUrl } : {}),
+      perPlatform, ...(needsMedia && firstMediaUrl ? { mediaUrl: firstMediaUrl } : {}),
+      ...(isCarousel && mediaUrls.length ? { mediaUrls } : {}),
       ...(canStory && alsoStory ? { alsoStory: true } : {}),
       ...(topic ? { threadsTopicTag: topic } : {}),
     } })
   }
 
-  const showMedia = needsMedia && (previewUrl || mediaUrl)
+  const showMedia = needsMedia && media.length > 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -131,28 +156,50 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
             </div>
 
             <label className="mb-1 block text-sm font-semibold text-gray-700">{L('媒體型態', 'Media type')}</label>
-            <select value={mediaType} onChange={e => setMediaType(e.target.value as MediaType)}
+            <select value={mediaType} onChange={e => onMediaTypeChange(e.target.value as MediaType)}
               className="mb-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800">
               <option value="text">{L('純文字', 'Text')}</option>
               <option value="image">{L('單圖', 'Image')}</option>
-              <option value="carousel">{L('輪播', 'Carousel')}</option>
+              <option value="carousel">{L('輪播（多圖/影片，≤10）', 'Carousel (≤10)')}</option>
               <option value="video">{L('影片', 'Video')}</option>
               <option value="reels">Reels</option>
             </select>
 
             {needsMedia && (
               <div className="mb-4">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">{L('影音素材', 'Media')}</label>
-                <input ref={fileRef} type="file" accept="image/*,video/*" onChange={onFile} className="hidden" />
-                <button onClick={() => fileRef.current?.click()}
-                  className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:border-blue-300">
-                  🖼️ {L('新增相片 / 影片', 'Add photo / video')}
-                </button>
-                {uploading && <p className="mt-1 text-xs text-blue-600">{L('上傳中', 'Uploading')} {Math.round(uploadPct ?? 0)}%</p>}
-                {uploadPct === 100 && <p className="mt-1 text-xs text-green-600">✓ {L('已上傳', 'Uploaded')}</p>}
-                <input value={mediaUrl} onChange={e => { setMediaUrl(e.target.value); setPreviewUrl(e.target.value) }}
-                  placeholder={L('或貼上公開媒體 URL', 'or paste a public media URL')}
-                  className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700" />
+                <label className="mb-1 block text-sm font-semibold text-gray-700">
+                  {L('影音素材', 'Media')}
+                  {isCarousel && <span className="ml-1 text-xs font-normal text-gray-400">{media.length}/10（{L('至少 2', 'min 2')}）</span>}
+                  {uploadQueue && <span className="ml-2 text-xs font-bold text-blue-600">⏳ {L('上傳中', 'Uploading')} {Math.min(uploadQueue.done + 1, uploadQueue.total)}/{uploadQueue.total}</span>}
+                </label>
+                {/* Thumbnails of added media (with remove). */}
+                {media.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {media.map((m, i) => (
+                      <div key={i} className="relative h-16 w-16 overflow-hidden rounded-lg border border-gray-200">
+                        {m.kind === 'video'
+                          ? <video src={m.preview} className="h-full w-full object-cover" />
+                          // eslint-disable-next-line @next/next/no-img-element
+                          : <img src={m.preview} alt="" className="h-full w-full object-cover" />}
+                        <button onClick={() => removeMedia(i)} className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl bg-black/60 text-[10px] text-white">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {media.length < maxMedia && (<>
+                  <input ref={fileRef} type="file" accept="image/*,video/*" multiple={isCarousel} onChange={onFile} className="hidden" />
+                  <button onClick={() => fileRef.current?.click()}
+                    className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 hover:border-blue-300">
+                    🖼️ {isCarousel ? L('新增相片 / 影片（可多選）', 'Add photos / videos') : L('新增相片 / 影片', 'Add photo / video')}
+                  </button>
+                  {uploading && <p className="mt-1 text-xs text-blue-600">{L('上傳中', 'Uploading')} {Math.round(uploadPct ?? 0)}%</p>}
+                  <span className="mt-2 flex gap-1">
+                    <input value={pasteUrl} onChange={e => setPasteUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPasteUrl() } }}
+                      placeholder={L('或貼上公開媒體 URL', 'or paste a public media URL')}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700" />
+                    <button onClick={addPasteUrl} className="rounded-lg border border-gray-300 px-3 text-xs font-semibold text-gray-600">{L('加入', 'Add')}</button>
+                  </span>
+                </>)}
               </div>
             )}
 
@@ -249,7 +296,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
               ? <div className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">{L('請先選發布平台', 'Select a platform')}</div>
               : (
                 <div className={previewDevice === 'mobile' ? 'mx-auto max-w-[340px]' : ''}>
-                  <PostPreview platform={activePreview} body={eff(activePreview)} mediaUrl={previewUrl || mediaUrl} mediaKind={previewKind} hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />
+                  <PostPreview platform={activePreview} body={eff(activePreview)} mediaItems={media.map(m => ({ url: m.preview, kind: m.kind }))} hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />
                 </div>
               )}
           </div>

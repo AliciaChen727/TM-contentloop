@@ -79,7 +79,17 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, on
         <div className="ml-auto"><StatusPill status={draft.status} /></div>
       </div>
 
-      {draft.generated.mediaUrl && (
+      {/* Carousel (mediaUrls, ≥2) → horizontal strip; else single image/video. */}
+      {(draft.generated.mediaUrls?.length ?? 0) > 1 ? (
+        <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+          {draft.generated.mediaUrls!.map((u, i) => (
+            /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
+              ? <video key={i} src={u} controls className="h-40 w-40 flex-shrink-0 rounded-lg object-cover" style={{ background: '#F9FAFB' }} />
+              // eslint-disable-next-line @next/next/no-img-element
+              : <img key={i} src={u} alt="" className="h-40 w-40 flex-shrink-0 rounded-lg object-cover" style={{ background: '#F9FAFB' }} />
+          ))}
+        </div>
+      ) : draft.generated.mediaUrl && (
         (draft.mediaType === 'video' || draft.mediaType === 'reels' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(draft.generated.mediaUrl))
           ? <video src={draft.generated.mediaUrl} controls className="mb-3 max-h-64 w-full rounded-lg" style={{ background: '#F9FAFB' }} />
           // eslint-disable-next-line @next/next/no-img-element

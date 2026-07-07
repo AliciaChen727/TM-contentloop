@@ -12,14 +12,41 @@ const PLAT_META: Record<DraftTarget, { fallbackName: string; accent: string }> =
 }
 const IG_CAPTION_LIMIT = 125   // IG folds the caption after ~125 chars with "…more"
 
-function Media({ url, kind, crop }: { url: string; kind: 'image' | 'video'; crop?: '4/5' | '1/1' }) {
-  if (!url) return <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-4xl text-gray-300">🖼️</div>
-  if (kind === 'video') return <video src={url} controls className="w-full rounded-lg" style={crop ? { aspectRatio: crop.replace('/', ' / '), objectFit: 'cover' } : { maxHeight: 280 }} />
-  // IG crops feed media (object-cover into 4:5 or 1:1); FB/Threads letterbox (contain).
+type MediaItem = { url: string; kind: 'image' | 'video' }
+
+function One({ url, kind, crop }: { url: string; kind: 'image' | 'video'; crop?: '4/5' | '1/1' }) {
+  // Cap height so a wide preview panel doesn't blow media up. Cropped (IG) keeps
+  // its aspect but is bounded; uncropped letterboxes (contain).
+  const style: React.CSSProperties = crop
+    ? { aspectRatio: crop.replace('/', ' / '), objectFit: 'cover', maxHeight: 340, width: '100%' }
+    : { maxHeight: 280, width: '100%', objectFit: 'contain', background: '#fff' }
+  if (kind === 'video') return <video src={url} controls className="rounded-lg" style={style} />
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="w-full rounded-lg"
-      style={crop ? { aspectRatio: crop.replace('/', ' / '), objectFit: 'cover' } : { maxHeight: 280, objectFit: 'contain', background: '#fff' }} />
+    <img src={url} alt="" className="rounded-lg" style={style} />
+  )
+}
+
+// Renders a single item or a swipeable carousel strip (2–10). Empty → placeholder.
+// Carousel slides are uniform squares (object-cover) so mixed orientations read
+// as a tidy filmstrip — approximating Threads' one-at-a-time swipe.
+function Media({ items, crop }: { items: MediaItem[]; crop?: '4/5' | '1/1' }) {
+  if (items.length === 0) return <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-4xl text-gray-300">🖼️</div>
+  if (items.length === 1) return <One url={items[0].url} kind={items[0].kind} crop={crop} />
+  return (
+    <div className="relative">
+      <div className="flex snap-x gap-2 overflow-x-auto pb-1">
+        {items.map((m, i) => (
+          <div key={i} className="h-44 w-44 flex-shrink-0 snap-center overflow-hidden rounded-lg bg-gray-50">
+            {m.kind === 'video'
+              ? <video src={m.url} controls className="h-full w-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element
+              : <img src={m.url} alt="" className="h-full w-full object-cover" />}
+          </div>
+        ))}
+      </div>
+      <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">1/{items.length} ▸</span>
+    </div>
   )
 }
 
@@ -34,11 +61,10 @@ function Avatar({ accent, url }: { accent: string; url?: string }) {
 
 // Platform-accurate preview: real page name/avatar, platform-specific caption
 // truncation ("查看更多"/"…更多"), IG media crop, and the Threads reply-chain split.
-export function PostPreview({ platform, body, mediaUrl, mediaKind, hashtags, showMedia, pageName, pageAvatar }: {
+export function PostPreview({ platform, body, mediaItems, hashtags, showMedia, pageName, pageAvatar }: {
   platform: DraftTarget
   body: string
-  mediaUrl: string
-  mediaKind: 'image' | 'video'
+  mediaItems: MediaItem[]
   hashtags?: string[]
   showMedia: boolean
   pageName?: string
@@ -74,7 +100,7 @@ export function PostPreview({ platform, body, mediaUrl, mediaKind, hashtags, sho
                   : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{L(`留言 ${i}`, `Reply ${i}`)}</span>}
               </div>
               {seg ? <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">{seg}</p> : <p className="mt-1 text-sm text-gray-400">{L('文案預覽…', 'Caption preview…')}</p>}
-              {i === 0 && showMedia && <div className="mt-2"><Media url={mediaUrl} kind={mediaKind} /></div>}
+              {i === 0 && showMedia && <div className="mt-2"><Media items={mediaItems} /></div>}
             </div>
           </div>
         ))}
@@ -92,7 +118,7 @@ export function PostPreview({ platform, body, mediaUrl, mediaKind, hashtags, sho
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-3">
         <div className="mb-2 flex items-center gap-2"><Avatar accent={m.accent} url={pageAvatar} /><span className="text-xs font-bold text-gray-800">{name}</span></div>
-        {showMedia && <div className="mb-2"><Media url={mediaUrl} kind={mediaKind} crop="4/5" /></div>}
+        {showMedia && <div className="mb-2"><Media items={mediaItems} crop="4/5" /></div>}
         {body
           ? <p className="whitespace-pre-wrap text-sm text-gray-800">{shown}{long && !expanded && '… '}{long && <More label={L('更多', 'more')} />}</p>
           : <p className="text-sm text-gray-400">{L('文案預覽…', 'Caption preview…')}</p>}
@@ -113,7 +139,7 @@ export function PostPreview({ platform, body, mediaUrl, mediaKind, hashtags, sho
         : <p className="mb-2 text-sm text-gray-400">{L('文案預覽…', 'Caption preview…')}</p>}
       {body && (body.length > 120 || body.split('\n').length > 3) && <p className="mb-2 text-sm"><More label={L('查看更多', 'See more')} /></p>}
       {tagLine && <p className="mb-2 text-xs text-blue-600">{tagLine}</p>}
-      {showMedia && <Media url={mediaUrl} kind={mediaKind} />}
+      {showMedia && <Media items={mediaItems} />}
     </div>
   )
 }

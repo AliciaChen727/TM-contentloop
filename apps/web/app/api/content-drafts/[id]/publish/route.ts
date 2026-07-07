@@ -55,7 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const text = draft.generated.perPlatform.th?.body ?? ''
   const r = await publishThreads(tok.accessToken, {
-    text, mediaUrl: draft.generated.mediaUrl, mediaType: draft.mediaType, topicTag: draft.generated.threadsTopicTag,
+    text, mediaUrl: draft.generated.mediaUrl, mediaUrls: draft.generated.mediaUrls,
+    mediaType: draft.mediaType, topicTag: draft.generated.threadsTopicTag,
   })
 
   if (!r.ok) {

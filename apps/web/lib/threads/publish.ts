@@ -56,8 +56,33 @@ async function createAndPublish(
 export interface ThreadsPublishInput {
   text: string
   mediaUrl?: string
+  mediaUrls?: string[]   // carousel (2–10 items); each item may be image or video
   mediaType: MediaType
   topicTag?: string      // Threads topic_tag (single, no # needed)
+}
+
+const isVideoUrl = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
+
+// Build a CAROUSEL container: one child container per item → the carousel parent.
+// Returns the carousel creation id (unpublished) or an error.
+async function createCarouselContainer(
+  token: string, urls: string[], text: string, topicTag?: string,
+): Promise<{ id?: string; error?: string }> {
+  const children: string[] = []
+  for (const url of urls) {
+    const isVid = isVideoUrl(url)
+    const child = await post('me/threads', {
+      access_token: token, is_carousel_item: 'true',
+      media_type: isVid ? 'VIDEO' : 'IMAGE', ...(isVid ? { video_url: url } : { image_url: url }),
+    })
+    if (child.error || !child.id) return { error: child.error ?? 'carousel child failed' }
+    if (isVid) { const ready = await waitReady(token, child.id); if (!ready.ok) return { error: ready.error } }
+    children.push(child.id)
+  }
+  return post('me/threads', {
+    access_token: token, media_type: 'CAROUSEL', children: children.join(','), text,
+    ...(topicTag?.trim() ? { topic_tag: topicTag.trim() } : {}),
+  })
 }
 
 async function fetchPermalink(token: string, mediaId: string): Promise<string | undefined> {
@@ -76,21 +101,32 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 export async function publishThreads(
   token: string, input: ThreadsPublishInput,
 ): Promise<{ ok: true; rootId: string; permalink?: string; ids: string[] } | { ok: false; error: string }> {
+  const carouselUrls = (input.mediaUrls ?? []).filter(Boolean)
+  const isCarousel = input.mediaType === 'carousel' && carouselUrls.length >= 2
   const hasMedia = !!input.mediaUrl
   const tmt = toThreadsMediaType(input.mediaType, hasMedia)
   const isVideo = tmt === 'VIDEO'
   const segments = splitForThreads(input.text)
   const parts = segments.length ? segments : ['']
 
-  // Root post — carries the media (if any) + optional topic tag.
-  const rootParams: Record<string, string> = { media_type: tmt, text: parts[0] }
-  if (input.topicTag?.trim()) rootParams.topic_tag = input.topicTag.trim()
-  if (hasMedia && tmt === 'IMAGE') rootParams.image_url = input.mediaUrl!
-  if (hasMedia && tmt === 'VIDEO') rootParams.video_url = input.mediaUrl!
-  const root = await createAndPublish(token, rootParams, isVideo)
-  if (root.error || !root.id) return { ok: false, error: root.error ?? 'publish failed' }
+  // Root post: a CAROUSEL (2–10 items) or a single TEXT/IMAGE/VIDEO container.
+  let rootId: string
+  if (isCarousel) {
+    const carousel = await createCarouselContainer(token, carouselUrls, parts[0], input.topicTag)
+    if (carousel.error || !carousel.id) return { ok: false, error: carousel.error ?? 'carousel build failed' }
+    const pub = await post('me/threads_publish', { creation_id: carousel.id, access_token: token })
+    if (pub.error || !pub.id) return { ok: false, error: pub.error ?? 'carousel publish failed' }
+    rootId = pub.id
+  } else {
+    const rootParams: Record<string, string> = { media_type: tmt, text: parts[0] }
+    if (input.topicTag?.trim()) rootParams.topic_tag = input.topicTag.trim()
+    if (hasMedia && tmt === 'IMAGE') rootParams.image_url = input.mediaUrl!
+    if (hasMedia && tmt === 'VIDEO') rootParams.video_url = input.mediaUrl!
+    const root = await createAndPublish(token, rootParams, isVideo)
+    if (root.error || !root.id) return { ok: false, error: root.error ?? 'publish failed' }
+    rootId = root.id
+  }
 
-  const rootId = root.id
   const ids = [rootId]
   // Remaining segments → text replies chained to the previous post. The just-
   // published post needs a moment to be replyable; small delay + one retry.

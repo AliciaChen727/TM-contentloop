@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
       await transitionDraft(pageId, draft.id, 'publishing', 'cron')          // guard against re-pick
       const text = draft.generated.perPlatform.th?.body ?? ''
-      const r = await publishThreads(tok.accessToken, { text, mediaUrl: draft.generated.mediaUrl, mediaType: draft.mediaType, topicTag: draft.generated.threadsTopicTag })
+      const r = await publishThreads(tok.accessToken, { text, mediaUrl: draft.generated.mediaUrl, mediaUrls: draft.generated.mediaUrls, mediaType: draft.mediaType, topicTag: draft.generated.threadsTopicTag })
       if (r.ok) {
         await recordPublishOutcome(pageId, draft.id, 'th', { postId: r.rootId, permalink: r.permalink })
         await writeAudit(pageId, draft.id, 'publish:th:scheduled', 'cron', { postId: r.rootId })

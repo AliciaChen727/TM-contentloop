@@ -31,7 +31,8 @@ export interface DraftRecommendation {
 
 export interface GeneratedContent {
   prompt?: string                                   // 生成 prompt（可追溯）
-  mediaUrl?: string                                 // 主素材（圖/影片，影片/Reels 用 9:16）
+  mediaUrl?: string                                 // 主素材（單圖/影片；= mediaUrls[0] 向後相容）
+  mediaUrls?: string[]                              // 輪播多圖/影片（≤10；carousel 用）
   aspectRatio?: string
   perPlatform: Partial<Record<DraftTarget, PerPlatformContent>>
   recommendation?: DraftRecommendation
