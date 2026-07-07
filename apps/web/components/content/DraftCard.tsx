@@ -61,8 +61,10 @@ export function DraftCard({ draft, onTransition, onEdit, busy }: {
       </div>
 
       {draft.generated.mediaUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={draft.generated.mediaUrl} alt="" className="mb-3 max-h-64 w-full rounded-lg object-contain" style={{ background: '#F9FAFB' }} />
+        (draft.mediaType === 'video' || draft.mediaType === 'reels' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(draft.generated.mediaUrl))
+          ? <video src={draft.generated.mediaUrl} controls className="mb-3 max-h-64 w-full rounded-lg" style={{ background: '#F9FAFB' }} />
+          // eslint-disable-next-line @next/next/no-img-element
+          : <img src={draft.generated.mediaUrl} alt="" className="mb-3 max-h-64 w-full rounded-lg object-contain" style={{ background: '#F9FAFB' }} />
       )}
 
       <div className="space-y-2">

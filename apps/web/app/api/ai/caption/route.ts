@@ -30,8 +30,9 @@ export async function POST(req: NextRequest) {
   try { uid = (await adminAuth.verifyIdToken(idToken)).uid }
   catch { return NextResponse.json({ error: 'Invalid token' }, { status: 401 }) }
 
-  const { pageId, targets, mediaType, seed, lang, settings, useHistory } = (await req.json().catch(() => ({}))) as {
+  const { pageId, targets, mediaType, seed, lang, settings, useHistory, perPlatform } = (await req.json().catch(() => ({}))) as {
     pageId?: string; targets?: string[]; mediaType?: string; seed?: string; lang?: string; useHistory?: boolean
+    perPlatform?: boolean
     settings?: { tone?: string; goal?: string; cta?: string; language?: string; info?: Record<string, string> }
   }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
@@ -66,7 +67,8 @@ export async function POST(req: NextRequest) {
     wantsThreads ? (en ? 'Keep it tight; if it must run long it will be split into a Threads reply chain.' : '盡量精簡；若必要可較長（Threads 會自動切成回覆串）。') : '',
     settings?.tone ? (en ? `Match this tone: ${settings.tone}.` : `語氣須符合：${settings.tone}。`) : (en ? 'Warm, encouraging voice.' : '語氣溫暖鼓勵。'),
     settings?.goal ? (en ? `Optimize the copy for this goal: ${settings.goal}.` : `文案要服務這個目標：${settings.goal}。`) : '',
-    settings?.cta ? (en ? `End with a CTA consistent with the goal: "${settings.cta}".` : `結尾用與目標一致的 CTA：「${settings.cta}」。`) : (en ? 'End with a light CTA.' : '結尾給輕量行動呼籲。'),
+    settings?.cta ? (en ? `End with a call-to-action. Use "${settings.cta}" only as a direction/reference for the desired action — write your own natural, on-tone CTA sentence in English; do NOT paste it verbatim.` : `結尾要有行動呼籲（CTA）。「${settings.cta}」只是「希望使用者採取的行動方向」參考——請自行寫出自然、符合語氣的呼籲句，不要原封不動照抄這幾個字。`) : (en ? 'End with a light CTA.' : '結尾給輕量行動呼籲。'),
+    en ? 'The ENTIRE output — including the CTA — must be in English.' : '整篇（含 CTA）必須是繁體中文。',
     infoLines.length ? (en ? 'Weave in every provided fact accurately; do NOT invent unstated details.' : '準確帶入每一項必要資訊；未提供的細節絕不捏造。') : '',
     en ? 'Concrete, not salesy. Inviting hook first.' : '具體不推銷，開頭吸睛。',
     en ? 'Output ONLY the caption text — no quotes, no explanations, no markdown.' : '只輸出貼文文案本身——不要引號、不要說明、不要 markdown。',
@@ -85,8 +87,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Per-platform mode: one tailored caption each, honoring platform character.
+  const wantPer = perPlatform === true && Array.isArray(targets) && targets.filter(t => ['fb', 'ig', 'th'].includes(t)).length > 1
+  const PLAT_GUIDE: Record<string, string> = {
+    fb: 'fb（Facebook）：可較完整、溫暖敘事，鼓勵留言互動；適度分段。',
+    ig: 'ig（Instagram）：視覺優先、精煉有節奏、可用 emoji；不要在文案裡塞 hashtag（另欄位處理）。',
+    th: 'th（Threads）：口語、精簡、對話感；盡量單則講完（過長會自動切成回覆串）。',
+  }
+
   try {
     const anthropic = new Anthropic({ apiKey: anthropicKey })
+    if (wantPer) {
+      const plats = targets!.filter(t => ['fb', 'ig', 'th'].includes(t))
+      const guide = plats.map(p => `- ${PLAT_GUIDE[p]}`).join('\n')
+      const shape = `{${plats.map(p => `"${p}": "該平台文案"`).join(', ')}}`
+      const msg = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1400,
+        messages: [{
+          role: 'user',
+          content: `為以下粉專針對「不同平台各自」生成社群貼文文案（同一主題，但依平台屬性調整寫法/長度/語氣）。\n\n${ctx}\n\n各平台屬性：\n${guide}\n\n共同規則：\n${rules}${seedLine}${historyBlock}\n\n只輸出 JSON（不要說明、不要 markdown 圍欄），格式：\n${shape}`,
+        }],
+      })
+      const raw = msg.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('')
+      const s = raw.indexOf('{'), e = raw.lastIndexOf('}')
+      let captions: Record<string, string> = {}
+      if (s !== -1 && e > s) { try { captions = JSON.parse(raw.slice(s, e + 1)) } catch { /* fall through */ } }
+      const clean: Record<string, string> = {}
+      for (const p of plats) if (captions[p] && String(captions[p]).trim()) clean[p] = String(captions[p]).trim()
+      if (Object.keys(clean).length === 0) return NextResponse.json({ error: en ? 'Generation failed, please retry' : '生成失敗，請再試一次' }, { status: 500 })
+      return NextResponse.json({ captions: clean })
+    }
+
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 700,

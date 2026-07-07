@@ -27,7 +27,9 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
   const { L } = useLang()
   const [targets, setTargets] = useState<DraftTarget[]>(['fb'])
   const [mediaType, setMediaType] = useState<MediaType>('text')
-  const [body, setBody] = useState('')
+  const [body, setBody] = useState('')                       // shared caption
+  const [tailored, setTailored] = useState(false)            // per-platform copy?
+  const [perBody, setPerBody] = useState<Record<string, string>>({})  // caption per platform
   const [hashtags, setHashtags] = useState('')
   const [mediaUrl, setMediaUrl] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')     // local objectURL for instant preview
@@ -38,19 +40,25 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
   const [previewPlat, setPreviewPlat] = useState<DraftTarget>('fb')
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Effective caption for a platform: tailored → its own body; else the shared one.
+  const eff = (t: DraftTarget) => (tailored ? (perBody[t] ?? '') : body)
+  // Preview tab must be one of the selected targets.
+  const activePreview: DraftTarget = targets.includes(previewPlat) ? previewPlat : (targets[0] ?? 'fb')
+  const editBody = tailored ? (perBody[activePreview] ?? '') : body
+  const setEditBody = (v: string) => tailored ? setPerBody(p => ({ ...p, [activePreview]: v })) : setBody(v)
+
   // Hashtags apply to ALL selected platforms (not just IG); Threads counts them
   // toward its 500-char limit, so include them when computing the split.
   const tags = hashtags.split(/[\s,]+/).map(s => s.replace(/^#/, '')).filter(Boolean).slice(0, 30)
   const tagLine = tags.map(h => `#${h}`).join(' ')
-  const bodyWithTags = tagLine ? `${body}\n\n${tagLine}` : body
+  const withTags = (b: string) => tagLine ? `${b}\n\n${tagLine}` : b
   // Threads no longer blocks on 500 — overflow auto-splits into a reply chain.
-  const thSegs = targets.includes('th') ? splitForThreads(bodyWithTags) : []
+  const thSegs = targets.includes('th') ? splitForThreads(withTags(eff('th'))) : []
   const thWillSplit = thSegs.length > 1
   const needsMedia = mediaType !== 'text'
   const uploading = uploadPct !== null && uploadPct < 100
-  const canSubmit = targets.length > 0 && body.trim().length > 0 && !uploading && (!needsMedia || mediaUrl.trim().length > 0)
-  // Preview tab must be one of the selected targets.
-  const activePreview: DraftTarget = targets.includes(previewPlat) ? previewPlat : (targets[0] ?? 'fb')
+  const bodiesReady = tailored ? targets.every(t => (perBody[t] ?? '').trim().length > 0) : body.trim().length > 0
+  const canSubmit = targets.length > 0 && bodiesReady && !uploading && (!needsMedia || mediaUrl.trim().length > 0)
 
   function toggle(t: DraftTarget) {
     setTargets(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
@@ -78,8 +86,8 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
       // Hashtags go to every platform now. Threads keeps them inline in the body
       // (so the reply-chain split counts them); FB/IG carry them as a field.
       perPlatform[t] = t === 'th'
-        ? { body: bodyWithTags }
-        : { body, ...(tags.length ? { hashtags: tags } : {}), ...(needsMedia ? { mediaUrl } : {}) }
+        ? { body: withTags(eff('th')) }
+        : { body: eff(t), ...(tags.length ? { hashtags: tags } : {}), ...(needsMedia ? { mediaUrl } : {}) }
       if (t !== 'th' && needsMedia) perPlatform[t]!.mediaUrl = mediaUrl
     }
     onCreate({ target: targets, mediaType, generated: { perPlatform, ...(needsMedia ? { mediaUrl } : {}) } })
@@ -132,16 +140,20 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
             )}
 
             <div className="mb-1 flex items-center justify-between">
-              <label className="text-sm font-semibold text-gray-700">{L('文案', 'Caption')}</label>
+              <label className="text-sm font-semibold text-gray-700">
+                {L('文案', 'Caption')}
+                {tailored && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-bold text-purple-700">{PLAT_TAB[activePreview]}</span>}
+              </label>
               <div className="flex items-center gap-2">
-                {targets.includes('th') && <span className={`text-xs font-semibold ${thWillSplit ? 'text-purple-600' : 'text-gray-400'}`}>Threads {body.length}/{TH_LIMIT}</span>}
+                {targets.includes('th') && <span className={`text-xs font-semibold ${thWillSplit ? 'text-purple-600' : 'text-gray-400'}`}>Threads {eff('th').length}/{TH_LIMIT}</span>}
                 <button onClick={() => setShowAiSettings(true)}
                   className="rounded-md bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">
                   {`✨ ${L('AI 生成文案', 'AI caption')}`}
                 </button>
               </div>
             </div>
-            <textarea value={body} onChange={e => setBody(e.target.value)} rows={5}
+            {tailored && <p className="mb-1 text-xs text-gray-400">{L('各平台文案不同，用右上預覽切換平台來編輯。', 'Per-platform copy — switch platform via the preview tabs to edit each.')}</p>}
+            <textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={5}
               placeholder={L('輸入貼文文案，或按「AI 生成文案」…', 'Write a caption, or use "AI caption"…')}
               className="w-full resize-y rounded-lg border border-gray-200 p-3 text-sm text-gray-800" />
             {thWillSplit && <p className="mt-1 text-xs text-purple-600">🧵 {L(`Threads 超過 500 字，將自動切成 ${thSegs.length} 則（1 主貼 + ${thSegs.length - 1} 則留言）。`, `Over 500 chars — Threads auto-splits into ${thSegs.length} (1 main + ${thSegs.length - 1} replies).`)}</p>}
@@ -170,7 +182,7 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
             </div>
             {targets.length === 0
               ? <div className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">{L('請先選發布平台', 'Select a platform')}</div>
-              : <PostPreview platform={activePreview} body={body} mediaUrl={previewUrl || mediaUrl} mediaKind={previewKind} hashtags={hashtags.split(/[\s,]+/).map(s => s.replace(/^#/, '')).filter(Boolean)} showMedia={!!showMedia} />}
+              : <PostPreview platform={activePreview} body={eff(activePreview)} mediaUrl={previewUrl || mediaUrl} mediaKind={previewKind} hashtags={tags} showMedia={!!showMedia} />}
           </div>
         </div>
 
@@ -185,8 +197,12 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
 
       {showAiSettings && (
         <CaptionSettings
-          pageId={pageId} idToken={idToken} targets={targets} mediaType={mediaType} seed={body}
-          onGenerated={c => { setBody(c); setShowAiSettings(false) }}
+          pageId={pageId} idToken={idToken} targets={targets} mediaType={mediaType} seed={tailored ? (perBody[activePreview] ?? '') : body}
+          onGenerated={r => {
+            if (r.perPlatform) { setTailored(true); setPerBody(p => ({ ...p, ...r.perPlatform })) }
+            else { setTailored(false); setBody(r.shared ?? '') }
+            setShowAiSettings(false)
+          }}
           onClose={() => setShowAiSettings(false)}
         />
       )}
