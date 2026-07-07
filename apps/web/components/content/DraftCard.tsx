@@ -39,11 +39,10 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent) => void
-  onPublish: (id: string, platform: DraftTarget) => void
   onPublishAll: (id: string) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
@@ -54,7 +53,6 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
 }) {
   const { L } = useLang()
   const [schedAt, setSchedAt] = useState('')
-  const thOnly = draft.target.length === 1 && draft.target[0] === 'th'
   const fmtTime = (ms?: number) => ms ? new Date(ms).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
   const [editing, setEditing] = useState(false)
   const [bodies, setBodies] = useState<Record<string, string>>(
@@ -189,8 +187,8 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
         </>)}
         {/* Duplicate — the way to re-post a published draft (a new editable draft). */}
         {locked && <button disabled={busy} onClick={() => onDuplicate(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">📄 {L('複製為新草稿', 'Duplicate')}</button>}
-        {/* Schedule (S5a) — Threads-only approved drafts can auto-publish later. */}
-        {draft.status === 'approved' && !locked && thOnly && !draft.publishResults?.th?.postId && (
+        {/* Schedule (S5) — any approved draft can auto-publish later (all platforms). */}
+        {draft.status === 'approved' && !locked && (
           <span className="flex items-center gap-1">
             <input type="datetime-local" value={schedAt} onChange={e => setSchedAt(e.target.value)}
               className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700" />
@@ -200,7 +198,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
         )}
         {draft.status === 'scheduled' && (<>
           <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">⏰ {L('已排程', 'Scheduled')}：{fmtTime(draft.schedule?.at)}</span>
-          <button disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishingPlatform ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('立即發布', 'Publish now')}`}</button>
+          <button disabled={busy} onClick={() => onPublishAll(draft.id)} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishingPlatform ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('立即發布', 'Publish now')}`}</button>
           <button disabled={busy} onClick={() => onUnschedule(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✕ {L('取消排程', 'Cancel')}</button>
         </>)}
         {(draft.status === 'rejected' || draft.status === 'expired' || draft.status === 'failed') && (

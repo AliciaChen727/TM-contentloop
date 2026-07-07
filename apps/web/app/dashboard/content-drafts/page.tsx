@@ -127,23 +127,6 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false) }
   }, [idToken, selectedPageId, load, L])
 
-  const publish = useCallback(async (id: string, platform: DraftTarget) => {
-    const label = platform === 'th' ? 'Threads' : platform
-    if (!window.confirm(L(`確定要立即發布到 ${label}？這會真的貼出貼文。`, `Publish to ${label} now? This posts for real.`))) return
-    setBusy(true); setPublishing({ id, platform }); setError('')
-    try {
-      const res = await fetch(`/api/content-drafts/${id}/publish`, {
-        method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: selectedPageId, platform }),
-      })
-      const d = await res.json().catch(() => ({}))
-      if (!res.ok) { setError(d.error ?? L('發布失敗', 'Publish failed')) }
-      await load(idToken, selectedPageId)
-    } catch {
-      setError(L('發布失敗或逾時（含多支影片的輪播較慢，請稍候重試）。若主貼已發出，請到平台檢查。', 'Publish failed or timed out.'))
-    } finally { setBusy(false); setPublishing(null) }
-  }, [idToken, selectedPageId, load, L])
-
   // One-click publish: sequentially publish every not-yet-published target platform.
   const publishAll = useCallback(async (id: string) => {
     const draft = drafts.find(d => d.id === id)
@@ -262,7 +245,7 @@ export default function ContentDraftsPage() {
                 <DraftCard key={d.id} draft={d} busy={busy} publishingPlatform={publishing?.id === d.id ? publishing.platform : null}
                   onTransition={(id, status) => patch(id, { status })}
                   onEdit={(id, generated) => patch(id, { generated })}
-                  onPublish={publish} onPublishAll={publishAll} onDuplicate={duplicate} onDelete={remove}
+                  onPublishAll={publishAll} onDuplicate={duplicate} onDelete={remove}
                   onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
                   onUnschedule={(id) => patch(id, { unschedule: true })} />
               ))}

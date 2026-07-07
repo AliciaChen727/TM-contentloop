@@ -1,0 +1,90 @@
+// Shared publish runner (Agent 自動發布). One place that actually publishes a
+// draft to ONE platform (th/fb/ig) + optional Story, records the outcome, and
+// audits — used by both the manual publish route and the scheduled cron so the
+// FB/IG/Story logic isn't duplicated. Auth/idempotency stay in the callers.
+
+import { adminDb } from '@/lib/firebase/admin'
+import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
+import { getThreadsToken } from '@/lib/threads/client'
+import { publishThreads } from '@/lib/threads/publish'
+import { publishToFacebook, publishFbStory } from '@/lib/meta/publishFb'
+import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
+import { recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
+import type { ContentDraft, DraftTarget } from '@/lib/content/draftTypes'
+
+async function getMetaCreds(pageId: string): Promise<{ accessToken?: string; igUserId?: string }> {
+  const owner = await resolvePageOwnerUid(pageId)
+  if (!owner) return {}
+  const d = await adminDb.collection('users').doc(owner).collection('metaTokens').doc(pageId).get()
+  const data = d.data() as { accessToken?: string; igUserId?: string } | undefined
+  return { accessToken: data?.accessToken, igUserId: data?.igUserId }
+}
+
+function composeText(pp?: { body?: string; hashtags?: string[] }): string {
+  const body = pp?.body ?? ''
+  const tags = (pp?.hashtags ?? []).filter(Boolean)
+  return tags.length ? `${body}\n\n${tags.map(h => `#${h}`).join(' ')}` : body
+}
+
+export type PublishResult =
+  | { ok: true; postId: string; storyId?: string; storyNote?: string }
+  | { ok: false; error: string }
+
+// Publish `draft` to one platform (+ Story if opted in). Records the outcome +
+// audit. `byUid` is the actor (a uid, or 'cron'). Never throws — returns error.
+export async function runPublish(
+  pageId: string, draft: ContentDraft, platform: DraftTarget, byUid: string,
+): Promise<PublishResult> {
+  const g = draft.generated
+  const media = { mediaType: draft.mediaType, mediaUrl: g.mediaUrl, mediaUrls: g.mediaUrls }
+  try {
+    let result: { ok: true; postId: string; permalink?: string } | { ok: false; error: string }
+    let storyId: string | undefined
+    let storyNote: string | undefined
+
+    if (platform === 'th') {
+      const owner = await resolvePageOwnerUid(pageId)
+      const tok = (await getThreadsToken(byUid, pageId)) ?? (owner ? await getThreadsToken(owner, pageId) : null)
+      if (!tok) return { ok: false, error: 'Threads 未連接或未授權發布' }
+      const r = await publishThreads(tok.accessToken, { text: g.perPlatform.th?.body ?? '', ...media, topicTag: g.threadsTopicTag })
+      result = r.ok ? { ok: true, postId: r.rootId, permalink: r.permalink } : r
+    } else {
+      const creds = await getMetaCreds(pageId)
+      if (!creds.accessToken) return { ok: false, error: '找不到粉專存取權杖，請重新連接粉專授權' }
+      const text = composeText(g.perPlatform[platform])
+      if (platform === 'fb') {
+        result = await publishToFacebook(pageId, creds.accessToken, { text, ...media })
+      } else {
+        if (!creds.igUserId) return { ok: false, error: '此粉專未連動 IG 商業帳號' }
+        result = await publishToInstagram(creds.igUserId, creds.accessToken, { text, ...media })
+      }
+      // Story (opt-in) — fully isolated: a Story failure never fails the post.
+      if (result.ok && g.alsoStory) {
+        const storyMedia = g.mediaUrl ?? g.mediaUrls?.[0]
+        if (storyMedia) {
+          try {
+            const s = platform === 'fb'
+              ? await publishFbStory(pageId, creds.accessToken, storyMedia)
+              : await publishIgStory(creds.igUserId!, creds.accessToken, storyMedia)
+            if (s.ok) storyId = s.postId
+            else storyNote = `限動發布失敗：${s.error}`
+          } catch (e) { storyNote = `限動發布失敗：${e instanceof Error ? e.message : 'error'}` }
+        }
+      }
+    }
+
+    if (!result.ok) {
+      await recordPublishOutcome(pageId, draft.id, platform, { error: result.error })
+      await writeAudit(pageId, draft.id, `publish:${platform}:failed`, byUid, { error: result.error })
+      return { ok: false, error: result.error }
+    }
+    await recordPublishOutcome(pageId, draft.id, platform, { postId: result.postId, permalink: result.permalink, storyId })
+    await writeAudit(pageId, draft.id, `publish:${platform}`, byUid, { postId: result.postId, storyId })
+    return { ok: true, postId: result.postId, storyId, storyNote }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unexpected publish error'
+    await recordPublishOutcome(pageId, draft.id, platform, { error: msg }).catch(() => {})
+    await writeAudit(pageId, draft.id, `publish:${platform}:error`, byUid, { error: msg }).catch(() => {})
+    return { ok: false, error: msg }
+  }
+}

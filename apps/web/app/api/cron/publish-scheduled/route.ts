@@ -1,9 +1,9 @@
 /**
- * Scheduled-publish cron (Agent 自動發布 S5a). Finds due `scheduled` drafts and
- * auto-publishes them to Threads (S5a scope = Threads-only drafts). Respects the
- * per-page Kill Switch and quiet hours. Triggered by GitHub Actions with
- * Authorization: Bearer CRON_SECRET. Fallback/fail-safe: failures mark the draft
- * `failed` (never silent, never loops); FB/IG scheduling waits for S4b.
+ * Scheduled-publish cron (Agent 自動發布 S5). Finds due `scheduled` drafts and
+ * auto-publishes them to ALL target platforms (Threads / FB / IG) via the shared
+ * runPublish. Respects the per-page Kill Switch and quiet hours. Triggered by
+ * GitHub Actions with Authorization: Bearer CRON_SECRET. Fail-safe: a draft that
+ * doesn't fully publish is marked `failed` (never silent, never loops).
  */
 
 export const dynamic = 'force-dynamic'
@@ -11,10 +11,8 @@ export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
-import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
-import { getThreadsToken } from '@/lib/threads/client'
-import { publishThreads } from '@/lib/threads/publish'
-import { listByStatus, recordPublishOutcome, transitionDraft, writeAudit } from '@/lib/content/draftStore'
+import { listByStatus, getDraft, transitionDraft } from '@/lib/content/draftStore'
+import { runPublish } from '@/lib/content/publishRunner'
 import { getAutomationSettings, inQuietHours } from '@/lib/content/automationStore'
 
 export async function POST(req: NextRequest) {
@@ -25,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   const now = Date.now()
   const pageRefs = await adminDb.collection('pages').listDocuments()
-  const summary = { pages: 0, published: 0, failed: 0, skipped: 0, deferred: 0 }
+  const summary = { pages: 0, published: 0, partial: 0, failed: 0, skipped: 0, deferred: 0 }
 
   for (const pageRef of pageRefs) {
     const pageId = pageRef.id
@@ -38,32 +36,20 @@ export async function POST(req: NextRequest) {
     if (due.length === 0) continue
     summary.pages++
 
-    const ownerUid = await resolvePageOwnerUid(pageId)
-    const tok = ownerUid ? await getThreadsToken(ownerUid, pageId) : null
-
     for (const draft of due) {
-      // S5a: Threads-only drafts. Multi-platform scheduling waits for S4b.
-      if (!(draft.target.length === 1 && draft.target[0] === 'th')) { summary.skipped++; continue }
-      if (draft.publishResults?.th?.postId) { summary.skipped++; continue }   // already out
-      if (!tok) {
-        await recordPublishOutcome(pageId, draft.id, 'th', { error: 'Threads 未連接或未授權發布' })
-        await transitionDraft(pageId, draft.id, 'failed', 'cron')
-        summary.failed++; continue
+      await transitionDraft(pageId, draft.id, 'publishing', 'cron')   // guard against re-pick
+      // Publish every not-yet-published target platform.
+      const todo = draft.target.filter(t => !draft.publishResults?.[t]?.postId)
+      let anyFail = false
+      for (const platform of todo) {
+        const r = await runPublish(pageId, draft, platform, 'cron')     // records + audits inside
+        if (!r.ok) anyFail = true
       }
-
-      await transitionDraft(pageId, draft.id, 'publishing', 'cron')          // guard against re-pick
-      const text = draft.generated.perPlatform.th?.body ?? ''
-      const r = await publishThreads(tok.accessToken, { text, mediaUrl: draft.generated.mediaUrl, mediaUrls: draft.generated.mediaUrls, mediaType: draft.mediaType, topicTag: draft.generated.threadsTopicTag })
-      if (r.ok) {
-        await recordPublishOutcome(pageId, draft.id, 'th', { postId: r.rootId, permalink: r.permalink })
-        await writeAudit(pageId, draft.id, 'publish:th:scheduled', 'cron', { postId: r.rootId })
-        summary.published++
-      } else {
-        await recordPublishOutcome(pageId, draft.id, 'th', { error: r.error })
-        await transitionDraft(pageId, draft.id, 'failed', 'cron')
-        await writeAudit(pageId, draft.id, 'publish:th:scheduled:failed', 'cron', { error: r.error })
-        summary.failed++
-      }
+      // recordPublishOutcome flips status→published when ALL platforms succeed.
+      // If not, move out of `publishing` so it isn't re-picked; mark failed.
+      const after = await getDraft(pageId, draft.id)
+      if (after?.status === 'published') summary.published++
+      else { await transitionDraft(pageId, draft.id, 'failed', 'cron'); if (anyFail) summary.failed++; else summary.partial++ }
     }
   }
 
