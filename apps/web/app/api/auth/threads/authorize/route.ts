@@ -6,8 +6,9 @@ import crypto from 'crypto'
 import { THREADS_APP_ID } from '@/lib/threads/client'
 
 // threads_manage_insights: read post/account metrics.
-// threads_content_publish: publish posts/replies (S4a real publishing).
-const SCOPES = 'threads_basic,threads_manage_insights,threads_content_publish'
+// threads_content_publish: publish posts (S4a real publishing).
+// threads_manage_replies: publish REPLIES (the reply-chain for long posts).
+const SCOPES = 'threads_basic,threads_manage_insights,threads_content_publish,threads_manage_replies'
 
 export async function GET(req: NextRequest) {
   const idToken = req.nextUrl.searchParams.get('idToken')

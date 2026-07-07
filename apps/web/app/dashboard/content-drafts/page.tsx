@@ -27,6 +27,7 @@ export default function ContentDraftsPage() {
   const [tab, setTab] = useState<Tab>('draft')
   const [composing, setComposing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [publishingId, setPublishingId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -85,7 +86,7 @@ export default function ContentDraftsPage() {
   const publish = useCallback(async (id: string, platform: DraftTarget) => {
     const label = platform === 'th' ? 'Threads' : platform
     if (!window.confirm(L(`確定要立即發布到 ${label}？這會真的貼出貼文。`, `Publish to ${label} now? This posts for real.`))) return
-    setBusy(true)
+    setBusy(true); setPublishingId(id); setError('')
     try {
       const res = await fetch(`/api/content-drafts/${id}/publish`, {
         method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
@@ -94,7 +95,7 @@ export default function ContentDraftsPage() {
       const d = await res.json()
       if (!res.ok) { setError(d.error ?? L('發布失敗', 'Publish failed')) }
       await load(idToken, selectedPageId)
-    } finally { setBusy(false) }
+    } finally { setBusy(false); setPublishingId(null) }
   }, [idToken, selectedPageId, load, L])
 
   const remove = useCallback(async (id: string) => {
@@ -148,7 +149,7 @@ export default function ContentDraftsPage() {
           : (
             <div className="space-y-4">
               {shown.map(d => (
-                <DraftCard key={d.id} draft={d} busy={busy}
+                <DraftCard key={d.id} draft={d} busy={busy} publishing={publishingId === d.id}
                   onTransition={(id, status) => patch(id, { status })}
                   onEdit={(id, generated) => patch(id, { generated })}
                   onPublish={publish} onDelete={remove} />

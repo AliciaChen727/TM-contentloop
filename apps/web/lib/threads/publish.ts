@@ -67,10 +67,17 @@ async function fetchPermalink(token: string, mediaId: string): Promise<string | 
   } catch { return undefined }
 }
 
-// Publishes the (possibly multi-segment) post. Returns the root post id + all ids.
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// Publishes the (possibly multi-segment) post. On partial success (root live but
+// a reply failed) still returns rootId so the caller records it — never re-post
+// the root. `ok:false` with a rootId means "main post is live, replies partial".
 export async function publishThreads(
   token: string, input: ThreadsPublishInput,
-): Promise<{ ok: true; rootId: string; permalink?: string; ids: string[] } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; rootId: string; permalink?: string; ids: string[] }
+  | { ok: false; error: string; rootId?: string; permalink?: string; ids?: string[] }
+> {
   const hasMedia = !!input.mediaUrl
   const tmt = toThreadsMediaType(input.mediaType, hasMedia)
   const isVideo = tmt === 'VIDEO'
@@ -84,18 +91,21 @@ export async function publishThreads(
   const root = await createAndPublish(token, rootParams, isVideo)
   if (root.error || !root.id) return { ok: false, error: root.error ?? 'publish failed' }
 
-  const ids = [root.id]
-  // Remaining segments → text replies chained to the previous post.
-  let prev = root.id
+  const rootId = root.id
+  const permalink = await fetchPermalink(token, rootId)
+  const ids = [rootId]
+  // Remaining segments → text replies chained to the previous post. The just-
+  // published post needs a moment to be replyable; small delay + one retry.
+  let prev = rootId
   for (let i = 1; i < parts.length; i++) {
-    const reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false)
+    await sleep(1500)
+    let reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false)
+    if (reply.error || !reply.id) { await sleep(2500); reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false) }
     if (reply.error || !reply.id) {
-      // Partial success — root is live; report which replies made it.
-      return { ok: false, error: `已發主貼但留言串第 ${i} 則失敗：${reply.error ?? 'unknown'}` }
+      return { ok: false, error: `主貼已發布，但留言串第 ${i} 則失敗：${reply.error ?? 'unknown'}`, rootId, permalink, ids }
     }
     ids.push(reply.id)
     prev = reply.id
   }
-  const permalink = await fetchPermalink(token, root.id)
-  return { ok: true, rootId: root.id, permalink, ids }
+  return { ok: true, rootId, permalink, ids }
 }

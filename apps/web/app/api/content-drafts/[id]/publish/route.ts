@@ -57,9 +57,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const r = await publishThreads(tok.accessToken, { text, mediaUrl: draft.generated.mediaUrl, mediaType: draft.mediaType })
 
   if (!r.ok) {
-    await recordPublishOutcome(pageId, params.id, 'th', { error: r.error })
-    await writeAudit(pageId, params.id, 'publish:th:failed', uid, { error: r.error })
-    return NextResponse.json({ error: r.error }, { status: 502 })
+    // Partial: the main post IS live (r.rootId) but a reply failed. Record the
+    // rootId so we never re-post the main thread; surface the reply error.
+    await recordPublishOutcome(pageId, params.id, 'th', { postId: r.rootId, permalink: r.permalink, error: r.error })
+    await writeAudit(pageId, params.id, r.rootId ? 'publish:th:partial' : 'publish:th:failed', uid, { error: r.error, postId: r.rootId })
+    return NextResponse.json({ error: r.error, postId: r.rootId ?? null, partial: !!r.rootId }, { status: 502 })
   }
 
   const out = await recordPublishOutcome(pageId, params.id, 'th', { postId: r.rootId, permalink: r.permalink })

@@ -33,13 +33,14 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, busy }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, busy, publishing }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent) => void
   onPublish: (id: string, platform: DraftTarget) => void
   onDelete: (id: string) => void
   busy: boolean
+  publishing?: boolean
 }) {
   const { L } = useLang()
   const [editing, setEditing] = useState(false)
@@ -122,7 +123,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, bu
               return <a key={t} href={res.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
             }
             if (t === 'th') {
-              return <button key={t} disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">🚀 {L('發布到 Threads', 'Publish to Threads')}</button>
+              return <button key={t} disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishing ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('發布到 Threads', 'Publish to Threads')}`}</button>
             }
             return <span key={t} className="rounded-lg bg-gray-50 px-3 py-1.5 text-xs text-gray-400">{PLAT_LABEL[t]} {L('待 App Review', 'pending review')}</span>
           })}
