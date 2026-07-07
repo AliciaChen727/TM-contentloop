@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
@@ -91,6 +91,8 @@ export default function DashboardPage() {
   const [idToken, setIdToken] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [autoSyncing, setAutoSyncing] = useState(false)   // throttled background refresh
+  const rangeRef = useRef<{ since?: string; until?: string }>({})
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string, since?: string, until?: string) => {
     const headers = { Authorization: `Bearer ${idToken}` }
@@ -191,9 +193,37 @@ export default function DashboardPage() {
     let cancelled = false
     const since = days === 0 && dateMode === 'preset' ? undefined : dateBounds.start
     const until = days === 0 && dateMode === 'preset' ? undefined : dateBounds.end
+    rangeRef.current = { since, until }
     fetchPosts(idToken, selectedPageId, since, until).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [idToken, selectedPageId, dateBounds.start, dateBounds.end, days, dateMode, fetchPosts])
+
+  // Throttled background refresh: on page open, ask the server to claim a sync
+  // (only if data is > 3h stale and no other sync is running — Firestore lock).
+  // If claimed, silently sync FB/IG/Threads and refetch. Keeps loads fast while
+  // fetching the latest, without hammering the Meta API on every open. Admin only.
+  useEffect(() => {
+    if (!idToken || !selectedPageId || !isAdmin) return
+    let cancelled = false
+    const headers = { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' }
+    const body = JSON.stringify({ pageId: selectedPageId })
+    ;(async () => {
+      const claim = await fetch('/api/insights/auto-sync', { method: 'POST', headers, body: JSON.stringify({ pageId: selectedPageId, phase: 'claim' }) })
+        .then(r => r.ok ? r.json() : { claim: false }).catch(() => ({ claim: false }))
+      if (!claim.claim || cancelled) return
+      setAutoSyncing(true)
+      try {
+        await Promise.all([
+          fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).catch(() => null),
+          fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).catch(() => null),
+          fetch('/api/threads/sync', { method: 'POST', headers, body }).catch(() => null),
+        ])
+        await fetch('/api/insights/auto-sync', { method: 'POST', headers, body: JSON.stringify({ pageId: selectedPageId, phase: 'done' }) }).catch(() => null)
+        if (!cancelled) await fetchPosts(idToken, selectedPageId, rangeRef.current.since, rangeRef.current.until)
+      } finally { if (!cancelled) setAutoSyncing(false) }
+    })()
+    return () => { cancelled = true }
+  }, [idToken, selectedPageId, isAdmin, fetchPosts])
 
   // Posts in date range (for summary cards)
   const rangedFb = useMemo(() => fbPosts.filter(p => {
@@ -391,6 +421,8 @@ export default function DashboardPage() {
         // too (was only synced by the daily cron before). No-op if not connected.
         fetch('/api/threads/sync', { method: 'POST', headers, body }).catch(() => null),
       ])
+      // Record freshness so the throttled auto-sync won't immediately re-run.
+      await fetch('/api/insights/auto-sync', { method: 'POST', headers, body: JSON.stringify({ pageId: selectedPageId, phase: 'done' }) }).catch(() => null)
       const since = days === 0 && dateMode === 'preset' ? undefined : dateBounds.start
       const until = days === 0 && dateMode === 'preset' ? undefined : dateBounds.end
       await fetchPosts(token, selectedPageId, since, until)
@@ -509,7 +541,8 @@ export default function DashboardPage() {
                     {syncing ? L('↻ 同步中⋯', '↻ Syncing…') : L('↻ 同步最新資料', '↻ Sync latest data')}
                   </button>
                 )}
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('每日凌晨 3 點自動更新', 'Auto-updates daily at 3 AM')}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('開啟時自動更新最新資料', 'Auto-refreshes on open')}</span>
+                {autoSyncing && <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ad-blue)' }}>🔄 {L('背景更新中⋯', 'Refreshing…')}</span>}
               </div>
             </div>
 
