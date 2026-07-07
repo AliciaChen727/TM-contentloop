@@ -68,8 +68,9 @@ const isVideoUrl = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
 async function createCarouselContainer(
   token: string, urls: string[], text: string, topicTag?: string,
 ): Promise<{ id?: string; error?: string }> {
-  const children: string[] = []
-  for (const url of urls) {
+  // Build all child containers IN PARALLEL — video children each poll up to ~60s,
+  // so sequential (N × 60s) blows past the serverless limit. Parallel ≈ one poll.
+  const results = await Promise.all(urls.map(async (url): Promise<{ id?: string; error?: string }> => {
     const isVid = isVideoUrl(url)
     const child = await post('me/threads', {
       access_token: token, is_carousel_item: 'true',
@@ -77,8 +78,11 @@ async function createCarouselContainer(
     })
     if (child.error || !child.id) return { error: child.error ?? 'carousel child failed' }
     if (isVid) { const ready = await waitReady(token, child.id); if (!ready.ok) return { error: ready.error } }
-    children.push(child.id)
-  }
+    return { id: child.id }
+  }))
+  const failed = results.find(r => r.error)
+  if (failed) return { error: failed.error }
+  const children = results.map(r => r.id!)   // Promise.all preserves order
   return post('me/threads', {
     access_token: token, media_type: 'CAROUSEL', children: children.join(','), text,
     ...(topicTag?.trim() ? { topic_tag: topicTag.trim() } : {}),

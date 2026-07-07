@@ -6,7 +6,7 @@
  */
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 120
+export const maxDuration = 300   // carousel with videos processes async; parallel but allow headroom
 
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'

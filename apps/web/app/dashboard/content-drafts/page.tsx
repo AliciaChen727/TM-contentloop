@@ -125,9 +125,12 @@ export default function ContentDraftsPage() {
         method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: selectedPageId, platform }),
       })
-      const d = await res.json()
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) { setError(d.error ?? L('發布失敗', 'Publish failed')) }
       await load(idToken, selectedPageId)
+    } catch {
+      // Never fail silently: a timeout / 5xx (e.g. carousel with many videos) lands here.
+      setError(L('發布失敗或逾時（含多支影片的輪播較慢，請稍候重試或減少影片數）。若主貼已發出，請到 Threads 檢查。', 'Publish failed or timed out (carousels with many videos are slow — retry or use fewer videos).'))
     } finally { setBusy(false); setPublishingId(null) }
   }, [idToken, selectedPageId, load, L])
 
