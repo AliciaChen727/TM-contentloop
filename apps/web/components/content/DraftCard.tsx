@@ -142,10 +142,8 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, on
             if (res?.postId) {
               return <a key={t} href={res.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
             }
-            if (t === 'th') {
-              return <button key={t} disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishing ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('發布到 Threads', 'Publish to Threads')}`}</button>
-            }
-            return <span key={t} className="rounded-lg bg-gray-50 px-3 py-1.5 text-xs text-gray-400">{PLAT_LABEL[t]} {L('待 App Review', 'pending review')}</span>
+            const bg = t === 'th' ? 'bg-gray-900' : t === 'fb' ? 'bg-[#1877F2]' : 'bg-[#C13584]'
+            return <button key={t} disabled={busy} onClick={() => onPublish(draft.id, t)} className={`rounded-lg ${bg} px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70`}>{publishing ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('發布到', 'Publish to')} ${PLAT_LABEL[t]}`}</button>
           })}
           {firstPublishError(draft) && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {firstPublishError(draft)}</span>}
           {draft.status === 'approved' && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}

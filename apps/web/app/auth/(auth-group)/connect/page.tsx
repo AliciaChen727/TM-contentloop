@@ -23,6 +23,10 @@ const SCOPES = [
   // 一般使用者才需單獨送這兩個 messaging 權限審查。詳見 docs/phase-5-messaging-analytics-chatbot.md。
   'instagram_manage_messages',
   'pages_messaging',
+  // S4b Agent 自動發布（寫入）：發布貼文到 FB 粉專 / IG。開發模式下 app admin/tester
+  // 可直接授權使用；一般使用者需單獨送 App Review（見 docs/meta-app-review.md）。
+  'pages_manage_posts',
+  'instagram_content_publish',
 ].join(',')
 
 function ConnectContent() {
