@@ -16,6 +16,17 @@ const TAB_MATCH: Record<Tab, DraftStatus[]> = {
   published: ['published'], other: ['rejected', 'expired', 'failed'],
 }
 
+// Which tab a draft belongs to. A multi-platform draft where some platforms are
+// published (e.g. Threads done, FB/IG waiting for App Review) counts as
+// "published" even though its overall status is still `approved`.
+function tabOf(d: ContentDraft): Tab {
+  const anyPublished = Object.values(d.publishResults ?? {}).some(r => r?.postId)
+  if (d.status === 'published' || anyPublished) return 'published'
+  if (TAB_MATCH.draft.includes(d.status)) return 'draft'
+  if (TAB_MATCH.other.includes(d.status)) return 'other'
+  return 'approved'
+}
+
 export default function ContentDraftsPage() {
   const router = useRouter()
   const { L } = useLang()
@@ -146,8 +157,8 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false) }
   }, [idToken, selectedPageId, load, L])
 
-  const shown = drafts.filter(d => TAB_MATCH[tab].includes(d.status))
-  const count = (t: Tab) => drafts.filter(d => TAB_MATCH[t].includes(d.status)).length
+  const shown = drafts.filter(d => tabOf(d) === tab)
+  const count = (t: Tab) => drafts.filter(d => tabOf(d) === t).length
   const tabBtn = (t: Tab, label: string) => (
     <button onClick={() => setTab(t)}
       className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${tab === t ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500 hover:text-gray-800'}`}>
