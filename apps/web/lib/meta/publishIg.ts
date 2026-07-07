@@ -79,7 +79,8 @@ export async function publishToInstagram(
     if (c.error || !c.id) return { ok: false, error: c.error ?? 'video container failed' }
     containerId = c.id
   } else {
-    const c = await createContainer(igUserId, token, { image_url: mediaUrl, caption: text }, false)
+    // Poll even for images — publishing an unready container can fail.
+    const c = await createContainer(igUserId, token, { image_url: mediaUrl, caption: text }, true)
     if (c.error || !c.id) return { ok: false, error: c.error ?? 'image container failed' }
     containerId = c.id
   }

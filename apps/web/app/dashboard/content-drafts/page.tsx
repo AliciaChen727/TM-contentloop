@@ -164,6 +164,7 @@ export default function ContentDraftsPage() {
           const d = await res.json().catch(() => ({}))
           const nm = platform === 'th' ? 'Threads' : platform === 'fb' ? 'Facebook' : 'Instagram'
           if (!res.ok) setError(prev => `${prev ? prev + '；' : ''}${nm}：${d.error ?? L('發布失敗', 'failed')}`)
+          else if (d.storyNote) setError(prev => `${prev ? prev + '；' : ''}${nm} ${L('主貼已發，但', 'posted, but ')}${d.storyNote}`)
         } catch {
           const nm = platform === 'th' ? 'Threads' : platform === 'fb' ? 'Facebook' : 'Instagram'
           setError(prev => `${prev ? prev + '；' : ''}${nm}：${L('逾時/失敗', 'timeout/failed')}`)

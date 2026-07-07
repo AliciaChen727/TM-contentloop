@@ -73,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let storyId: string | undefined
   let storyNote: string | undefined
 
+  try {
   if (platform === 'th') {
     let tok = await getThreadsToken(uid, pageId)
     if (!tok) { const owner = await resolvePageOwnerUid(pageId); if (owner) tok = await getThreadsToken(owner, pageId) }
@@ -90,15 +91,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!creds.igUserId) return NextResponse.json({ error: '此粉專未連動 IG 商業帳號' }, { status: 400 })
       result = await publishToInstagram(creds.igUserId, creds.accessToken, { text, ...media })
     }
-    // Also publish a 24h Story (opt-in) — best effort, uses the first media item.
+    // Also publish a 24h Story (opt-in) — best effort. A Story failure must NEVER
+    // fail the main post (it already went out), so it's fully isolated here.
     if (result.ok && g.alsoStory) {
       const storyMedia = g.mediaUrl ?? g.mediaUrls?.[0]
       if (storyMedia) {
-        const s = platform === 'fb'
-          ? await publishFbStory(pageId, creds.accessToken, storyMedia)
-          : await publishIgStory(creds.igUserId!, creds.accessToken, storyMedia)
-        if (s.ok) storyId = s.postId
-        else storyNote = `限動發布失敗：${s.error}`
+        try {
+          const s = platform === 'fb'
+            ? await publishFbStory(pageId, creds.accessToken, storyMedia)
+            : await publishIgStory(creds.igUserId!, creds.accessToken, storyMedia)
+          if (s.ok) storyId = s.postId
+          else storyNote = `限動發布失敗：${s.error}`
+        } catch (e) { storyNote = `限動發布失敗：${e instanceof Error ? e.message : 'error'}` }
       }
     }
   }
@@ -111,4 +115,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const out = await recordPublishOutcome(pageId, params.id, platform, { postId: result.postId, permalink: result.permalink, storyId })
   await writeAudit(pageId, params.id, `publish:${platform}`, uid, { postId: result.postId, storyId })
   return NextResponse.json({ ok: true, postId: result.postId, storyId, storyNote, status: out.ok ? out.draft.status : draft.status })
+  } catch (e) {
+    // Never return an empty/HTML error — surface the real reason + record it.
+    const msg = e instanceof Error ? e.message : 'unexpected publish error'
+    await recordPublishOutcome(pageId, params.id, platform, { error: msg }).catch(() => {})
+    await writeAudit(pageId, params.id, `publish:${platform}:error`, uid, { error: msg }).catch(() => {})
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
