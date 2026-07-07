@@ -108,6 +108,10 @@ export async function transitionDraft(
   if (!canTransition(current.status, to)) {
     return { ok: false, error: `illegal transition ${current.status} → ${to}`, code: 409 }
   }
+  // A published post can't be unpublished → block reverting to draft (Option A).
+  if (to === 'draft' && current.target.some(t => current.publishResults?.[t]?.postId)) {
+    return { ok: false, error: '已發布的內容無法收回，請改用「複製為新草稿」', code: 409 }
+  }
   const patch: Record<string, unknown> = { status: to, updatedAt: Date.now() }
   if (to === 'approved') patch.approvedByUid = byUid
   if (to === 'draft') patch.approvedByUid = null   // 收回核准/重審 → 清核准者

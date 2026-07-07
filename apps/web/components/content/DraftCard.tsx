@@ -38,12 +38,13 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll, onDelete, onSchedule, onUnschedule, busy, publishingPlatform }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent) => void
   onPublish: (id: string, platform: DraftTarget) => void
   onPublishAll: (id: string) => void
+  onDuplicate: (id: string) => void
   onDelete: (id: string) => void
   onSchedule: (id: string, atMs: number) => void
   onUnschedule: (id: string) => void
@@ -60,7 +61,12 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
   )
 
   const rec = draft.generated.recommendation
-  const canEdit = draft.status === 'draft'
+  // Option A: once ANY platform is published the draft is LOCKED — published
+  // posts can't be unpublished, so no revert/edit; only補發 remaining or 複製.
+  const anyPublished = draft.target.some(t => draft.publishResults?.[t]?.postId)
+  const allPublished = draft.target.length > 0 && draft.target.every(t => draft.publishResults?.[t]?.postId)
+  const locked = anyPublished
+  const canEdit = draft.status === 'draft' && !locked
 
   function saveEdit() {
     const perPlatform = { ...draft.generated.perPlatform }
@@ -77,7 +83,11 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
         ))}
         <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{draft.mediaType}</span>
         {draft.generated.alsoStory && <span className="rounded-md bg-pink-100 px-2 py-0.5 text-xs font-semibold text-pink-700">📸 {L('＋限動', '+Story')}</span>}
-        <div className="ml-auto"><StatusPill status={draft.status} /></div>
+        <div className="ml-auto">
+          {anyPublished
+            ? <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: allPublished ? '#D1FAE5' : '#DBEAFE', color: allPublished ? '#065F46' : '#1E40AF' }}>{allPublished ? L('已發布', 'Published') : L('部分發布', 'Partly published')}</span>
+            : <StatusPill status={draft.status} />}
+        </div>
       </div>
 
       {/* Carousel (mediaUrls, ≥2) → horizontal strip; else single image/video. */}
@@ -128,7 +138,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
 
       {/* Actions — human-in-the-loop gate. Publish itself is S4 (needs Meta scopes). */}
       <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-        {draft.status === 'draft' && !editing && (<>
+        {draft.status === 'draft' && !locked && !editing && (<>
           <button disabled={busy} onClick={() => onTransition(draft.id, 'approved')} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">✓ {L('核准', 'Approve')}</button>
           <button disabled={busy} onClick={() => onTransition(draft.id, 'rejected')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">{L('拒絕', 'Reject')}</button>
           <button disabled={busy} onClick={() => setEditing(true)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✎ {L('編輯', 'Edit')}</button>
@@ -137,7 +147,8 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
           <button disabled={busy} onClick={saveEdit} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{L('儲存', 'Save')}</button>
           <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600">{L('取消', 'Cancel')}</button>
         </>)}
-        {(draft.status === 'approved' || draft.status === 'published') && (<>
+        {/* Publish/published block — also renders when LOCKED (some platform out). */}
+        {(draft.status === 'approved' || draft.status === 'published' || locked) && !editing && (<>
           {/* Already-published platforms → link. */}
           {draft.target.filter(t => draft.publishResults?.[t]?.postId).map(t => (
             <a key={t} href={draft.publishResults![t]!.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
@@ -156,10 +167,13 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
             )
           })()}
           {firstPublishError(draft) && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {firstPublishError(draft)}</span>}
-          {draft.status === 'approved' && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
+          {/* Unapprove only while not yet published anywhere. */}
+          {draft.status === 'approved' && !locked && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
         </>)}
+        {/* Duplicate — the way to re-post a published draft (a new editable draft). */}
+        {locked && <button disabled={busy} onClick={() => onDuplicate(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">📄 {L('複製為新草稿', 'Duplicate')}</button>}
         {/* Schedule (S5a) — Threads-only approved drafts can auto-publish later. */}
-        {draft.status === 'approved' && thOnly && !draft.publishResults?.th?.postId && (
+        {draft.status === 'approved' && !locked && thOnly && !draft.publishResults?.th?.postId && (
           <span className="flex items-center gap-1">
             <input type="datetime-local" value={schedAt} onChange={e => setSchedAt(e.target.value)}
               className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700" />

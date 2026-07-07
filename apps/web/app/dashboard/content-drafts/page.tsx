@@ -173,6 +173,21 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false); setPublishing(null) }
   }, [drafts, idToken, selectedPageId, load, L])
 
+  // Duplicate a (usually published) draft into a fresh editable draft.
+  const duplicate = useCallback(async (id: string) => {
+    const d = drafts.find(x => x.id === id)
+    if (!d) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/content-drafts', {
+        method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: selectedPageId, target: d.target, mediaType: d.mediaType, generated: d.generated }),
+      })
+      if (res.ok) { setTab('draft'); await load(idToken, selectedPageId) }
+      else { const e = await res.json(); setError(e.error ?? L('複製失敗', 'Duplicate failed')) }
+    } finally { setBusy(false) }
+  }, [drafts, idToken, selectedPageId, load, L])
+
   const remove = useCallback(async (id: string) => {
     if (!window.confirm(L('確定刪除這則草稿？此動作無法復原。', 'Delete this draft? This cannot be undone.'))) return
     setBusy(true)
@@ -246,7 +261,7 @@ export default function ContentDraftsPage() {
                 <DraftCard key={d.id} draft={d} busy={busy} publishingPlatform={publishing?.id === d.id ? publishing.platform : null}
                   onTransition={(id, status) => patch(id, { status })}
                   onEdit={(id, generated) => patch(id, { generated })}
-                  onPublish={publish} onPublishAll={publishAll} onDelete={remove}
+                  onPublish={publish} onPublishAll={publishAll} onDuplicate={duplicate} onDelete={remove}
                   onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
                   onUnschedule={(id) => patch(id, { unschedule: true })} />
               ))}
