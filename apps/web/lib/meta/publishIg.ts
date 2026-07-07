@@ -43,7 +43,9 @@ export async function publishIgStory(
   igUserId: string, token: string, mediaUrl: string,
 ): Promise<{ ok: true; postId: string } | { ok: false; error: string }> {
   const vid = isVideoUrl(mediaUrl)
-  const c = await createContainer(igUserId, token, { media_type: 'STORIES', ...(vid ? { video_url: mediaUrl } : { image_url: mediaUrl }) }, vid)
+  // Always poll — publishing an unready STORIES container fails (root cause of
+  // earlier story failures where the image itself was fine).
+  const c = await createContainer(igUserId, token, { media_type: 'STORIES', ...(vid ? { video_url: mediaUrl } : { image_url: mediaUrl }) }, true)
   if (c.error || !c.id) return { ok: false, error: c.error ?? 'story container failed' }
   const pub = await post(`${igUserId}/media_publish`, { creation_id: c.id, access_token: token })
   if (pub.error || !pub.id) return { ok: false, error: pub.error ?? 'story publish failed' }
