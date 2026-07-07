@@ -17,8 +17,9 @@ const TH_LIMIT = THREADS_LIMIT
 
 // Manual draft composer (S2+). Upload image/video with live preview, optional
 // AI caption generation (copy-only, no image quota), then save as `draft`.
-export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
+export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, busy }: {
   pageId: string
+  pageName?: string
   idToken: string
   onCreate: (input: Omit<CreateDraftInput, 'pageId'>) => void
   onClose: () => void
@@ -38,6 +39,10 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
   const [showAiSettings, setShowAiSettings] = useState(false)
   const [err, setErr] = useState('')
   const [previewPlat, setPreviewPlat] = useState<DraftTarget>('fb')
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [alsoStory, setAlsoStory] = useState(false)
+  // Public FB page picture (no token needed for public pages).
+  const pageAvatar = `https://graph.facebook.com/${pageId}/picture?type=square&width=64&height=64`
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Effective caption for a platform: tailored → its own body; else the shared one.
@@ -90,7 +95,8 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
         : { body: eff(t), ...(tags.length ? { hashtags: tags } : {}), ...(needsMedia ? { mediaUrl } : {}) }
       if (t !== 'th' && needsMedia) perPlatform[t]!.mediaUrl = mediaUrl
     }
-    onCreate({ target: targets, mediaType, generated: { perPlatform, ...(needsMedia ? { mediaUrl } : {}) } })
+    const canStory = needsMedia && (targets.includes('fb') || targets.includes('ig'))
+    onCreate({ target: targets, mediaType, generated: { perPlatform, ...(needsMedia ? { mediaUrl } : {}), ...(canStory && alsoStory ? { alsoStory: true } : {}) } })
   }
 
   const showMedia = needsMedia && (previewUrl || mediaUrl)
@@ -120,7 +126,6 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
               <option value="carousel">{L('輪播', 'Carousel')}</option>
               <option value="video">{L('影片', 'Video')}</option>
               <option value="reels">Reels</option>
-              <option value="story">Story</option>
             </select>
 
             {needsMedia && (
@@ -162,27 +167,56 @@ export function DraftComposer({ pageId, idToken, onCreate, onClose, busy }: {
               <input value={hashtags} onChange={e => setHashtags(e.target.value)} placeholder={L('Hashtags（套用所有平台，空白分隔；IG ≤30）', 'Hashtags (all platforms, space-separated; IG ≤30)')}
                 className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800" />
             )}
+
+            {/* Story is time-sensitive → opt-in separately, not a media type.
+                Needs media + FB/IG (Threads has no stories). */}
+            {needsMedia && (targets.includes('fb') || targets.includes('ig')) && (
+              <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3">
+                <input type="checkbox" checked={alsoStory} onChange={e => setAlsoStory(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
+                <span>
+                  <span className="block text-sm font-semibold text-gray-700">📸 {L('同時發佈限動 Story', 'Also post as Story')}</span>
+                  <span className="block text-xs text-gray-400">{L('把這則媒體同時發成 24 小時限動（IG／FB，時效性內容）。', 'Also publish this media as a 24h Story (IG/FB).')}</span>
+                </span>
+              </label>
+            )}
             {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
           </div>
 
           {/* RIGHT — live preview with per-platform toggle (only selected targets) */}
           <div>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <label className="text-sm font-semibold text-gray-700">{L('預覽', 'Preview')}</label>
-              {targets.length > 0 && (
-                <div className="flex gap-1">
-                  {targets.map(t => (
-                    <button key={t} onClick={() => setPreviewPlat(t)}
-                      className={`rounded-md px-2 py-1 text-xs font-semibold ${activePreview === t ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500'}`}>
-                      {PLAT_TAB[t]}
-                    </button>
-                  ))}
+              <div className="flex items-center gap-2">
+                {targets.length > 0 && (
+                  <div className="flex gap-1">
+                    {targets.map(t => (
+                      <button key={t} onClick={() => setPreviewPlat(t)}
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${activePreview === t ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500'}`}>
+                        {PLAT_TAB[t]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Device preview toggle (desktop / mobile), like Meta's composer. */}
+                <div className="flex overflow-hidden rounded-lg border border-gray-200">
+                  <button onClick={() => setPreviewDevice('desktop')} aria-label={L('桌機預覽', 'Desktop')}
+                    className={`px-2 py-1.5 ${previewDevice === 'desktop' ? 'bg-gray-900 text-white' : 'text-gray-500'}`}>
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="10" rx="1.2" stroke="currentColor" strokeWidth="1.5"/><path d="M7 17h6M10 13.5V17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  </button>
+                  <button onClick={() => setPreviewDevice('mobile')} aria-label={L('手機預覽', 'Mobile')}
+                    className={`px-2 py-1.5 ${previewDevice === 'mobile' ? 'bg-gray-900 text-white' : 'text-gray-500'}`}>
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="6" y="2.5" width="8" height="15" rx="1.6" stroke="currentColor" strokeWidth="1.5"/><path d="M9 15h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
             {targets.length === 0
               ? <div className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">{L('請先選發布平台', 'Select a platform')}</div>
-              : <PostPreview platform={activePreview} body={eff(activePreview)} mediaUrl={previewUrl || mediaUrl} mediaKind={previewKind} hashtags={tags} showMedia={!!showMedia} />}
+              : (
+                <div className={previewDevice === 'mobile' ? 'mx-auto max-w-[340px]' : ''}>
+                  <PostPreview platform={activePreview} body={eff(activePreview)} mediaUrl={previewUrl || mediaUrl} mediaKind={previewKind} hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />
+                </div>
+              )}
           </div>
         </div>
 

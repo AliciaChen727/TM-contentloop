@@ -130,7 +130,7 @@ export default function ContentDraftsPage() {
       </div>
 
       {composing && selectedPageId && (
-        <DraftComposer pageId={selectedPageId} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} />
+        <DraftComposer pageId={selectedPageId} pageName={pages.find(p => p.pageId === selectedPageId)?.pageName} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} />
       )}
     </main>
   )

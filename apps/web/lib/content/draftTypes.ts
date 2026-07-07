@@ -35,6 +35,7 @@ export interface GeneratedContent {
   aspectRatio?: string
   perPlatform: Partial<Record<DraftTarget, PerPlatformContent>>
   recommendation?: DraftRecommendation
+  alsoStory?: boolean                               // 同時把媒體發成限動 Story（IG/FB，時效性）
 }
 
 export interface ContentDraft {

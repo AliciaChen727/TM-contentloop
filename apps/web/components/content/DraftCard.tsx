@@ -57,6 +57,7 @@ export function DraftCard({ draft, onTransition, onEdit, busy }: {
           <span key={t} className="rounded-md px-2 py-0.5 text-xs font-bold text-white" style={{ background: PLAT_COLOR[t] }}>{PLAT_LABEL[t]}</span>
         ))}
         <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{draft.mediaType}</span>
+        {draft.generated.alsoStory && <span className="rounded-md bg-pink-100 px-2 py-0.5 text-xs font-semibold text-pink-700">📸 {L('＋限動', '+Story')}</span>}
         <div className="ml-auto"><StatusPill status={draft.status} /></div>
       </div>
 
