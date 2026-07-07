@@ -10,8 +10,9 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
-import { createDraft, listDrafts } from '@/lib/content/draftStore'
-import { isValidTarget, isValidMediaType, type DraftStatus, type CreateDraftInput } from '@/lib/content/draftTypes'
+import { createDraft, listDrafts, writeAudit } from '@/lib/content/draftStore'
+import { isValidTarget, isValidMediaType, type DraftStatus, type CreateDraftInput, type DraftTarget } from '@/lib/content/draftTypes'
+import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -68,6 +69,17 @@ export async function POST(req: NextRequest) {
     if (!generated.perPlatform[t]) return NextResponse.json({ error: `missing generated.perPlatform.${t}` }, { status: 400 })
   }
 
+  // Server-side platform validation (defense in depth — never trust the client).
+  const items = target.map((t: DraftTarget) => {
+    const pp = generated.perPlatform[t]!
+    return { platform: t, text: pp.body ?? '', hashtags: pp.hashtags ?? [], hasMedia: !!(pp.mediaUrl ?? generated.mediaUrl), mediaType }
+  })
+  const violations = validateItems(items)
+  if (hasBlockingErrors(violations)) {
+    return NextResponse.json({ error: 'validation failed', violations: violations.filter(v => v.severity === 'error') }, { status: 422 })
+  }
+
   const draft = await createDraft({ pageId, target, mediaType, generated, schedule }, uid)
+  await writeAudit(pageId, draft.id, 'create', uid, { target, mediaType })
   return NextResponse.json({ draft }, { status: 201 })
 }

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
-import { getDraft, transitionDraft, editDraftContent } from '@/lib/content/draftStore'
+import { getDraft, transitionDraft, editDraftContent, writeAudit } from '@/lib/content/draftStore'
 import { HUMAN_DRIVEN_STATUSES, type DraftStatus, type GeneratedContent } from '@/lib/content/draftTypes'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
@@ -56,6 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (generated) {
     const r = await editDraftContent(pageId, params.id, generated)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
+    await writeAudit(pageId, params.id, 'edit', uid)
     if (!status) return NextResponse.json({ draft: r.draft })
   }
   if (status) {
@@ -66,6 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     const r = await transitionDraft(pageId, params.id, status, uid)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
+    await writeAudit(pageId, params.id, `status:${status}`, uid)
     return NextResponse.json({ draft: r.draft })
   }
   return NextResponse.json({ error: 'no-op' }, { status: 400 })

@@ -51,7 +51,7 @@ failed | rejected | expired → draft（可復原重審）
 ## 里程碑進度
 - [x] S1 草稿基建（型別/狀態機/store/API，已對 Firestore 驗證）
 - [x] S2 審核 UI（列表/分頁/核准·拒絕·編輯/composer）
-- [ ] S3 平台約束 + 品牌預檢 + fallback（`platformSpecs` + `validateDraft` + killSwitch + 冪等 + 稽核 log）
+- [~] S3 進行中：`platformSpecs` + `validateDraft`（字數/hashtag/媒體硬限，composer 標紅擋存 + create API 422 守門）+ 稽核 log（`pages/{pageId}/publishAuditLog`）已完成。**待補**：killSwitch/automationSettings（發布端總開關，等 S4/S5）、禁詞 per-page 設定 UI（機制已在 `validateDraft` 的 `bannedWords`）
 - [ ] S4a Threads 發布（先鋒）→ S4b FB/IG 發布（等 App Review）
 - [ ] S5 排程（L2）→ S6 廣告寫入（Phase 4）→ S7 學習迴圈
 

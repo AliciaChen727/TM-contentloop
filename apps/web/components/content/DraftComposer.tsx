@@ -5,6 +5,7 @@ import { useLang } from '@/lib/i18n/LanguageProvider'
 import { auth } from '@/lib/firebase/client'
 import { uploadDraftMedia } from '@/lib/firebase/storage'
 import { splitForThreads, THREADS_LIMIT } from '@/lib/publish/threadsSplit'
+import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
 import { PostPreview } from './PostPreview'
 import { CaptionSettings } from './CaptionSettings'
 import type { DraftTarget, MediaType, CreateDraftInput } from '@/lib/content/draftTypes'
@@ -63,7 +64,12 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const needsMedia = mediaType !== 'text'
   const uploading = uploadPct !== null && uploadPct < 100
   const bodiesReady = tailored ? targets.every(t => (perBody[t] ?? '').trim().length > 0) : body.trim().length > 0
-  const canSubmit = targets.length > 0 && bodiesReady && !uploading && (!needsMedia || mediaUrl.trim().length > 0)
+  // Platform hard-limit validation (字數/hashtag/媒體) — blocks save on errors.
+  const violations = validateItems(targets.map(t => ({
+    platform: t, text: eff(t), hashtags: tags, hasMedia: mediaUrl.trim().length > 0, mediaType,
+  })))
+  const blocked = hasBlockingErrors(violations)
+  const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && (!needsMedia || mediaUrl.trim().length > 0)
 
   function toggle(t: DraftTarget) {
     setTargets(cur => cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t])
@@ -185,6 +191,19 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                 </span>
               </label>
             )}
+            {/* Hide the obvious "empty caption" nag; show the informative ones. */}
+            {(() => {
+              const shown = violations.filter(v => v.code !== 'empty')
+              return shown.length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {shown.map((v, i) => (
+                    <li key={i} className={`flex items-start gap-1 text-xs ${v.severity === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
+                      <span>{v.severity === 'error' ? '⛔' : '⚠️'}</span>{v.message}
+                    </li>
+                  ))}
+                </ul>
+              )
+            })()}
             {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
           </div>
 

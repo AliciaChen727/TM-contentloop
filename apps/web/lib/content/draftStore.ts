@@ -12,6 +12,18 @@ import {
 const col = (pageId: string) =>
   adminDb.collection('pages').doc(pageId).collection('contentDrafts')
 
+// Append-only audit trail of who did what to a draft (approve/reject/edit…).
+// Best-effort — never blocks the primary action.
+export async function writeAudit(
+  pageId: string, draftId: string, action: string, byUid: string, detail?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await adminDb.collection('pages').doc(pageId).collection('publishAuditLog').add({
+      draftId, action, byUid, at: Date.now(), ...(detail ?? {}),
+    })
+  } catch { /* audit is best-effort */ }
+}
+
 // Firestore doc → ContentDraft (id from doc id, pageId is implicit in path).
 function fromDoc(pageId: string, id: string, d: FirebaseFirestore.DocumentData): ContentDraft {
   return {
