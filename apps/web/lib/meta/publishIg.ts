@@ -38,6 +38,18 @@ async function createContainer(igUserId: string, token: string, params: Record<s
   return { id: c.id }
 }
 
+// Publish a 24h IG Story (single image or video). Videos poll before publish.
+export async function publishIgStory(
+  igUserId: string, token: string, mediaUrl: string,
+): Promise<{ ok: true; postId: string } | { ok: false; error: string }> {
+  const vid = isVideoUrl(mediaUrl)
+  const c = await createContainer(igUserId, token, { media_type: 'STORIES', ...(vid ? { video_url: mediaUrl } : { image_url: mediaUrl }) }, vid)
+  if (c.error || !c.id) return { ok: false, error: c.error ?? 'story container failed' }
+  const pub = await post(`${igUserId}/media_publish`, { creation_id: c.id, access_token: token })
+  if (pub.error || !pub.id) return { ok: false, error: pub.error ?? 'story publish failed' }
+  return { ok: true, postId: pub.id }
+}
+
 export interface IgPublishInput { text: string; mediaType: MediaType; mediaUrl?: string; mediaUrls?: string[] }
 
 // IG requires media (no text-only posts). Returns published media id + permalink.

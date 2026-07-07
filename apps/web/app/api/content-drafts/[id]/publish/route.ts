@@ -15,8 +15,8 @@ import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { getDraft, recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
 import { getThreadsToken } from '@/lib/threads/client'
 import { publishThreads } from '@/lib/threads/publish'
-import { publishToFacebook } from '@/lib/meta/publishFb'
-import { publishToInstagram } from '@/lib/meta/publishIg'
+import { publishToFacebook, publishFbStory } from '@/lib/meta/publishFb'
+import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
 import type { DraftTarget } from '@/lib/content/draftTypes'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
@@ -70,6 +70,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const g = draft.generated
   const media = { mediaType: draft.mediaType, mediaUrl: g.mediaUrl, mediaUrls: g.mediaUrls }
   let result: { ok: true; postId: string; permalink?: string } | { ok: false; error: string }
+  let storyId: string | undefined
+  let storyNote: string | undefined
 
   if (platform === 'th') {
     let tok = await getThreadsToken(uid, pageId)
@@ -88,6 +90,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!creds.igUserId) return NextResponse.json({ error: '此粉專未連動 IG 商業帳號' }, { status: 400 })
       result = await publishToInstagram(creds.igUserId, creds.accessToken, { text, ...media })
     }
+    // Also publish a 24h Story (opt-in) — best effort, uses the first media item.
+    if (result.ok && g.alsoStory) {
+      const storyMedia = g.mediaUrl ?? g.mediaUrls?.[0]
+      if (storyMedia) {
+        const s = platform === 'fb'
+          ? await publishFbStory(pageId, creds.accessToken, storyMedia)
+          : await publishIgStory(creds.igUserId!, creds.accessToken, storyMedia)
+        if (s.ok) storyId = s.postId
+        else storyNote = `限動發布失敗：${s.error}`
+      }
+    }
   }
 
   if (!result.ok) {
@@ -95,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     await writeAudit(pageId, params.id, `publish:${platform}:failed`, uid, { error: result.error })
     return NextResponse.json({ error: result.error }, { status: 502 })
   }
-  const out = await recordPublishOutcome(pageId, params.id, platform, { postId: result.postId, permalink: result.permalink })
-  await writeAudit(pageId, params.id, `publish:${platform}`, uid, { postId: result.postId })
-  return NextResponse.json({ ok: true, postId: result.postId, status: out.ok ? out.draft.status : draft.status })
+  const out = await recordPublishOutcome(pageId, params.id, platform, { postId: result.postId, permalink: result.permalink, storyId })
+  await writeAudit(pageId, params.id, `publish:${platform}`, uid, { postId: result.postId, storyId })
+  return NextResponse.json({ ok: true, postId: result.postId, storyId, storyNote, status: out.ok ? out.draft.status : draft.status })
 }

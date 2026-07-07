@@ -149,9 +149,9 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
         </>)}
         {/* Publish/published block — also renders when LOCKED (some platform out). */}
         {(draft.status === 'approved' || draft.status === 'published' || locked) && !editing && (<>
-          {/* Already-published platforms → link. */}
+          {/* Already-published platforms → link (+限動 if a Story was posted). */}
           {draft.target.filter(t => draft.publishResults?.[t]?.postId).map(t => (
-            <a key={t} href={draft.publishResults![t]!.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
+            <a key={t} href={draft.publishResults![t]!.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')}{draft.publishResults![t]!.storyId ? L('＋限動', '+Story') : ''} ↗</a>
           ))}
           {/* One-click publish to all remaining platforms at once. */}
           {(() => {

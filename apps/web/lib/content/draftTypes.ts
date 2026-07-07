@@ -52,7 +52,7 @@ export interface ContentDraft {
   approvedByUid?: string | null
   publishResult?: { postId?: string; error?: string } | null
   // Per-platform publish outcome (S4a+). Threads published first; FB/IG later.
-  publishResults?: Partial<Record<DraftTarget, { postId?: string; permalink?: string; error?: string; at: number }>>
+  publishResults?: Partial<Record<DraftTarget, { postId?: string; permalink?: string; storyId?: string; error?: string; at: number }>>
   idempotencyKey: string
   createdAt: number
   updatedAt: number

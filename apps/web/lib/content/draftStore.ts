@@ -124,7 +124,7 @@ export async function transitionDraft(
 // left as-is (partially published — user can publish the rest later).
 export async function recordPublishOutcome(
   pageId: string, id: string, platform: DraftTarget,
-  result: { postId?: string; permalink?: string; error?: string },
+  result: { postId?: string; permalink?: string; storyId?: string; error?: string },
 ): Promise<{ ok: true; draft: ContentDraft } | { ok: false; error: string; code: number }> {
   const ref = col(pageId).doc(id)
   const dd = await ref.get()

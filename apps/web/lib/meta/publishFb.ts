@@ -17,6 +17,20 @@ async function post(path: string, params: Record<string, string>): Promise<{ id?
   return { id: j.id ? String(j.id) : undefined, postId: j.post_id ? String(j.post_id) : undefined }
 }
 
+// Publish a FB Page photo Story (24h). Video stories need resumable upload —
+// deferred; image stories are a simple 2-step (upload unpublished → photo_stories).
+export async function publishFbStory(
+  pageId: string, pageToken: string, mediaUrl: string,
+): Promise<{ ok: true; postId: string } | { ok: false; error: string }> {
+  if (isVideoUrl(mediaUrl)) return { ok: false, error: 'FB 影片限動尚未支援（需分段上傳），目前僅支援圖片限動' }
+  const up = await post(`${pageId}/photos`, { url: mediaUrl, published: 'false', access_token: pageToken })
+  if (up.error || !up.id) return { ok: false, error: up.error ?? 'story photo upload failed' }
+  const r = await post(`${pageId}/photo_stories`, { photo_id: up.id, access_token: pageToken })
+  const id = r.postId ?? r.id
+  if (r.error || !id) return { ok: false, error: r.error ?? 'photo_stories failed' }
+  return { ok: true, postId: id }
+}
+
 export interface FbPublishInput { text: string; mediaType: MediaType; mediaUrl?: string; mediaUrls?: string[] }
 
 // Returns the published post id + a permalink.
