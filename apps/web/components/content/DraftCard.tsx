@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import type { ContentDraft, DraftTarget, DraftStatus, GeneratedContent } from '@/lib/content/draftTypes'
+import { validateItems } from '@/lib/publish/validateDraft'
 
 const PLAT_LABEL: Record<DraftTarget, string> = { fb: 'Facebook', ig: 'Instagram', th: 'Threads' }
 const PLAT_COLOR: Record<DraftTarget, string> = { fb: '#1877F2', ig: '#C13584', th: '#000000' }
@@ -63,6 +64,11 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
   const rec = draft.generated.recommendation
   // Option A: once ANY platform is published the draft is LOCKED — published
   // posts can't be unpublished, so no revert/edit; only補發 remaining or 複製.
+  // Pre-publish warnings (e.g. FB mixed image+video carousel) surfaced on the card.
+  const cardViolations = validateItems(draft.target.map(t => ({
+    platform: t, text: draft.generated.perPlatform[t]?.body ?? '', hashtags: draft.generated.perPlatform[t]?.hashtags ?? [],
+    hasMedia: !!(draft.generated.mediaUrl || draft.generated.mediaUrls?.length), mediaType: draft.mediaType, mediaUrls: draft.generated.mediaUrls,
+  }))).filter(v => v.code === 'fb_mixed_carousel' || v.code === 'fb_video_carousel')
   const anyPublished = draft.target.some(t => draft.publishResults?.[t]?.postId)
   const allPublished = draft.target.length > 0 && draft.target.every(t => draft.publishResults?.[t]?.postId)
   const locked = anyPublished
@@ -135,6 +141,17 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll
       )}
       {draft.publishResult?.error && <p className="mt-2 text-xs text-red-600">⚠ {draft.publishResult.error}</p>}
       {draft.publishResult?.postId && <p className="mt-2 text-xs text-green-700">✓ {L('已發布 ID', 'Post ID')}: {draft.publishResult.postId}</p>}
+
+      {/* Pre-publish warnings (FB mixed carousel etc.) — hide once fully published. */}
+      {!allPublished && cardViolations.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {cardViolations.map((v, i) => (
+            <li key={i} className={`flex items-start gap-1 text-xs ${v.severity === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
+              <span>{v.severity === 'error' ? '⛔' : '⚠️'}</span>{v.message}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Actions — human-in-the-loop gate. Publish itself is S4 (needs Meta scopes). */}
       <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">

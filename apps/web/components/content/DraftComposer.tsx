@@ -74,7 +74,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const bodiesReady = tailored ? targets.every(t => (perBody[t] ?? '').trim().length > 0) : body.trim().length > 0
   // Platform hard-limit validation (字數/hashtag/媒體) — blocks save on errors.
   const violations = validateItems(targets.map(t => ({
-    platform: t, text: eff(t), hashtags: tags, hasMedia: media.length > 0, mediaType,
+    platform: t, text: eff(t), hashtags: tags, hasMedia: media.length > 0, mediaType, mediaUrls,
   })))
   const blocked = hasBlockingErrors(violations)
   const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && mediaReady

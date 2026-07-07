@@ -5,7 +5,7 @@
 import type { DraftTarget, MediaType } from '@/lib/content/draftTypes'
 import { PLATFORM_SPECS } from './platformSpecs'
 
-export type ViolationCode = 'empty' | 'text_max' | 'media_required' | 'media_missing' | 'hashtag_max' | 'banned'
+export type ViolationCode = 'empty' | 'text_max' | 'media_required' | 'media_missing' | 'hashtag_max' | 'banned' | 'fb_mixed_carousel' | 'fb_video_carousel'
 
 export interface Violation {
   platform: DraftTarget
@@ -24,7 +24,10 @@ export interface ValidationItem {
   hashtags: string[]
   hasMedia: boolean
   mediaType: MediaType
+  mediaUrls?: string[]   // for carousels — used to detect FB mixed image+video
 }
+
+const isVideoUrl = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
 
 const PLAT_ZH: Record<DraftTarget, string> = { fb: 'Facebook', ig: 'Instagram', th: 'Threads' }
 
@@ -55,6 +58,17 @@ export function validateItems(items: ValidationItem[], opts?: { bannedWords?: st
     // Hashtag cap (IG ≤30).
     if (spec.hashtagMax != null && it.hashtags.length > spec.hashtagMax) {
       out.push({ platform: it.platform, field: 'hashtags', code: 'hashtag_max', severity: 'error', message: `${name}：hashtag 超過 ${spec.hashtagMax} 個上限（目前 ${it.hashtags.length}）`, limit: spec.hashtagMax, actual: it.hashtags.length })
+    }
+    // FB carousel can't mix photos + videos (feed multi-media = photos only).
+    if (it.platform === 'fb' && it.mediaType === 'carousel') {
+      const urls = it.mediaUrls ?? []
+      const hasVid = urls.some(isVideoUrl)
+      const hasImg = urls.some(u => !isVideoUrl(u))
+      if (hasVid && hasImg) {
+        out.push({ platform: 'fb', field: 'media', code: 'fb_mixed_carousel', severity: 'warn', message: 'Facebook 輪播不支援圖片＋影片混合，發布時影片會被略過（建議影片另發，或 FB 只放相片）' })
+      } else if (hasVid && !hasImg) {
+        out.push({ platform: 'fb', field: 'media', code: 'fb_video_carousel', severity: 'error', message: 'Facebook 輪播僅支援多張相片（目前全是影片），請改用相片或取消勾選 Facebook' })
+      }
     }
     // Banned words (brand pre-check) — warn, don't block.
     for (const w of banned) {

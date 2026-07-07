@@ -136,13 +136,16 @@ export async function publishThreads(
   }
 
   const ids = [rootId]
-  // Remaining segments → text replies chained to the previous post. The just-
-  // published post needs a moment to be replyable; small delay + one retry.
+  // Remaining segments → text replies chained to the previous post. A just-
+  // published post (esp. carousel/video) takes time to become replyable, so
+  // retry with increasing backoff (~2s,4.5s,7s,9.5s ≈ 23s total per reply).
   let prev = rootId
   for (let i = 1; i < parts.length; i++) {
-    await sleep(1500)
-    let reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false)
-    if (reply.error || !reply.id) { await sleep(2500); reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false) }
+    let reply: { id?: string; error?: string } = { error: 'init' }
+    for (let attempt = 0; attempt < 4 && (reply.error || !reply.id); attempt++) {
+      await sleep(2000 + attempt * 2500)
+      reply = await createAndPublish(token, { media_type: 'TEXT', text: parts[i], reply_to_id: prev }, false)
+    }
     if (reply.error || !reply.id) {
       // Partial: main post is live but a reply failed. Report it — the draft
       // stays re-publishable (user deletes on Threads then re-publishes).
