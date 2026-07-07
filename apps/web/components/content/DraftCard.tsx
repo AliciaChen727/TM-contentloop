@@ -11,8 +11,13 @@ const PLAT_COLOR: Record<DraftTarget, string> = { fb: '#1877F2', ig: '#C13584', 
 const TH_LIMIT = 500
 const IG_HASHTAG_LIMIT = 30
 
+// Only surface an error for a platform that did NOT publish. Once a postId
+// exists (success), any earlier error is stale and must not be shown.
 function firstPublishError(d: ContentDraft): string | undefined {
-  for (const t of d.target) { const e = d.publishResults?.[t]?.error; if (e) return e }
+  for (const t of d.target) {
+    const r = d.publishResults?.[t]
+    if (r?.error && !r.postId) return r.error
+  }
   return undefined
 }
 
