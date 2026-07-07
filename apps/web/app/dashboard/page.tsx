@@ -20,6 +20,7 @@ import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
 import { ProfileMenu } from '@/components/ProfileMenu'
+import { NavMenu } from '@/components/dashboard/NavMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingModal } from '@/components/OnboardingModal'
 import { DateField } from '@/components/ui/DateField'
@@ -450,21 +451,12 @@ export default function DashboardPage() {
             {(() => {
               const activePerms = pages.find(p => p.pageId === selectedPageId)?.permissions ?? null
               return (<>
-                {(isAdmin || activePerms?.ads) && (
-                  <button onClick={() => router.push('/dashboard/ads')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
-                    📊 {L('廣告儀表板', 'Ad Dashboard')}
-                  </button>
-                )}
-                {isAdmin && (
-                  <button onClick={() => router.push('/dashboard/links')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
-                    🔗 {L('報名連結追蹤', 'Link Tracking')}
-                  </button>
-                )}
-                {isAdmin && (
-                  <button onClick={() => router.push('/dashboard/messages')} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-purple-300 hover:text-purple-600 transition-colors">
-                    💬 {L('私訊分析', 'Messages')}
-                  </button>
-                )}
+                <NavMenu items={[
+                  { key: 'ads', icon: '📊', label: L('廣告儀表板', 'Ad Dashboard'), onClick: () => router.push('/dashboard/ads'), show: isAdmin || !!activePerms?.ads },
+                  { key: 'links', icon: '🔗', label: L('報名連結追蹤', 'Link Tracking'), onClick: () => router.push('/dashboard/links'), show: isAdmin },
+                  { key: 'messages', icon: '💬', label: L('私訊分析', 'Messages'), onClick: () => router.push('/dashboard/messages'), show: isAdmin },
+                  { key: 'drafts', icon: '✍️', label: L('AI 草稿發布', 'AI Drafts'), onClick: () => router.push('/dashboard/content-drafts'), show: isAdmin },
+                ]} />
                 {(isAdmin || activePerms?.sidekick) && (
                   <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
                     ✨ AI Sidekick
