@@ -61,6 +61,19 @@ export default function ContentDraftsPage() {
 
   useEffect(() => { if (idToken && selectedPageId) load(idToken, selectedPageId) }, [idToken, selectedPageId, load])
 
+  // Auto-refresh so cron/scheduled publishes reflect without a manual reload:
+  // refetch on window focus + poll every 30s while the tab is visible. Skips
+  // while an action is in-flight (busy) to avoid racing with it.
+  useEffect(() => {
+    if (!idToken || !selectedPageId) return
+    const refresh = () => { if (document.visibilityState === 'visible' && !busy) load(idToken, selectedPageId) }
+    const onFocus = () => refresh()
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    const timer = setInterval(refresh, 30000)
+    return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); clearInterval(timer) }
+  }, [idToken, selectedPageId, busy, load])
+
   // Load per-page automation settings (Kill Switch + quiet hours).
   useEffect(() => {
     if (!idToken || !selectedPageId) return
