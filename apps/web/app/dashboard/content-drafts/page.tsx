@@ -38,7 +38,7 @@ export default function ContentDraftsPage() {
   const [tab, setTab] = useState<Tab>('draft')
   const [composing, setComposing] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [publishingId, setPublishingId] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState<{ id: string; platform: DraftTarget } | null>(null)
   const [killSwitch, setKillSwitch] = useState(false)
   const [quiet, setQuiet] = useState<{ start: number; end: number } | null>(null)
   const [error, setError] = useState('')
@@ -130,7 +130,7 @@ export default function ContentDraftsPage() {
   const publish = useCallback(async (id: string, platform: DraftTarget) => {
     const label = platform === 'th' ? 'Threads' : platform
     if (!window.confirm(L(`確定要立即發布到 ${label}？這會真的貼出貼文。`, `Publish to ${label} now? This posts for real.`))) return
-    setBusy(true); setPublishingId(id); setError('')
+    setBusy(true); setPublishing({ id, platform }); setError('')
     try {
       const res = await fetch(`/api/content-drafts/${id}/publish`, {
         method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
@@ -140,10 +140,38 @@ export default function ContentDraftsPage() {
       if (!res.ok) { setError(d.error ?? L('發布失敗', 'Publish failed')) }
       await load(idToken, selectedPageId)
     } catch {
-      // Never fail silently: a timeout / 5xx (e.g. carousel with many videos) lands here.
-      setError(L('發布失敗或逾時（含多支影片的輪播較慢，請稍候重試或減少影片數）。若主貼已發出，請到 Threads 檢查。', 'Publish failed or timed out (carousels with many videos are slow — retry or use fewer videos).'))
-    } finally { setBusy(false); setPublishingId(null) }
+      setError(L('發布失敗或逾時（含多支影片的輪播較慢，請稍候重試）。若主貼已發出，請到平台檢查。', 'Publish failed or timed out.'))
+    } finally { setBusy(false); setPublishing(null) }
   }, [idToken, selectedPageId, load, L])
+
+  // One-click publish: sequentially publish every not-yet-published target platform.
+  const publishAll = useCallback(async (id: string) => {
+    const draft = drafts.find(d => d.id === id)
+    if (!draft) return
+    const todo = draft.target.filter(t => !draft.publishResults?.[t]?.postId)
+    if (todo.length === 0) return
+    const names = todo.map(t => t === 'th' ? 'Threads' : t === 'fb' ? 'Facebook' : 'Instagram')
+    if (!window.confirm(L(`確定一鍵發布到 ${names.join('、')}？這會真的貼出貼文。`, `Publish to ${names.join(', ')}? This posts for real.`))) return
+    setBusy(true); setError('')
+    try {
+      for (const platform of todo) {
+        setPublishing({ id, platform })
+        try {
+          const res = await fetch(`/api/content-drafts/${id}/publish`, {
+            method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pageId: selectedPageId, platform }),
+          })
+          const d = await res.json().catch(() => ({}))
+          const nm = platform === 'th' ? 'Threads' : platform === 'fb' ? 'Facebook' : 'Instagram'
+          if (!res.ok) setError(prev => `${prev ? prev + '；' : ''}${nm}：${d.error ?? L('發布失敗', 'failed')}`)
+        } catch {
+          const nm = platform === 'th' ? 'Threads' : platform === 'fb' ? 'Facebook' : 'Instagram'
+          setError(prev => `${prev ? prev + '；' : ''}${nm}：${L('逾時/失敗', 'timeout/failed')}`)
+        }
+      }
+      await load(idToken, selectedPageId)
+    } finally { setBusy(false); setPublishing(null) }
+  }, [drafts, idToken, selectedPageId, load, L])
 
   const remove = useCallback(async (id: string) => {
     if (!window.confirm(L('確定刪除這則草稿？此動作無法復原。', 'Delete this draft? This cannot be undone.'))) return
@@ -215,10 +243,10 @@ export default function ContentDraftsPage() {
           : (
             <div className="space-y-4">
               {shown.map(d => (
-                <DraftCard key={d.id} draft={d} busy={busy} publishing={publishingId === d.id}
+                <DraftCard key={d.id} draft={d} busy={busy} publishingPlatform={publishing?.id === d.id ? publishing.platform : null}
                   onTransition={(id, status) => patch(id, { status })}
                   onEdit={(id, generated) => patch(id, { generated })}
-                  onPublish={publish} onDelete={remove}
+                  onPublish={publish} onPublishAll={publishAll} onDelete={remove}
                   onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
                   onUnschedule={(id) => patch(id, { unschedule: true })} />
               ))}

@@ -38,16 +38,17 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, onSchedule, onUnschedule, busy, publishing }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublish, onPublishAll, onDelete, onSchedule, onUnschedule, busy, publishingPlatform }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent) => void
   onPublish: (id: string, platform: DraftTarget) => void
+  onPublishAll: (id: string) => void
   onDelete: (id: string) => void
   onSchedule: (id: string, atMs: number) => void
   onUnschedule: (id: string) => void
   busy: boolean
-  publishing?: boolean
+  publishingPlatform?: DraftTarget | null   // platform currently being published for THIS draft
 }) {
   const { L } = useLang()
   const [schedAt, setSchedAt] = useState('')
@@ -137,14 +138,23 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, on
           <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600">{L('取消', 'Cancel')}</button>
         </>)}
         {(draft.status === 'approved' || draft.status === 'published') && (<>
-          {draft.target.map(t => {
-            const res = draft.publishResults?.[t]
-            if (res?.postId) {
-              return <a key={t} href={res.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
-            }
-            const bg = t === 'th' ? 'bg-gray-900' : t === 'fb' ? 'bg-[#1877F2]' : 'bg-[#C13584]'
-            return <button key={t} disabled={busy} onClick={() => onPublish(draft.id, t)} className={`rounded-lg ${bg} px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70`}>{publishing ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('發布到', 'Publish to')} ${PLAT_LABEL[t]}`}</button>
-          })}
+          {/* Already-published platforms → link. */}
+          {draft.target.filter(t => draft.publishResults?.[t]?.postId).map(t => (
+            <a key={t} href={draft.publishResults![t]!.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')} ↗</a>
+          ))}
+          {/* One-click publish to all remaining platforms at once. */}
+          {(() => {
+            const remaining = draft.target.filter(t => !draft.publishResults?.[t]?.postId)
+            if (remaining.length === 0) return null
+            return (
+              <button disabled={busy} onClick={() => onPublishAll(draft.id)}
+                className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">
+                {publishingPlatform
+                  ? `⏳ ${L('發布', 'Publishing')} ${PLAT_LABEL[publishingPlatform]}${L('中…', '…')}`
+                  : `🚀 ${L('一鍵發布', 'Publish all')}（${remaining.map(t => PLAT_LABEL[t]).join('、')}）`}
+              </button>
+            )
+          })()}
           {firstPublishError(draft) && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {firstPublishError(draft)}</span>}
           {draft.status === 'approved' && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
         </>)}
@@ -159,7 +169,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublish, onDelete, on
         )}
         {draft.status === 'scheduled' && (<>
           <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">⏰ {L('已排程', 'Scheduled')}：{fmtTime(draft.schedule?.at)}</span>
-          <button disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishing ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('立即發布', 'Publish now')}`}</button>
+          <button disabled={busy} onClick={() => onPublish(draft.id, 'th')} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishingPlatform ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('立即發布', 'Publish now')}`}</button>
           <button disabled={busy} onClick={() => onUnschedule(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✕ {L('取消排程', 'Cancel')}</button>
         </>)}
         {(draft.status === 'rejected' || draft.status === 'expired' || draft.status === 'failed') && (
