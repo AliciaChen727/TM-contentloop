@@ -52,9 +52,15 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   publishingPlatform?: DraftTarget | null   // platform currently being published for THIS draft
 }) {
   const { L } = useLang()
-  const [schedAt, setSchedAt] = useState('')
   const fmtTime = (ms?: number) => ms ? new Date(ms).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
   const [editing, setEditing] = useState(false)
+  // Schedule: split into date / hour / minute for a custom 5-min-step picker
+  const [schedDate, setSchedDate] = useState('')   // 'YYYY-MM-DD'
+  const [schedHour, setSchedHour] = useState('09') // '00'–'23'
+  const [schedMinute, setSchedMinute] = useState('00') // '00','05','10'…
+  const schedMs = schedDate
+    ? new Date(`${schedDate}T${schedHour}:${schedMinute}:00`).getTime()
+    : NaN
   const [bodies, setBodies] = useState<Record<string, string>>(
     Object.fromEntries(draft.target.map(t => [t, draft.generated.perPlatform[t]?.body ?? ''])),
   )
@@ -189,11 +195,41 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
         {locked && <button disabled={busy} onClick={() => onDuplicate(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">📄 {L('複製為新草稿', 'Duplicate')}</button>}
         {/* Schedule (S5) — any approved draft can auto-publish later (all platforms). */}
         {draft.status === 'approved' && !locked && (
-          <span className="flex items-center gap-1">
-            <input type="datetime-local" step="300" value={schedAt} onChange={e => setSchedAt(e.target.value)}
-              className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700" />
-            <button disabled={busy || !schedAt} onClick={() => onSchedule(draft.id, new Date(schedAt).getTime())}
-              className="rounded-lg border border-indigo-300 px-3 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50">⏰ {L('排程', 'Schedule')}</button>
+          <span className="flex flex-wrap items-center gap-1">
+            {/* Date */}
+            <input
+              type="date"
+              value={schedDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={e => setSchedDate(e.target.value)}
+              className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700"
+            />
+            {/* Hour */}
+            <select
+              value={schedHour}
+              onChange={e => setSchedHour(e.target.value)}
+              className="rounded-lg border border-gray-200 px-1 py-1 text-xs text-gray-700"
+            >
+              {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map(h => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+            <span className="text-xs text-gray-400">:</span>
+            {/* Minute — 5-min steps only */}
+            <select
+              value={schedMinute}
+              onChange={e => setSchedMinute(e.target.value)}
+              className="rounded-lg border border-gray-200 px-1 py-1 text-xs text-gray-700"
+            >
+              {['00','05','10','15','20','25','30','35','40','45','50','55'].map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <button
+              disabled={busy || !schedDate || isNaN(schedMs)}
+              onClick={() => onSchedule(draft.id, schedMs)}
+              className="rounded-lg border border-indigo-300 px-3 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50"
+            >⏰ {L('排程', 'Schedule')}</button>
           </span>
         )}
         {draft.status === 'scheduled' && (<>
