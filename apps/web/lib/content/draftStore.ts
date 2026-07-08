@@ -114,7 +114,18 @@ export async function transitionDraft(
   }
   const patch: Record<string, unknown> = { status: to, updatedAt: Date.now() }
   if (to === 'approved') patch.approvedByUid = byUid
-  if (to === 'draft') patch.approvedByUid = null   // 收回核准/重審 → 清核准者
+  if (to === 'draft') {
+    patch.approvedByUid = null   // 收回核准/重審 → 清核准者
+    // Clear failed publish results (error-only entries) so stale errors don't show in UI.
+    // Keep entries that have a postId (partial publishes that actually succeeded).
+    const cleaned: Record<string, unknown> = {}
+    for (const [plat, r] of Object.entries(current.publishResults ?? {})) {
+      if ((r as { postId?: string }).postId) cleaned[plat] = r
+    }
+    if (Object.keys(cleaned).length !== Object.keys(current.publishResults ?? {}).length) {
+      patch.publishResults = Object.keys(cleaned).length ? cleaned : null
+    }
+  }
   await ref.set(patch, { merge: true })
   return { ok: true, draft: { ...current, ...patch } as ContentDraft }
 }

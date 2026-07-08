@@ -18,7 +18,10 @@ let _db: ReturnType<typeof getFirestore> | undefined
 let _auth: ReturnType<typeof getAuth> | undefined
 
 export function getAdminDb() {
-  if (!_db) _db = getFirestore(getAdminApp())
+  if (!_db) {
+    _db = getFirestore(getAdminApp())
+    _db.settings({ ignoreUndefinedProperties: true })
+  }
   return _db
 }
 
