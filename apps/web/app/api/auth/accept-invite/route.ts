@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { roleFromLegacyPerms } from '@/lib/auth/access'
+import { type Role, isRole, legacyPermsForRole } from '@/lib/auth/roles'
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -29,22 +31,24 @@ export async function POST(req: NextRequest) {
 
   if (pendingSnap.empty) return NextResponse.json({ hasInvites: false })
 
-  interface ViewerPage { pageId: string; pageName: string; igUserId: string | null; permissions: { ads: boolean; sidekick: boolean; syncAds: boolean } }
+  interface ViewerPage { pageId: string; pageName: string; igUserId: string | null; role: Role; permissions: { ads: boolean; sidekick: boolean; syncAds: boolean } }
   const batch = adminDb.batch()
   const viewerPages: ViewerPage[] = []
 
   for (const inviteDoc of pendingSnap.docs) {
     const data = inviteDoc.data()
     const pageId = inviteDoc.id
-    const permissions = data.permissions ?? { ads: false, sidekick: false, syncAds: false }
+    // 角色為權威來源；舊邀請只有 permissions 時映射成角色。permissions 保留餵舊消費端。
+    const role: Role = isRole(data.role) ? data.role : roleFromLegacyPerms(data.permissions)
+    const permissions = legacyPermsForRole(role)
     batch.update(inviteDoc.ref, { status: 'accepted', acceptedAt: new Date(), acceptedBy: uid })
     batch.set(
       adminDb.collection('pages').doc(pageId).collection('members').doc(uid),
-      { role: 'viewer', email, displayName, permissions, addedAt: new Date() }
+      { role, email, displayName, permissions, addedAt: new Date() }
     )
     // Remove from pendingInvites
     batch.delete(adminDb.collection('pages').doc(pageId).collection('pendingInvites').doc(email.toLowerCase()))
-    viewerPages.push({ pageId, pageName: data.pageName ?? '', igUserId: data.igUserId ?? null, permissions })
+    viewerPages.push({ pageId, pageName: data.pageName ?? '', igUserId: data.igUserId ?? null, role, permissions })
   }
 
   const viewerAccessRef = adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages')

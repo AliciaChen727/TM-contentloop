@@ -1,9 +1,21 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
+import { can, roleFromLegacyPerms } from '@/lib/auth/access'
+import { type Role, isRole, legacyPermsForRole } from '@/lib/auth/roles'
 import nodemailer from 'nodemailer'
 
-interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
+interface LegacyPerms { ads: boolean; sidekick: boolean; syncAds: boolean }
+
+// email 邀請可指派的角色（Owner 只能由 OAuth 首連產生，不可被邀請）。
+function resolveInviteRole(body: { role?: unknown; permissions?: LegacyPerms }): Role {
+  if (isRole(body.role) && body.role !== 'owner') return body.role
+  // 回溯相容：舊前端只送 permissions 時，映射成角色。
+  return roleFromLegacyPerms(body.permissions)
+}
+
+const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', admin: '管理員', editor: '編輯者', viewer: '檢視者' }
 
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -19,28 +31,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { email, pageId, permissions }: { email: string; pageId: string; permissions?: Permissions } = await req.json()
+  const body = await req.json()
+  const { email, pageId } = body as { email?: string; pageId?: string }
   if (!email || !pageId) return NextResponse.json({ error: 'Missing email or pageId' }, { status: 400 })
 
-  const tokensSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
-  const adminPageIds = new Set(tokensSnap.docs.filter(d => d.id !== 'userToken').map(d => d.id === 'page' ? d.data().pageId : d.id).filter(Boolean))
-  if (!adminPageIds.has(pageId)) {
-    return NextResponse.json({ error: '你不是此粉絲頁的管理員' }, { status: 403 })
+  // 授權：呼叫者需對此頁有「管理成員」能力（owner/admin）。走集中授權層，
+  // 不再只認 metaTokens，故受邀成 admin 的人也能再邀請他人。
+  if (!(await can(uid, pageId, 'members.manage'))) {
+    return NextResponse.json({ error: '你沒有管理此粉絲頁成員的權限' }, { status: 403 })
   }
 
-  const pageDoc = tokensSnap.docs.find(d => d.id === pageId) ?? tokensSnap.docs.find(d => d.id === 'page')
-  const pageData = pageDoc?.data() ?? {}
-  const pageName = pageData.pageName ?? ''
+  const role = resolveInviteRole(body)
+  const permissions = legacyPermsForRole(role)
 
-  const finalPermissions: Permissions = permissions ?? { ads: false, sidekick: false, syncAds: false }
+  // 頁名一律從「頁的 owner」解析，不靠呼叫者 metaTokens（受邀 admin 可能沒有 token）。
+  let pageName = ''
+  let igUserId: string | null = null
+  const ownerUid = await resolvePageOwnerUid(pageId)
+  if (ownerUid) {
+    const ownerTok = await adminDb.collection('users').doc(ownerUid).collection('metaTokens').doc(pageId).get()
+    pageName = ownerTok.data()?.pageName ?? ''
+    igUserId = ownerTok.data()?.igUserId ?? null
+  }
 
   const normalizedEmail = email.toLowerCase().trim()
   const inviteData = {
-    role: 'viewer',
+    role,
+    permissions,
     invitedBy: uid,
     pageName,
-    igUserId: pageData.igUserId ?? null,
-    permissions: finalPermissions,
+    igUserId,
     createdAt: new Date(),
     status: 'pending',
   }
@@ -49,18 +69,13 @@ export async function POST(req: NextRequest) {
   batch.set(adminDb.collection('invites').doc(normalizedEmail).collection('pages').doc(pageId), inviteData)
   // Mirror in pages/{pageId}/pendingInvites for easy admin listing
   batch.set(adminDb.collection('pages').doc(pageId).collection('pendingInvites').doc(normalizedEmail), {
-    email: normalizedEmail, permissions: finalPermissions, invitedBy: uid, createdAt: new Date(),
+    email: normalizedEmail, role, permissions, invitedBy: uid, createdAt: new Date(),
   })
   await batch.commit()
 
   // Send invitation email
   const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://tm-contentloop.vercel.app'}/auth/login?invited=1`
-  const permLabels = [
-    finalPermissions.ads && '廣告儀表板',
-    finalPermissions.sidekick && 'AI Sidekick',
-    finalPermissions.syncAds && '同步廣告資料',
-  ].filter(Boolean)
-  const permText = permLabels.length > 0 ? permLabels.join('、') : '貼文成效首頁'
+  const roleText = `${ROLE_LABEL[role]}（${role === 'admin' ? '可管理與發布' : role === 'editor' ? '可建立草稿與同步' : '唯讀成效'}）`
 
   let emailError: string | null = null
   if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
@@ -86,8 +101,8 @@ export async function POST(req: NextRequest) {
               查看 <strong>${pageName}</strong> 的成效數據。
             </p>
             <div style="background:white;border-radius:8px;padding:16px;margin-bottom:24px;border:1px solid #E5E7EB">
-              <p style="font-size:12px;color:#6B7280;margin:0 0 8px;font-weight:600">開放權限</p>
-              <p style="font-size:14px;color:#374151;margin:0">${permText}</p>
+              <p style="font-size:12px;color:#6B7280;margin:0 0 8px;font-weight:600">你的角色</p>
+              <p style="font-size:14px;color:#374151;margin:0">${roleText}</p>
             </div>
             <a href="${loginUrl}" style="display:inline-block;background:#3B6FD4;color:white;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">
               點擊登入 ContentLoop

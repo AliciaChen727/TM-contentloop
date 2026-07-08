@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'crypto'
 import { adminDb } from '@/lib/firebase/admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import {
   type ContentDraft, type CreateDraftInput, type DraftStatus, type DraftTarget,
   canTransition,
@@ -123,7 +124,7 @@ export async function transitionDraft(
       if ((r as { postId?: string }).postId) cleaned[plat] = r
     }
     if (Object.keys(cleaned).length !== Object.keys(current.publishResults ?? {}).length) {
-      patch.publishResults = Object.keys(cleaned).length ? cleaned : require('@/lib/firebase/admin').adminDb.firestore.FieldValue.delete()
+      patch.publishResults = Object.keys(cleaned).length ? cleaned : FieldValue.delete()
     }
   }
   await ref.set(patch, { merge: true })

@@ -2,6 +2,16 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin, listAllPages } from '@/lib/auth/superadmin'
+import { type Role, isRole, legacyPermsForRole } from '@/lib/auth/roles'
+
+interface LegacyPerms { ads: boolean; sidekick: boolean; syncAds: boolean }
+interface PageEntry {
+  pageId: string
+  pageName: string
+  igUserId: string | null
+  permissions?: LegacyPerms | null
+  role?: Role
+}
 
 export async function GET(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -29,44 +39,56 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ pages: allPages, isOwner: true, isAdmin: true })
   }
 
-  interface PageEntry { pageId: string; pageName: string; igUserId: string | null; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }
+  // 1) 自己用 OAuth 連接的粉專（metaTokens）— 一律具管理權。
   const snap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
-  const pages: PageEntry[] = snap.docs
+  const ownPages: PageEntry[] = snap.docs
     .filter(d => d.id !== 'userToken' && d.id !== 'page')
     .map(d => {
       const data = d.data()
       return { pageId: d.id, pageName: data.pageName ?? '', igUserId: data.igUserId ?? null }
     })
-
-  // Fallback: if no new-style page docs, try old 'page' doc
-  if (pages.length === 0) {
+  // Fallback: 舊 'page' 單一 doc
+  if (ownPages.length === 0) {
     const oldDoc = snap.docs.find(d => d.id === 'page')
     if (oldDoc) {
       const data = oldDoc.data()
-      pages.push({ pageId: data.pageId ?? 'page', pageName: data.pageName ?? '', igUserId: data.igUserId ?? null })
+      ownPages.push({ pageId: data.pageId ?? 'page', pageName: data.pageName ?? '', igUserId: data.igUserId ?? null })
+    }
+  }
+  const ownIds = new Set(ownPages.map(p => p.pageId))
+
+  // 2) 受邀粉專（users/{uid}/viewerAccess）。新模型帶 role；舊資料只有 permissions → 沿用不擴權。
+  let hasInvitedAdmin = false
+  const memberPages: PageEntry[] = []
+  const viewerSnap = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
+  if (viewerSnap.exists) {
+    const vps: { pageId: string; pageName?: string; igUserId?: string | null; role?: unknown; permissions?: LegacyPerms }[] = viewerSnap.data()?.pages ?? []
+    for (const vp of vps) {
+      if (ownIds.has(vp.pageId)) continue
+      const role: Role | undefined = isRole(vp.role) ? vp.role : undefined
+      // 有 role → 由 role 展開 permissions（權威）；無 role（舊 viewer）→ 沿用既存 permissions。
+      const permissions = role ? legacyPermsForRole(role) : (vp.permissions ?? null)
+      if (role === 'admin' || role === 'owner') hasInvitedAdmin = true
+      memberPages.push({ pageId: vp.pageId, pageName: vp.pageName ?? '', igUserId: vp.igUserId ?? null, permissions, role })
     }
   }
 
-  // Admin = has at least one connected-Meta page (before viewer pages appended).
-  const isAdmin = pages.length > 0
+  const combined = [...ownPages, ...memberPages]
 
-  // Also include viewer pages granted via invite (skipped when ownOnly=true)
-  const viewerSnap = !ownOnly ? await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get() : null
-  if (viewerSnap?.exists) {
-    const viewerPages: { pageId: string; pageName: string; igUserId: string | null; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } }[] = viewerSnap.data()?.pages ?? []
-    for (const vp of viewerPages) {
-      if (!pages.find(p => p.pageId === vp.pageId)) {
-        pages.push({ pageId: vp.pageId, pageName: vp.pageName, igUserId: vp.igUserId ?? null, permissions: vp.permissions ?? null })
-      }
-    }
-  }
+  // 管理權：自己連接的頁 或 被邀為 admin/owner。
+  const isAdmin = ownPages.length > 0 || hasInvitedAdmin
 
-  // Check if user is owner of any page
+  // owner：自己連接的頁中有 admins/{uid}.isOwner。
   let isOwner = false
-  for (const page of pages) {
+  for (const page of ownPages) {
     const adminDoc = await adminDb.collection('pages').doc(page.pageId).collection('admins').doc(uid).get()
     if (adminDoc.data()?.isOwner === true) { isOwner = true; break }
   }
+
+  // ownOnly：只回「可管理」的頁（自己連接 + 受邀 admin/owner），供設定/成員/連結頁使用。
+  const pages = ownOnly
+    ? combined.filter(p => ownIds.has(p.pageId) || p.role === 'admin' || p.role === 'owner')
+    : combined
 
   return NextResponse.json({ pages, isOwner, isAdmin })
 }
