@@ -91,8 +91,14 @@ export async function runPublish(
       await writeAudit(pageId, draft.id, `publish:${platform}:failed`, byUid, { error: result.error })
       return { ok: false, error: result.error }
     }
-    await recordPublishOutcome(pageId, draft.id, platform, { postId: result.postId, permalink: result.permalink, storyId })
-    await writeAudit(pageId, draft.id, `publish:${platform}`, byUid, { postId: result.postId, storyId })
+    // Firestore rejects `undefined` values — only include fields that are defined.
+    const outcome: Record<string, unknown> = { postId: result.postId }
+    if (result.permalink !== undefined) outcome.permalink = result.permalink
+    if (storyId !== undefined) outcome.storyId = storyId
+    await recordPublishOutcome(pageId, draft.id, platform, outcome as Parameters<typeof recordPublishOutcome>[3])
+    const auditData: Record<string, unknown> = { postId: result.postId }
+    if (storyId !== undefined) auditData.storyId = storyId
+    await writeAudit(pageId, draft.id, `publish:${platform}`, byUid, auditData)
     return { ok: true, postId: result.postId, storyId, storyNote }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unexpected publish error'
