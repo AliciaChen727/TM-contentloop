@@ -4,3 +4,4 @@ admin.initializeApp()
 
 export { syncFbInsights } from './syncFbInsights'
 export { syncIgInsights } from './syncIgInsights'
+export { publishScheduled } from './publishScheduled'
