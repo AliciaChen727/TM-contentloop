@@ -190,7 +190,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
         {/* Schedule (S5) — any approved draft can auto-publish later (all platforms). */}
         {draft.status === 'approved' && !locked && (
           <span className="flex items-center gap-1">
-            <input type="datetime-local" value={schedAt} onChange={e => setSchedAt(e.target.value)}
+            <input type="datetime-local" step="300" value={schedAt} onChange={e => setSchedAt(e.target.value)}
               className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700" />
             <button disabled={busy || !schedAt} onClick={() => onSchedule(draft.id, new Date(schedAt).getTime())}
               className="rounded-lg border border-indigo-300 px-3 py-1.5 text-xs font-semibold text-indigo-600 disabled:opacity-50">⏰ {L('排程', 'Schedule')}</button>
