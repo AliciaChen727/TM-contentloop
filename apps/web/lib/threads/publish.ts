@@ -28,14 +28,23 @@ async function post(path: string, params: Record<string, string>): Promise<{ id?
   return { id: j.id ? String(j.id) : undefined }
 }
 
-// Video containers report status async; wait until FINISHED (or fail) before publish.
-async function waitReady(token: string, creationId: string): Promise<{ ok: boolean; error?: string }> {
+// Poll container status before publishing. All container types (TEXT/IMAGE/VIDEO/CAROUSEL)
+// need this — even text containers require brief propagation time and will return
+// "resource does not exist" if published immediately. TEXT containers return FINISHED
+// instantly; VIDEO/CAROUSEL may take seconds to minutes.
+async function waitReady(token: string, creationId: string, isText = false): Promise<{ ok: boolean; error?: string }> {
   for (let i = 0; i < 20; i++) {                       // ~20 × 3s ≈ 60s budget
     const res = await fetch(`${API}/${creationId}?fields=status,error_message&access_token=${encodeURIComponent(token)}`)
     const j = await res.json().catch(() => ({}))
-    const status = j.status as string | undefined
-    if (status === 'FINISHED') return { ok: true }
-    if (status === 'ERROR' || status === 'EXPIRED') return { ok: false, error: j.error_message ?? `container ${status}` }
+    
+    if (!j.error) {
+      const status = j.status as string | undefined
+      if (status === 'FINISHED') return { ok: true }
+      if (status === 'ERROR' || status === 'EXPIRED') return { ok: false, error: j.error_message ?? `container ${status}` }
+      // TEXT containers may not return a status field at all, but if j.error is absent, it exists and is ready.
+      if (isText && status === undefined) return { ok: true }
+    }
+    
     await new Promise(r => setTimeout(r, 3000))
   }
   return { ok: false, error: 'media processing timed out' }
@@ -46,10 +55,10 @@ async function createAndPublish(
 ): Promise<{ id?: string; error?: string }> {
   const created = await post('me/threads', { ...params, access_token: token })
   if (created.error || !created.id) return { error: created.error ?? 'no creation id' }
-  if (isVideo) {
-    const ready = await waitReady(token, created.id)
-    if (!ready.ok) return { error: ready.error }
-  }
+  // Always poll ready — TEXT containers need propagation time too (root cause of
+  // "The requested resource does not exist" errors on immediate publish).
+  const ready = await waitReady(token, created.id, !isVideo)
+  if (!ready.ok) return { error: ready.error }
   return post('me/threads_publish', { creation_id: created.id, access_token: token })
 }
 
