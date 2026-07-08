@@ -142,7 +142,7 @@ export function CaptionSettings({ pageId, idToken, targets, mediaType, seed, onG
               <span className="mb-0.5 block text-xs font-medium text-gray-500">{L(f.zh, f.en)}</span>
               <textarea value={info[f.key] ?? ''} onChange={e => setInfo(v => ({ ...v, [f.key]: e.target.value }))}
                 rows={2}
-                placeholder={`${L(f.zh, f.en)}${f.placeholder ? `（${f.placeholder}）` : ''}`}
+                placeholder={f.placeholder ? (lang === 'en' && f.placeholderEn ? f.placeholderEn : f.placeholder) : L(f.zh, f.en)}
                 className="max-h-40 min-h-[2.5rem] w-full resize-y overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800" />
             </div>
           ))}

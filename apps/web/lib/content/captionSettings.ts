@@ -31,7 +31,7 @@ export const TONE_PRESETS: { zh: string; en: string }[] = [
   { zh: '故事感', en: 'Storytelling' },
 ]
 
-export interface RequiredField { key: string; zh: string; en: string; placeholder?: string }
+export interface RequiredField { key: string; zh: string; en: string; placeholder?: string; placeholderEn?: string }
 
 // Required-info fields customized per industry (image/product/event facts the AI
 // should weave in — never invent). Falls back to `other` for unknown industries.
@@ -53,7 +53,7 @@ export const INDUSTRY_FIELDS: Record<Industry, RequiredField[]> = {
     { key: 'event', zh: '活動名稱', en: 'Event name' },
     { key: 'place', zh: '地點', en: 'Location' },
     { key: 'time', zh: '時間', en: 'Time' },
-    { key: 'fee', zh: '費用', en: 'Fee', placeholder: '免費 / NT$…' },
+    { key: 'fee', zh: '費用', en: 'Fee', placeholder: '免費 / NT$…', placeholderEn: 'Free / NT$…' },
     { key: 'highlight', zh: '活動亮點', en: 'Highlights' },
   ],
   personal_brand: [
@@ -62,8 +62,8 @@ export const INDUSTRY_FIELDS: Record<Industry, RequiredField[]> = {
     { key: 'link', zh: '連結', en: 'Link' },
   ],
   other: [
-    { key: 'name', zh: '名稱', en: 'Name' },
-    { key: 'info', zh: '重點資訊', en: 'Key info' },
+    { key: 'name', zh: '名稱', en: 'Name', placeholder: '例如活動或商品名稱', placeholderEn: 'e.g. event or product name' },
+    { key: 'info', zh: '重點資訊', en: 'Key info', placeholder: '例如活動時間、地點、主持人、商品介紹、亮點等', placeholderEn: 'e.g. time, location, host, product introduction, highlights, etc.' },
   ],
 }
 
