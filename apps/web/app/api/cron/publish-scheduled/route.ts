@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   const now = Date.now()
   const pageRefs = await adminDb.collection('pages').listDocuments()
   const summary = { pages: 0, published: 0, partial: 0, failed: 0, skipped: 0, deferred: 0 }
+  const errors: { pageId: string; draftId: string; platform: string; error: string }[] = []
 
   for (const pageRef of pageRefs) {
     const pageId = pageRef.id
@@ -43,7 +44,14 @@ export async function POST(req: NextRequest) {
       let anyFail = false
       for (const platform of todo) {
         const r = await runPublish(pageId, draft, platform, 'cron')     // records + audits inside
-        if (!r.ok) anyFail = true
+        if (!r.ok) {
+          anyFail = true
+          const errMsg = r.error
+          console.error(`[publish-scheduled] FAILED pageId=${pageId} draftId=${draft.id} platform=${platform} error="${errMsg}"`)
+          errors.push({ pageId, draftId: draft.id, platform, error: errMsg })
+        } else {
+          console.log(`[publish-scheduled] OK pageId=${pageId} draftId=${draft.id} platform=${platform} postId=${r.postId}`)
+        }
       }
       // recordPublishOutcome flips status→published when ALL platforms succeed.
       // If not, move out of `publishing` so it isn't re-picked; mark failed.
@@ -53,5 +61,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, ...summary })
+  return NextResponse.json({ ok: true, ...summary, ...(errors.length ? { errors } : {}) })
 }
+
