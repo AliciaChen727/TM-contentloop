@@ -123,7 +123,7 @@ export async function transitionDraft(
       if ((r as { postId?: string }).postId) cleaned[plat] = r
     }
     if (Object.keys(cleaned).length !== Object.keys(current.publishResults ?? {}).length) {
-      patch.publishResults = Object.keys(cleaned).length ? cleaned : null
+      patch.publishResults = Object.keys(cleaned).length ? cleaned : require('@/lib/firebase/admin').adminDb.firestore.FieldValue.delete()
     }
   }
   await ref.set(patch, { merge: true })
