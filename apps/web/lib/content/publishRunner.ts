@@ -44,8 +44,14 @@ export async function runPublish(
 
     if (platform === 'th') {
       const owner = await resolvePageOwnerUid(pageId)
-      const tok = (await getThreadsToken(byUid, pageId)) ?? (owner ? await getThreadsToken(owner, pageId) : null)
-      if (!tok) return { ok: false, error: 'Threads 未連接或未授權發布' }
+      const tokByUser = await getThreadsToken(byUid, pageId)
+      const tokByOwner = owner ? await getThreadsToken(owner, pageId) : null
+      const tok = tokByUser ?? tokByOwner
+      if (!tok) {
+        console.error(`[publishRunner] Threads token not found: byUid=${byUid} owner=${owner} pageId=${pageId} tokByUser=${!!tokByUser} tokByOwner=${!!tokByOwner}`)
+        return { ok: false, error: 'Threads 未連接或未授權發布' }
+      }
+
       const r = await publishThreads(tok.accessToken, { text: g.perPlatform.th?.body ?? '', ...media, topicTag: g.threadsTopicTag })
       result = r.ok ? { ok: true, postId: r.rootId, permalink: r.permalink } : r
     } else {
