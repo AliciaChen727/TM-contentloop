@@ -43,12 +43,19 @@ export async function runPublish(
     let storyNote: string | undefined
 
     if (platform === 'th') {
-      const owner = await resolvePageOwnerUid(pageId)
-      const tokByUser = await getThreadsToken(byUid, pageId)
-      const tokByOwner = owner ? await getThreadsToken(owner, pageId) : null
-      const tok = tokByUser ?? tokByOwner
+      // For cron publishes (byUid='cron'), try the caller first (no-op for 'cron'),
+      // then scan ALL admins of this page to find any valid Threads token.
+      // This fixes the case where the connecting user is an admin but not the owner.
+      let tok = await getThreadsToken(byUid, pageId)
       if (!tok) {
-        console.error(`[publishRunner] Threads token not found: byUid=${byUid} owner=${owner} pageId=${pageId} tokByUser=${!!tokByUser} tokByOwner=${!!tokByOwner}`)
+        const adminSnap = await adminDb.collection('pages').doc(pageId).collection('admins').get()
+        for (const adminDoc of adminSnap.docs) {
+          tok = await getThreadsToken(adminDoc.id, pageId)
+          if (tok) break
+        }
+      }
+      if (!tok) {
+        console.error(`[publishRunner] Threads token not found after scanning all admins: byUid=${byUid} pageId=${pageId} adminCount=${(await adminDb.collection('pages').doc(pageId).collection('admins').get()).size}`)
         return { ok: false, error: 'Threads 未連接或未授權發布' }
       }
 
