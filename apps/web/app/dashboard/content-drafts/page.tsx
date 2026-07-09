@@ -10,7 +10,7 @@ import { DraftComposer } from '@/components/content/DraftComposer'
 import type { ContentDraft, DraftStatus, DraftTarget, GeneratedContent, CreateDraftInput } from '@/lib/content/draftTypes'
 import type { Capability, Role } from '@/lib/auth/roles'
 
-interface PageInfo { pageId: string; pageName: string; role?: Role; threadsConnected?: boolean; permissions?: { syncAds?: boolean } | null }
+interface PageInfo { pageId: string; pageName: string; role?: Role; igUserId?: string | null; threadsConnected?: boolean; permissions?: { syncAds?: boolean } | null }
 type Tab = 'draft' | 'approved' | 'published' | 'other'
 const TAB_MATCH: Record<Tab, DraftStatus[]> = {
   draft: ['draft'], approved: ['approved', 'scheduled', 'publishing', 'processing'],
@@ -49,7 +49,10 @@ export default function ContentDraftsPage() {
   const canDraft = capabilities.includes('content.draft')
   const canPublish = capabilities.includes('content.publish')
   const activePage = pages.find(p => p.pageId === selectedPageId)
-  const unavailableTargets: DraftTarget[] = activePage?.threadsConnected === false ? ['th'] : []
+  const unavailableTargets: DraftTarget[] = [
+    ...(activePage?.igUserId ? [] : ['ig' as DraftTarget]),
+    ...(activePage?.threadsConnected === false ? ['th' as DraftTarget] : []),
+  ]
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async user => {
@@ -171,11 +174,20 @@ export default function ContentDraftsPage() {
   const publishAll = useCallback(async (id: string) => {
     const draft = drafts.find(d => d.id === id)
     if (!draft) return
-    const unavailable = draft.target.filter(t => t === 'th' && activePage?.threadsConnected === false && !draft.publishResults?.[t]?.postId)
+    const unavailable = draft.target.filter(t => (
+      (t === 'ig' && !activePage?.igUserId) ||
+      (t === 'th' && activePage?.threadsConnected === false)
+    ) && !draft.publishResults?.[t]?.postId)
+    if (unavailable.includes('ig')) {
+      setError(L('請先建立 IG 並連結 Meta 帳號，才能發布 IG。', 'Connect Instagram to Meta before publishing to Instagram.'))
+    }
     if (unavailable.includes('th')) {
       setError(L('請先建立 Threads 並連結帳號，才能發布 Threads。', 'Connect a Threads account before publishing to Threads.'))
     }
-    const todo = draft.target.filter(t => !draft.publishResults?.[t]?.postId && !(t === 'th' && activePage?.threadsConnected === false))
+    const todo = draft.target.filter(t => !draft.publishResults?.[t]?.postId && !(
+      (t === 'ig' && !activePage?.igUserId) ||
+      (t === 'th' && activePage?.threadsConnected === false)
+    ))
     if (todo.length === 0) return
     const names = todo.map(t => t === 'th' ? 'Threads' : t === 'fb' ? 'Facebook' : 'Instagram')
     if (!window.confirm(L(`確定一鍵發布到 ${names.join('、')}？這會真的貼出貼文。`, `Publish to ${names.join(', ')}? This posts for real.`))) return
@@ -199,7 +211,7 @@ export default function ContentDraftsPage() {
       }
       await load(idToken, selectedPageId)
     } finally { setBusy(false); setPublishing(null) }
-  }, [drafts, activePage?.threadsConnected, idToken, selectedPageId, load, L])
+  }, [drafts, activePage?.igUserId, activePage?.threadsConnected, idToken, selectedPageId, load, L])
 
   // Duplicate a (usually published) draft into a fresh editable draft.
   const duplicate = useCallback(async (id: string) => {
@@ -310,7 +322,7 @@ export default function ContentDraftsPage() {
       </div>
 
       {composing && selectedPageId && (
-        <DraftComposer pageId={selectedPageId} pageName={activePage?.pageName} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} threadsAvailable={activePage?.threadsConnected !== false} />
+        <DraftComposer pageId={selectedPageId} pageName={activePage?.pageName} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} threadsAvailable={activePage?.threadsConnected !== false} instagramAvailable={!!activePage?.igUserId} />
       )}
     </main>
   )

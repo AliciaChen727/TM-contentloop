@@ -18,7 +18,7 @@ const TH_LIMIT = THREADS_LIMIT
 
 // Manual draft composer (S2+). Upload image/video with live preview, optional
 // AI caption generation (copy-only, no image quota), then save as `draft`.
-export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, busy, threadsAvailable = true }: {
+export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, busy, threadsAvailable = true, instagramAvailable = true }: {
   pageId: string
   pageName?: string
   idToken: string
@@ -26,6 +26,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   onClose: () => void
   busy: boolean
   threadsAvailable?: boolean
+  instagramAvailable?: boolean
 }) {
   const { L } = useLang()
   const [targets, setTargets] = useState<DraftTarget[]>(['fb'])
@@ -81,6 +82,10 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && mediaReady
 
   function toggle(t: DraftTarget) {
+    if (t === 'ig' && !instagramAvailable) {
+      setErr(L('請先建立 IG 並連結 Meta 帳號，才能發布 IG。', 'Connect Instagram to Meta before publishing to Instagram.'))
+      return
+    }
     if (t === 'th' && !threadsAvailable) {
       setErr(L('請先建立 Threads 並連結帳號，才能發布 Threads。', 'Connect a Threads account before publishing to Threads.'))
       return
@@ -153,19 +158,38 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
             <label className="mb-1 block text-sm font-semibold text-gray-700">{L('發布平台', 'Platforms')}</label>
             <div className="mb-4 flex gap-2">
               {TARGETS.map(t => {
-                const disabled = t.key === 'th' && !threadsAvailable
+                const disabled = (t.key === 'th' && !threadsAvailable) || (t.key === 'ig' && !instagramAvailable)
                 return (
                 <button key={t.key} onClick={() => toggle(t.key)} disabled={disabled}
-                  title={disabled ? L('請先建立 Threads 並連結帳號，才能發布', 'Connect Threads before publishing') : undefined}
+                  title={
+                    t.key === 'th' && !threadsAvailable
+                      ? L('請先建立 Threads 並連結帳號，才能發布', 'Connect Threads before publishing')
+                      : t.key === 'ig' && !instagramAvailable
+                        ? L('請先建立 IG 並連結 Meta 帳號，才能發布', 'Connect Instagram to Meta before publishing')
+                        : undefined
+                  }
                   className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${targets.includes(t.key) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500'} ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}>
                   {t.label}
                 </button>
                 )
               })}
             </div>
+            {!instagramAvailable && (
+              <p className="-mt-2 mb-2 text-xs text-amber-600">
+                {L('Instagram 尚未連結：請先建立 IG 並連結 Meta 帳號，才能發布 IG。', 'Instagram is not connected yet. Connect Instagram to Meta before publishing to Instagram.')}
+              </p>
+            )}
             {!threadsAvailable && (
               <p className="-mt-2 mb-4 text-xs text-amber-600">
                 {L('Threads 尚未連結：請先建立 Threads 並連結帳號，才能發布 Threads。', 'Threads is not connected yet. Connect a Threads account before publishing to Threads.')}
+                <a
+                  href="/dashboard/settings"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-1 font-semibold underline underline-offset-2 hover:text-amber-700"
+                >
+                  {L('前往設定頁連結 Threads', 'Open settings to connect Threads')}
+                </a>
               </p>
             )}
 

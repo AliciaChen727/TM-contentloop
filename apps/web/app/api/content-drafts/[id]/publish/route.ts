@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { can } from '@/lib/auth/access'
 import { getDraft } from '@/lib/content/draftStore'
-import { runPublish } from '@/lib/content/publishRunner'
+import { hasPageInstagramConnection, runPublish } from '@/lib/content/publishRunner'
 import { hasPageThreadsConnection } from '@/lib/threads/client'
 import type { DraftTarget } from '@/lib/content/draftTypes'
 
@@ -39,6 +39,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!draft.target.includes(platform)) return NextResponse.json({ error: `此草稿未包含 ${platform}` }, { status: 400 })
   if (platform === 'th' && !(await hasPageThreadsConnection(pageId))) {
     return NextResponse.json({ error: '請先建立 Threads 並連結帳號，才能發布 Threads' }, { status: 409 })
+  }
+  if (platform === 'ig' && !(await hasPageInstagramConnection(pageId))) {
+    return NextResponse.json({ error: '請先建立 IG 並連結 Meta 帳號，才能發布 IG' }, { status: 409 })
   }
   if (draft.status !== 'approved' && draft.status !== 'published' && draft.status !== 'scheduled') {
     return NextResponse.json({ error: '需先核准草稿才能發布' }, { status: 409 })

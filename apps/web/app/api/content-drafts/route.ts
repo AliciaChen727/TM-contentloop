@@ -14,6 +14,7 @@ import { createDraft, listDrafts, writeAudit } from '@/lib/content/draftStore'
 import { isValidTarget, isValidMediaType, type DraftStatus, type CreateDraftInput, type DraftTarget } from '@/lib/content/draftTypes'
 import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
 import { hasPageThreadsConnection } from '@/lib/threads/client'
+import { hasPageInstagramConnection } from '@/lib/content/publishRunner'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -57,6 +58,9 @@ export async function POST(req: NextRequest) {
   }
   if (target.includes('th') && !(await hasPageThreadsConnection(pageId))) {
     return NextResponse.json({ error: '請先建立 Threads 並連結帳號，才能建立或發布 Threads 草稿' }, { status: 409 })
+  }
+  if (target.includes('ig') && !(await hasPageInstagramConnection(pageId))) {
+    return NextResponse.json({ error: '請先建立 IG 並連結 Meta 帳號，才能建立或發布 IG 草稿' }, { status: 409 })
   }
   if (!isValidMediaType(mediaType)) {
     return NextResponse.json({ error: 'invalid mediaType' }, { status: 400 })

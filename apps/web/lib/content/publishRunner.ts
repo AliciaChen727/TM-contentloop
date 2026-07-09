@@ -20,6 +20,11 @@ async function getMetaCreds(pageId: string): Promise<{ accessToken?: string; igU
   return { accessToken: data?.accessToken, igUserId: data?.igUserId }
 }
 
+export async function hasPageInstagramConnection(pageId: string): Promise<boolean> {
+  const creds = await getMetaCreds(pageId)
+  return !!creds.igUserId
+}
+
 function composeText(pp?: { body?: string; hashtags?: string[] }): string {
   const body = pp?.body ?? ''
   const tags = (pp?.hashtags ?? []).filter(Boolean)
