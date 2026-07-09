@@ -271,6 +271,10 @@ export default function SettingsPage() {
     }
   }
 
+  function handleBack() {
+    router.push('/dashboard')
+  }
+
 
   if (loading) return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -282,7 +286,7 @@ export default function SettingsPage() {
     <main className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-8 py-4">
         <div className="mx-auto flex max-w-2xl items-center gap-4">
-          <button onClick={() => router.back()} className="text-sm text-gray-400 hover:text-gray-600">{L('← 返回', '← Back')}</button>
+          <button onClick={handleBack} className="text-sm text-gray-400 hover:text-gray-600">{L('← 返回', '← Back')}</button>
           <h1 className="text-base font-bold text-gray-900">{L('設定', 'Settings')}</h1>
         </div>
       </header>

@@ -183,7 +183,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
               <p className="-mt-2 mb-4 text-xs text-amber-600">
                 {L('Threads 尚未連結：請先建立 Threads 並連結帳號，才能發布 Threads。', 'Threads is not connected yet. Connect a Threads account before publishing to Threads.')}
                 <a
-                  href="/dashboard/settings"
+                  href="/dashboard/settings?from=content-drafts"
                   target="_blank"
                   rel="noreferrer"
                   className="ml-1 font-semibold underline underline-offset-2 hover:text-amber-700"

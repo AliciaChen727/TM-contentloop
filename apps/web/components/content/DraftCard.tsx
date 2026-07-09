@@ -154,7 +154,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
           {L('請先建立 Threads 並連結帳號，才能發布 Threads。', 'Connect a Threads account before publishing to Threads.')}
           <a
-            href="/dashboard/settings"
+            href="/dashboard/settings?from=content-drafts"
             target="_blank"
             rel="noreferrer"
             className="ml-1 font-semibold underline underline-offset-2 hover:text-amber-700"
