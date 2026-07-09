@@ -651,24 +651,6 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Check API key on open — show prompt immediately if not set
-  useEffect(() => {
-    if (!open) return
-    auth.currentUser?.getIdToken().then(async idToken => {
-      const res = await fetch('/api/user/api-keys', { headers: { Authorization: `Bearer ${idToken}` } })
-      if (!res.ok) return
-      const data = await res.json()
-      if (!data.anthropic) {
-        const now = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
-        setMessages(prev => {
-          const alreadyHasPrompt = prev.some(m => m.noApiKey)
-          if (alreadyHasPrompt) return prev
-          return [...prev, { id: 'no-key', role: 'ai', text: '', time: now, noApiKey: true }]
-        })
-      }
-    }).catch(() => {})
-  }, [open])
-
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
 
   useEffect(() => {
@@ -945,14 +927,7 @@ export function AiSidekick({ open, onClose, contextPage, initialPrompt, autoSend
                         )}
                         {msg.noApiKey && (
                           <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-                            <p style={{ marginBottom: 6 }}>{L('⚠️ 請先到「設定」頁面輸入你的 Claude API Key 才能使用 AI Sidekick。', '⚠️ Please enter your Claude API Key in Settings to use AI Sidekick.')}</p>
-                            <p style={{ color: 'var(--ad-text2)', fontSize: 12 }}>
-                              {L('前往頭像 → 設定 → API Keys（', 'Go to avatar → Settings → API Keys (')}
-                              <a href="https://tm-contentloop.vercel.app/dashboard/settings" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ad-blue)', textDecoration: 'underline' }}>
-                                https://tm-contentloop.vercel.app/dashboard/settings
-                              </a>
-                              {L('）', ')')}
-                            </p>
+                            <p style={{ marginBottom: 6 }}>{L('⚠️ 系統尚未設定 Claude API Key，請聯絡管理員。', '⚠️ Claude API Key is not configured for this workspace. Please contact an admin.')}</p>
                           </div>
                         )}
                         {!msg.noApiKey && msg.text && <p style={{ marginBottom: msg.response ? 8 : 0 }}>{msg.text}</p>}

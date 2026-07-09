@@ -488,7 +488,7 @@ export default function DashboardPage() {
               return (<>
                 <NavMenu items={[
                   { key: 'ads', icon: '📊', label: L('廣告儀表板', 'Ad Dashboard'), onClick: () => router.push('/dashboard/ads'), show: isAdmin || !!activePerms?.ads },
-                  { key: 'links', icon: '🔗', label: L('報名連結追蹤', 'Link Tracking'), onClick: () => router.push('/dashboard/links'), show: isAdmin },
+                  { key: 'links', icon: '🔗', label: L('報名連結追蹤', 'Link Tracking'), onClick: () => router.push('/dashboard/links'), show: isAdmin || !!activePerms },
                   { key: 'messages', icon: '💬', label: L('私訊分析', 'Messages'), onClick: () => router.push('/dashboard/messages'), show: isAdmin },
                   { key: 'drafts', icon: '✍️', label: L('AI 草稿發布', 'AI Drafts'), onClick: () => router.push('/dashboard/content-drafts'), show: isAdmin },
                 ]} />

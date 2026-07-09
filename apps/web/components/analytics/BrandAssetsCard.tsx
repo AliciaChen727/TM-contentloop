@@ -12,6 +12,7 @@ interface Asset { id: string; name: string; keyword?: string; url: string; mimeT
 export function BrandAssetsCard({ pageId, idToken }: { pageId: string; idToken: string }) {
   const { L } = useLang()
   const [assets, setAssets] = useState<Asset[]>([])
+  const [canManageEffective, setCanManageEffective] = useState(false)
   const [name, setName] = useState('')
   const [keyword, setKeyword] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -28,6 +29,22 @@ export function BrandAssetsCard({ pageId, idToken }: { pageId: string; idToken: 
   }, [pageId, H])
 
   useEffect(() => { if (pageId && idToken) load() }, [pageId, idToken, load])
+
+  useEffect(() => {
+    let alive = true
+    setCanManageEffective(false)
+    if (!pageId || !idToken) return
+    fetch(`/api/user/role?pageId=${pageId}`, { headers: H() })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!alive) return
+        const role = d?.role
+        const caps: string[] = Array.isArray(d?.capabilities) ? d.capabilities : []
+        setCanManageEffective(role === 'owner' || role === 'admin' || role === 'editor' || caps.includes('content.draft'))
+      })
+      .catch(() => { if (alive) setCanManageEffective(false) })
+    return () => { alive = false }
+  }, [pageId, idToken, H])
 
   async function upload() {
     const file = fileRef.current?.files?.[0]
@@ -71,25 +88,27 @@ export function BrandAssetsCard({ pageId, idToken }: { pageId: string; idToken: 
         {L('① ', '① ')}<b>{L('自動疊：', 'Auto-overlay: ')}</b>{L('生圖時 prompt 提到該關鍵字（例「…加上 ', 'when a generation prompt mentions the keyword (e.g. "…add the ')}<b>logo</b>{L('」），系統會自動把這個素材疊到圖右下角（像素級正確，不靠 AI 生）。', '"), the system overlays this asset onto the bottom-right of the image (pixel-perfect, not AI-generated).')}<br />
         {L('② ', '② ')}<b>{L('帶進 Canva：', 'Send to Canva: ')}</b>{L('按下方按鈕把素材丟進 Canva uploads，自己拖到設計上。', 'click the button below to push the asset into Canva uploads, then drag it onto your design.')}</p>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-          onChange={e => setFileName(e.target.files?.[0]?.name ?? '')} />
-        <button type="button" onClick={() => fileRef.current?.click()}
-          style={{ padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          {L('選擇檔案', 'Choose file')}
-        </button>
-        <span style={{ fontSize: 12, color: '#9ca3af', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {fileName || L('未選擇任何檔案', 'No file chosen')}
-        </span>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder={L('名稱（如 Legacy TMC logo）', 'Name (e.g. Legacy TMC logo)')}
-          style={{ flex: 1, minWidth: 140, fontSize: 13, padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6 }} />
-        <input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder={L('關鍵字（如 logo）', 'Keyword (e.g. logo)')}
-          style={{ width: 120, fontSize: 13, padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6 }} />
-        <button onClick={upload} disabled={uploading}
-          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: 'none', background: uploading ? '#9ca3af' : '#2563eb', color: 'white', cursor: 'pointer' }}>
-          {uploading ? L('⋯ 上傳中', '⋯ Uploading') : L('新增', 'Add')}
-        </button>
-      </div>
+      {canManageEffective && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => setFileName(e.target.files?.[0]?.name ?? '')} />
+          <button type="button" onClick={() => fileRef.current?.click()}
+            style={{ padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {L('選擇檔案', 'Choose file')}
+          </button>
+          <span style={{ fontSize: 12, color: '#9ca3af', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {fileName || L('未選擇任何檔案', 'No file chosen')}
+          </span>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={L('名稱（如 Legacy TMC logo）', 'Name (e.g. Legacy TMC logo)')}
+            style={{ flex: 1, minWidth: 140, fontSize: 13, padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6 }} />
+          <input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder={L('關鍵字（如 logo）', 'Keyword (e.g. logo)')}
+            style={{ width: 120, fontSize: 13, padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6 }} />
+          <button onClick={upload} disabled={uploading}
+            style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: 'none', background: uploading ? '#9ca3af' : '#2563eb', color: 'white', cursor: 'pointer' }}>
+            {uploading ? L('⋯ 上傳中', '⋯ Uploading') : L('新增', 'Add')}
+          </button>
+        </div>
+      )}
 
       {msg && (
         <div style={{ margin: '8px 0', padding: '8px 12px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
@@ -113,8 +132,10 @@ export function BrandAssetsCard({ pageId, idToken }: { pageId: string; idToken: 
                     style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, border: '1px solid #2563eb', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer' }}>
                     {busy === a.id ? '⋯' : L('帶進 Canva', 'Send to Canva')}
                   </button>
-                  <button onClick={() => remove(a.id)}
-                    style={{ fontSize: 11, padding: '5px 8px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>🗑</button>
+                  {canManageEffective && (
+                    <button onClick={() => remove(a.id)}
+                      style={{ fontSize: 11, padding: '5px 8px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>🗑</button>
+                  )}
                 </div>
               </div>
             ))}

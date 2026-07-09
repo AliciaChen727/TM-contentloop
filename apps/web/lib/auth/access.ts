@@ -61,6 +61,12 @@ export async function getUserPageAccess(uid: string, pageId: string): Promise<Pa
 
   let best: Role | null = null
 
+  if (memberSnap.exists) {
+    const md = memberSnap.data()
+    const r: Role = isRole(md?.role) ? md!.role : roleFromLegacyPerms(md?.permissions as LegacyPerms)
+    return buildAccess(pageId, r, 'page')
+  }
+
   if (adminSnap.exists) {
     best = adminSnap.data()?.isOwner === true ? 'owner' : 'admin'
   } else if (metaTokCol.docs.some(d =>
@@ -71,12 +77,6 @@ export async function getUserPageAccess(uid: string, pageId: string): Promise<Pa
     // metaTokens。自己連接此頁 = owner 級（對齊 /api/pages 對自連粉專的處理），
     // 避免 can('members.manage') 對這些舊頁 owner 誤判 403。見 memory project_legacy_page_no_admins。
     best = 'owner'
-  }
-
-  if (memberSnap.exists) {
-    const md = memberSnap.data()
-    const r: Role = isRole(md?.role) ? md!.role : roleFromLegacyPerms(md?.permissions as LegacyPerms)
-    best = best ? higherRole(best, r) : r
   }
 
   if (viewerSnap.exists) {

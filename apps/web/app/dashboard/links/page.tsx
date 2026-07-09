@@ -24,7 +24,12 @@ interface LinkRow {
   paramName: string | null
   createdAt: string | null
 }
-interface PageOpt { pageId: string; pageName: string }
+interface PageOpt {
+  pageId: string
+  pageName: string
+  permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null
+  role?: 'owner' | 'admin' | 'editor' | 'viewer'
+}
 
 // 常用報名幣別（Meta CAPI 接受 ISO 4217 三碼）。
 const CURRENCIES = ['TWD', 'JPY', 'KRW', 'USD', 'CNY', 'HKD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'IDR'] as const
@@ -58,12 +63,12 @@ export default function LinksPage() {
       if (!u) { router.replace('/auth/login'); return }
       const token = await u.getIdToken()
       setIdToken(token)
-      const res = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
-      const adminPages: PageOpt[] = res.ok ? ((await res.json()).pages ?? []) : []
-      if (adminPages.length === 0) { router.replace('/dashboard'); return }
-      setPages(adminPages)
-      const pid = localStorage.getItem('selectedPageId') ?? adminPages[0].pageId
-      const valid = adminPages.find(p => p.pageId === pid)?.pageId ?? adminPages[0].pageId
+      const res = await fetch('/api/pages', { headers: { Authorization: `Bearer ${token}` } })
+      const accessiblePages: PageOpt[] = res.ok ? ((await res.json()).pages ?? []) : []
+      if (accessiblePages.length === 0) { router.replace('/dashboard'); return }
+      setPages(accessiblePages)
+      const pid = localStorage.getItem('selectedPageId') ?? accessiblePages[0].pageId
+      const valid = accessiblePages.find(p => p.pageId === pid)?.pageId ?? accessiblePages[0].pageId
       setPageId(valid)
       await load(token, valid)
       setLoading(false)
@@ -139,6 +144,8 @@ export default function LinksPage() {
     .filter(d => devAgg[d])
     .map(d => ({ device: d, ...devAgg[d] }))
   const hasDeviceData = deviceRows.some(r => r.clicks > 0)
+  const activePage = pages.find(p => p.pageId === pageId)
+  const canManageLinks = !!activePage && (activePage.role === 'owner' || activePage.role === 'admin' || activePage.permissions == null)
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -162,10 +169,10 @@ export default function LinksPage() {
       </p>
 
       {/* Meta ROAS reporting (CAPI) */}
-      {pageId && <MetaCapiCard key={pageId} pageId={pageId} idToken={idToken} L={L} />}
+      {pageId && canManageLinks && <MetaCapiCard key={pageId} pageId={pageId} idToken={idToken} L={L} />}
 
       {/* Create */}
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+      {canManageLinks && <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
         <label className="mb-1 block text-xs font-semibold text-gray-600">{L('報名表連結', 'Registration form link')}</label>
         <input id="reg-form-input" value={destination} onChange={e => setDestination(e.target.value)} placeholder="https://forms.gle/..."
           className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
@@ -200,7 +207,7 @@ export default function LinksPage() {
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-300">
           {creating ? L('產生中…', 'Creating…') : L('產生短網址', 'Create short link')}
         </button>
-      </div>
+      </div>}
 
       {/* List */}
       {links.length === 0
@@ -218,7 +225,7 @@ export default function LinksPage() {
                     <th className="px-3 py-2 text-center font-semibold">{L('點擊', 'Clicks')}</th>
                     <th className="px-3 py-2 text-center font-semibold">{L('完成', 'Done')}</th>
                     <th className="px-3 py-2 text-center font-semibold">{L('轉換率', 'Rate')}</th>
-                    <th className="px-3 py-2"></th>
+                    {canManageLinks && <th className="px-3 py-2"></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -235,7 +242,7 @@ export default function LinksPage() {
                           {l.trackConversion && l.value > 0 && (
                             <div className="text-[11px] text-gray-500">{L('金額', 'Fee')} {l.value} {l.currency} · {L('營收', 'Revenue')} {l.conversionCount * l.value} {l.currency}</div>
                           )}
-                          {l.trackConversion && (
+                          {canManageLinks && l.trackConversion && (
                             <button onClick={() => setOpenSetup(openSetup === l.slug ? '' : l.slug)} className="mt-1.5 text-sm font-bold text-purple-700 hover:underline">
                               {openSetup === l.slug ? L('▾ 收起設定教學', '▾ Hide setup') : L('▸ 表單設定教學', '▸ Form setup steps')}
                             </button>
@@ -246,11 +253,13 @@ export default function LinksPage() {
                         <td className="px-3 py-3 text-center text-xs font-semibold text-green-600">
                           {l.trackConversion && l.clickCount > 0 ? `${Math.round((l.conversionCount / l.clickCount) * 100)}%` : '—'}
                         </td>
-                        <td className="px-3 py-3 text-right">
-                          <button onClick={() => remove(l.slug)} className="text-sm font-semibold text-gray-500 hover:text-red-500">{L('停用', 'Disable')}</button>
-                        </td>
+                        {canManageLinks && (
+                          <td className="px-3 py-3 text-right">
+                            <button onClick={() => remove(l.slug)} className="text-sm font-semibold text-gray-500 hover:text-red-500">{L('停用', 'Disable')}</button>
+                          </td>
+                        )}
                       </tr>
-                      {openSetup === l.slug && l.trackConversion && (
+                      {canManageLinks && openSetup === l.slug && l.trackConversion && (
                         <tr className="border-b border-gray-50">
                           <td colSpan={5} className="bg-gray-50 px-4 py-3">
                             <SetupGuide link={l} copy={copy} copied={copied} L={L} />

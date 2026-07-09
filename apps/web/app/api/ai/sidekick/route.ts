@@ -7,6 +7,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import { resolvePageProfile } from '@/lib/page-profile'
 import { getSidekickFewShot, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
+import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 interface MetricsContext {
   // Posts metrics
@@ -486,8 +487,14 @@ export async function POST(req: NextRequest) {
       .join('\n')
   } catch { /* Firestore index missing or other error: non-critical, proceed without memory */ }
 
-  // Retrieve user's own Claude API key (required — no fallback to owner key)
-  const anthropicKey = await getUserApiKey(uid, 'anthropic') ?? process.env.ANTHROPIC_API_KEY ?? null
+  // Prefer the caller's key, then the page owner's shared key, then env fallback.
+  // Invited viewers/editors should not need to bring their own Claude key.
+  let anthropicKey = await getUserApiKey(uid, 'anthropic')
+  if (!anthropicKey && pageId) {
+    const ownerUid = await resolvePageOwnerUid(pageId).catch(() => null)
+    if (ownerUid && ownerUid !== uid) anthropicKey = await getUserApiKey(ownerUid, 'anthropic')
+  }
+  anthropicKey = anthropicKey ?? process.env.ANTHROPIC_API_KEY ?? null
   if (!anthropicKey) return NextResponse.json({ error: 'NO_API_KEY', type: 'anthropic' }, { status: 402 })
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 

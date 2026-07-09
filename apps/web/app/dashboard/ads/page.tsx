@@ -399,19 +399,28 @@ export default function AdsPage() {
               localStorage.setItem('selectedPageName', matched.pageName)
             }
           }
-          // Pages from metaTokens (admin pages) have no permissions field; viewer pages have permissions object
-          const isAdminUser = allPages.some(p => p.permissions === undefined || p.permissions === null)
-          if (!isAdminUser) {
-            const activePage = allPages.find(p => p.pageId === pageId) ?? allPages[0]
+          // Permissions are page-scoped. A user can be admin on page A and viewer on page B.
+          const activePage = allPages.find(p => p.pageId === pageId) ?? allPages[0]
+          const activeIsManager = activePage?.permissions === undefined || activePage?.permissions === null
+          if (activeIsManager) {
+            setCanSidekick(true)
+            setCanSync(true)
+          } else {
             if (!activePage?.permissions?.ads) {
               router.replace('/dashboard')
               return
             }
-            setCanSidekick(!!activePage?.permissions?.sidekick)
-            setCanSync(!!activePage?.permissions?.syncAds)
-          } else {
-            setCanSidekick(true)
-            setCanSync(true)
+            setCanSidekick(!!activePage.permissions.sidekick)
+            setCanSync(!!activePage.permissions.syncAds)
+          }
+        }
+        if (pageId) {
+          const roleRes = await fetch(`/api/user/role?pageId=${pageId}`, { headers })
+          if (roleRes.ok) {
+            const roleJson = await roleRes.json()
+            const caps: string[] = Array.isArray(roleJson.capabilities) ? roleJson.capabilities : []
+            setCanSidekick(caps.includes('sidekick.use'))
+            setCanSync(caps.includes('data.sync'))
           }
         }
         setAuthed(true)
