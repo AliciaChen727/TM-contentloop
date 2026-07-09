@@ -23,6 +23,70 @@ async function canManage(uid: string, pageId: string): Promise<boolean> {
   return admin.exists
 }
 
+function escapeControlCharsInsideJsonStrings(json: string): string {
+  let out = ''
+  let inString = false
+  let escaped = false
+
+  for (const ch of json) {
+    if (inString) {
+      if (escaped) {
+        out += ch
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        out += ch
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        out += ch
+        inString = false
+        continue
+      }
+      if (ch === '\n') {
+        out += '\\n'
+        continue
+      }
+      if (ch === '\r') {
+        out += '\\r'
+        continue
+      }
+      if (ch === '\t') {
+        out += '\\t'
+        continue
+      }
+    } else if (ch === '"') {
+      inString = true
+    }
+    out += ch
+  }
+
+  return out
+}
+
+function parseCaptionObject(raw: string): Record<string, string> {
+  const s = raw.indexOf('{')
+  const e = raw.lastIndexOf('}')
+  if (s === -1 || e <= s) return {}
+  const json = raw.slice(s, e + 1)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    try {
+      parsed = JSON.parse(escapeControlCharsInsideJsonStrings(json))
+    } catch {
+      return {}
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+  return Object.fromEntries(
+    Object.entries(parsed).filter(([, v]) => typeof v === 'string'),
+  ) as Record<string, string>
+}
+
 export async function POST(req: NextRequest) {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -71,6 +135,7 @@ export async function POST(req: NextRequest) {
     en ? 'The ENTIRE output — including the CTA — must be in English.' : '整篇（含 CTA）必須是繁體中文。',
     infoLines.length ? (en ? 'Weave in every provided fact accurately; do NOT invent unstated details.' : '準確帶入每一項必要資訊；未提供的細節絕不捏造。') : '',
     en ? 'Concrete, not salesy. Inviting hook first.' : '具體不推銷，開頭吸睛。',
+    en ? 'Use natural paragraph breaks. Separate the hook, key details, and CTA with line breaks when that improves readability.' : '可使用自然段落換行；開頭、重點資訊、CTA 適合分段時請用換行隔開。',
     en ? 'Output ONLY the caption text — no quotes, no explanations, no markdown.' : '只輸出貼文文案本身——不要引號、不要說明、不要 markdown。',
   ].filter(Boolean).map(s => `- ${s}`).join('\n')
 
@@ -106,13 +171,11 @@ export async function POST(req: NextRequest) {
         max_tokens: 1400,
         messages: [{
           role: 'user',
-          content: `為以下粉專針對「不同平台各自」生成社群貼文文案（同一主題，但依平台屬性調整寫法/長度/語氣）。\n\n${ctx}\n\n各平台屬性：\n${guide}\n\n共同規則：\n${rules}${seedLine}${historyBlock}\n\n只輸出 JSON（不要說明、不要 markdown 圍欄），格式：\n${shape}`,
+          content: `為以下粉專針對「不同平台各自」生成社群貼文文案（同一主題，但依平台屬性調整寫法/長度/語氣）。\n\n${ctx}\n\n各平台屬性：\n${guide}\n\n共同規則：\n${rules}${seedLine}${historyBlock}\n\n只輸出 JSON（不要說明、不要 markdown 圍欄），格式：\n${shape}\n\n若文案需要換行，JSON 字串內請使用 \\n 表示換行。`,
         }],
       })
       const raw = msg.content.filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('')
-      const s = raw.indexOf('{'), e = raw.lastIndexOf('}')
-      let captions: Record<string, string> = {}
-      if (s !== -1 && e > s) { try { captions = JSON.parse(raw.slice(s, e + 1)) } catch { /* fall through */ } }
+      const captions = parseCaptionObject(raw)
       const clean: Record<string, string> = {}
       for (const p of plats) if (captions[p] && String(captions[p]).trim()) clean[p] = String(captions[p]).trim()
       if (Object.keys(clean).length === 0) return NextResponse.json({ error: en ? 'Generation failed, please retry' : '生成失敗，請再試一次' }, { status: 500 })
