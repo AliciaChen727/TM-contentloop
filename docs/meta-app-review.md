@@ -96,7 +96,47 @@
 
 ---
 
-## 5. 送審後常見退件原因（自檢）
+## 5. Development mode 下的 ContentLoop admin 與 Meta tester 差異
+
+ContentLoop 內的 `owner` / `admin` / `editor` / `viewer` 是產品內權限；Meta Developer
+的 app admin/developer/tester 是 **Development mode 下能否授權未審核 Meta scope** 的資格。
+兩者不是同一件事。
+
+### 同一粉專內的發文 token 共用
+
+目前自動發文設計：
+
+- **Facebook / Instagram 發文**：使用該 `pageId` 的 ContentLoop owner 存在
+  `users/{ownerUid}/metaTokens/{pageId}` 的 Page access token。
+- 因此，若 owner 已經在 Meta Development mode 下授權過 `pages_manage_posts` /
+  `instagram_content_publish`，被該 owner 邀請進 ContentLoop 的 admin 可以透過 ContentLoop
+  共用 owner token 發文。
+- 這些被邀請的 ContentLoop admin **不需要另外加入 Meta Developer tester**，前提是他們只是
+  使用 ContentLoop 既有 token 發文，而不是自己重新走 Meta OAuth 連接流程。
+
+### 新粉專 / 新連接者的限制
+
+若某位 owner 要連接其他粉專並取得新的 Page token：
+
+- App 還在 **Development mode**，且發文 scope 尚未通過 App Review 時，該 Meta 使用者必須是
+  這個 Meta App 的 admin/developer/tester，才能授權 `pages_manage_posts` /
+  `instagram_content_publish` 等未審核或進階權限。
+- 若該 Meta 使用者不是 app role/tester，即使他在 ContentLoop 被設為 admin，也不能在開發模式下
+  正常授權這些發文 scope。
+- 若 scope 是後來才新增的，既有 token 不會自動補權限；需要重新走「連接 Meta」OAuth，取得包含
+  新 scope 的 token。
+- 等 App 切 **Live mode** 且相關發文權限通過 App Review 後，才不需要逐一把新連接者加進
+  Meta Developer tester。
+
+### Threads 例外
+
+Threads 使用獨立 OAuth 與 `graph.threads.net` token，不吃 FB/IG Page token。ContentLoop 發
+Threads 時會找該 page 下已連過 Threads 的 admin token；至少要有一位 owner/admin 完成 Threads
+授權且 token 仍有效。
+
+---
+
+## 6. 送審後常見退件原因（自檢）
 
 - [ ] Reviewer 登入卡在授權：確認測試帳號對某粉專有足夠角色能看到資料
 - [ ] Screencast 沒拍到「資料實際顯示」：只錄授權不夠，要錄到數字

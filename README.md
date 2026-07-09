@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-09 | 文件/memory：補充 Meta Development mode 下 ContentLoop admin 共用 owner FB/IG page token 的規則、何時仍需 Meta Developer tester、以及 Threads 獨立 OAuth 例外 | (文件/memory) |
 | 2026-07-09 | RBAC 對齊：Viewer 可進入報名連結追蹤並唯讀統計/CSV；品牌素材庫改為 Viewer 可讀、Editor/Admin 可新增刪除；AI Sidekick 對受邀 viewer/editor 改用頁面 owner/env Claude key，不再要求各自輸入 API key | (本次) |
 | 2026-07-08 | 修復 Threads 發布時遇到 "The requested resource does not exist" 問題：TEXT 類型貼文建立後需短暫同步時間，補上 `waitReady` 輪詢機制並修正其 error retry 邏輯；另修復 Firestore Admin SDK 寫入 `undefined` 導致崩潰問題（啟用 `ignoreUndefinedProperties`），並在「收回核准」時自動清除舊的發布失敗紀錄 | `2612f33` `6b9216e` `6c8dfb9` |
 | 2026-07-07 | Agent 自動發布 S1+S2（草稿基建＋審核 UI）。`lib/content/draftTypes.ts`（狀態機 `DRAFT_TRANSITIONS`）＋ `draftStore.ts`（page-scoped CRUD）＋ `/api/content-drafts`(＋`[id]`)（BFF，admin-only，viewer 看不到草稿）。審核頁 `/dashboard/content-drafts`：待審/已核准/已發布分頁＋核准·拒絕·編輯（HITL：未核准絕不發）。Composer：上傳影音（`uploadDraftMedia`→Storage）＋即時預覽（FB/IG/Threads 切換）＋Threads 超 500 字自動切回覆串（`lib/publish/threadsSplit.ts`）＋hashtags 套用全平台。**✨ AI 生成文案**：設定面板（語言/文案目標/語氣/CTA/依產業必要資訊）＋參考成效最好的歷史貼文 few-shot（`historyExamples.ts`，頁隔離）→ `/api/ai/caption`（Haiku，只生文案不生圖）。主儀表板功能鈕收成 ☰ 漢堡選單（`NavMenu`）。Skill `.claude/skills/auto-publish-agent`。規劃見 `docs/agent-auto-publish-plan.md` | (本次) |
