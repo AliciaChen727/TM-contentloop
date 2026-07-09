@@ -21,7 +21,9 @@ const TAB_MATCH: Record<Tab, DraftStatus[]> = {
 // "published" even though its overall status is still `approved`.
 function tabOf(d: ContentDraft): Tab {
   const anyPublished = Object.values(d.publishResults ?? {}).some(r => r?.postId)
+  const hasUnpublishedError = Object.values(d.publishResults ?? {}).some(r => r?.error && !r.postId)
   if (d.status === 'published' || anyPublished) return 'published'
+  if (hasUnpublishedError) return 'other'
   if (TAB_MATCH.draft.includes(d.status)) return 'draft'
   if (TAB_MATCH.other.includes(d.status)) return 'other'
   return 'approved'
@@ -49,13 +51,23 @@ export default function ContentDraftsPage() {
       const token = await user.getIdToken()
       setIdToken(token)
       try {
-        const res = await fetch('/api/pages?ownOnly=1', { headers: { Authorization: `Bearer ${token}` } })
+        const res = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
         const body = res.ok ? await res.json() : { pages: [] }
         const list: PageInfo[] = body.pages ?? []
         setPages(list)
         const saved = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
-        setSelectedPageId((list.find(p => p.pageId === saved) ?? list[0])?.pageId ?? '')
-      } catch { setError(L('無法載入粉專清單', 'Failed to load pages')) }
+        const nextPageId = (list.find(p => p.pageId === saved) ?? list[0])?.pageId ?? ''
+        setSelectedPageId(nextPageId)
+        if (!nextPageId) {
+          setDrafts([])
+          setError(L('找不到可管理的粉專，請先連接或確認權限。', 'No manageable pages found. Connect a page or check your access.'))
+          setLoading(false)
+        }
+      } catch {
+        setDrafts([])
+        setError(L('無法載入粉專清單', 'Failed to load pages'))
+        setLoading(false)
+      }
     })
     return unsub
   }, [router, L])
@@ -70,20 +82,28 @@ export default function ContentDraftsPage() {
     } catch { setError(L('讀取失敗', 'Failed to load')) } finally { setLoading(false) }
   }, [L])
 
+  // Silent refresh — same fetch but WITHOUT setLoading(true), so the UI
+  // doesn't flash to "Loading…". Used for background refetches on tab focus.
+  const silentLoad = useCallback(async (token: string, pageId: string) => {
+    try {
+      const res = await fetch(`/api/content-drafts?pageId=${encodeURIComponent(pageId)}&limit=100`, { headers: { Authorization: `Bearer ${token}` } })
+      const d = await res.json()
+      if (res.ok) setDrafts((d.drafts ?? []) as ContentDraft[])
+    } catch { /* silent — don't show error on background refresh */ }
+  }, [])
+
   useEffect(() => { if (idToken && selectedPageId) load(idToken, selectedPageId) }, [idToken, selectedPageId, load])
 
-  // Auto-refresh so cron/scheduled publishes reflect without a manual reload:
-  // refetch on window focus + poll every 30s while the tab is visible. Skips
-  // while an action is in-flight (busy) to avoid racing with it.
+  // Refresh on window focus / tab visibility change only (no polling).
+  // Firebase cron handles scheduled publishing server-side, so client
+  // polling is unnecessary and was causing page flash every 30s.
   useEffect(() => {
     if (!idToken || !selectedPageId) return
-    const refresh = () => { if (document.visibilityState === 'visible' && !busy) load(idToken, selectedPageId) }
-    const onFocus = () => refresh()
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onFocus)
-    const timer = setInterval(refresh, 30000)
-    return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); clearInterval(timer) }
-  }, [idToken, selectedPageId, busy, load])
+    const refresh = () => { if (document.visibilityState === 'visible' && !busy) silentLoad(idToken, selectedPageId) }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [idToken, selectedPageId, busy, silentLoad])
 
   // Load per-page automation settings (Kill Switch + quiet hours).
   useEffect(() => {

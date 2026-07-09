@@ -75,6 +75,8 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   }))).filter(v => v.code === 'fb_mixed_carousel' || v.code === 'fb_video_carousel')
   const anyPublished = draft.target.some(t => draft.publishResults?.[t]?.postId)
   const allPublished = draft.target.length > 0 && draft.target.every(t => draft.publishResults?.[t]?.postId)
+  const publishError = firstPublishError(draft)
+  const retryableFailure = draft.status === 'failed' || (!!publishError && !anyPublished)
   const locked = anyPublished
   const canEdit = draft.status === 'draft' && !locked
 
@@ -96,7 +98,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
         <div className="ml-auto">
           {anyPublished
             ? <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: allPublished ? '#D1FAE5' : '#DBEAFE', color: allPublished ? '#065F46' : '#1E40AF' }}>{allPublished ? L('已發布', 'Published') : L('部分發布', 'Partly published')}</span>
-            : <StatusPill status={draft.status} />}
+            : <StatusPill status={retryableFailure ? 'failed' : draft.status} />}
         </div>
       </div>
 
@@ -169,7 +171,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
           <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600">{L('取消', 'Cancel')}</button>
         </>)}
         {/* Publish/published block — also renders when LOCKED (some platform out). */}
-        {(draft.status === 'approved' || draft.status === 'published' || locked) && !editing && (<>
+        {(draft.status === 'approved' || draft.status === 'published' || locked) && !editing && !retryableFailure && (<>
           {/* Already-published platforms → link (+限動 if a Story was posted). */}
           {draft.target.filter(t => draft.publishResults?.[t]?.postId).map(t => (
             <a key={t} href={draft.publishResults![t]!.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')}{draft.publishResults![t]!.storyId ? L('＋限動', '+Story') : ''} ↗</a>
@@ -187,14 +189,14 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
               </button>
             )
           })()}
-          {firstPublishError(draft) && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {firstPublishError(draft)}</span>}
+          {publishError && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {publishError}</span>}
           {/* Unapprove only while not yet published anywhere. */}
           {draft.status === 'approved' && !locked && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
         </>)}
         {/* Duplicate — the way to re-post a published draft (a new editable draft). */}
         {locked && <button disabled={busy} onClick={() => onDuplicate(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">📄 {L('複製為新草稿', 'Duplicate')}</button>}
         {/* Schedule (S5) — any approved draft can auto-publish later (all platforms). */}
-        {draft.status === 'approved' && !locked && (
+        {draft.status === 'approved' && !locked && !retryableFailure && (
           <span className="flex flex-wrap items-center gap-1">
             {/* Date */}
             <input
@@ -237,9 +239,14 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
           <button disabled={busy} onClick={() => onPublishAll(draft.id)} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishingPlatform ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('立即發布', 'Publish now')}`}</button>
           <button disabled={busy} onClick={() => onUnschedule(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✕ {L('取消排程', 'Cancel')}</button>
         </>)}
-        {(draft.status === 'rejected' || draft.status === 'expired' || draft.status === 'failed') && (
+        {(draft.status === 'rejected' || draft.status === 'expired') && (
           <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('復原為草稿', 'Restore to draft')}</button>
         )}
+        {retryableFailure && (<>
+          {publishError && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {publishError}</span>}
+          <button disabled={busy} onClick={() => onTransition(draft.id, 'approved')} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">🔄 {L('重試發布', 'Retry publish')}</button>
+          <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('復原為草稿', 'Restore to draft')}</button>
+        </>)}
         {!editing && (
           <button disabled={busy} onClick={() => onDelete(draft.id)}
             className="ml-auto flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50">

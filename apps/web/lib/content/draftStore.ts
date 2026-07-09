@@ -13,6 +13,10 @@ import {
 const col = (pageId: string) =>
   adminDb.collection('pages').doc(pageId).collection('contentDrafts')
 
+function hasErrorOnlyPublishResult(draft: ContentDraft): boolean {
+  return Object.values(draft.publishResults ?? {}).some(r => r?.error && !r.postId)
+}
+
 // Append-only audit trail of who did what to a draft (approve/reject/edit…).
 // Best-effort — never blocks the primary action.
 export async function writeAudit(
@@ -105,8 +109,9 @@ export async function transitionDraft(
   const dd = await ref.get()
   if (!dd.exists) return { ok: false, error: 'draft not found', code: 404 }
   const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
-  if (current.status === to) return { ok: true, draft: current }
-  if (!canTransition(current.status, to)) {
+  const retryApproved = current.status === 'approved' && to === 'approved' && hasErrorOnlyPublishResult(current)
+  if (current.status === to && !retryApproved) return { ok: true, draft: current }
+  if (!retryApproved && !canTransition(current.status, to)) {
     return { ok: false, error: `illegal transition ${current.status} → ${to}`, code: 409 }
   }
   // A published post can't be unpublished → block reverting to draft (Option A).
@@ -115,8 +120,8 @@ export async function transitionDraft(
   }
   const patch: Record<string, unknown> = { status: to, updatedAt: Date.now() }
   if (to === 'approved') patch.approvedByUid = byUid
-  if (to === 'draft') {
-    patch.approvedByUid = null   // 收回核准/重審 → 清核准者
+  if (to === 'draft' || (to === 'approved' && (current.status === 'failed' || retryApproved))) {
+    if (to === 'draft') patch.approvedByUid = null   // 收回核准/重審 → 清核准者
     // Clear failed publish results (error-only entries) so stale errors don't show in UI.
     // Keep entries that have a postId (partial publishes that actually succeeded).
     const cleaned: Record<string, unknown> = {}
@@ -144,8 +149,10 @@ export async function recordPublishOutcome(
   const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
   const results = { ...(current.publishResults ?? {}), [platform]: { ...result, at: Date.now() } }
   const allDone = current.target.every(t => results[t]?.postId)
+  const anyDone = current.target.some(t => results[t]?.postId)
   const patch: Record<string, unknown> = { publishResults: results, updatedAt: Date.now() }
   if (allDone) patch.status = 'published'
+  else if (result.error && !anyDone) patch.status = 'failed'
   await ref.set(patch, { merge: true })
   return { ok: true, draft: { ...current, ...patch, publishResults: results } as ContentDraft }
 }

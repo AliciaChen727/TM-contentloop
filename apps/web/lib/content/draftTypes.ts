@@ -76,7 +76,7 @@ export const DRAFT_TRANSITIONS: Record<DraftStatus, DraftStatus[]> = {
   publishing: ['processing', 'published', 'failed'],
   processing: ['published', 'failed'],
   published:  [],                                   // 終態
-  failed:     ['draft'],                            // 允許重來
+  failed:     ['draft', 'approved'],                 // 允許重來 or 直接重試(→approved)
   rejected:   ['draft'],                            // 允許復原
   expired:    ['draft'],                            // 重審
 }

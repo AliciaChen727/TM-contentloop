@@ -2,32 +2,43 @@ import { initializeApp, getApps, cert, App } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 
+const globalForFirebase = globalThis as typeof globalThis & {
+  __contentLoopAdminApp?: App
+  __contentLoopAdminDb?: ReturnType<typeof getFirestore>
+  __contentLoopAdminAuth?: ReturnType<typeof getAuth>
+}
+
 function getAdminApp(): App {
+  if (globalForFirebase.__contentLoopAdminApp) return globalForFirebase.__contentLoopAdminApp
   if (getApps().length) return getApps()[0]
-  return initializeApp({
+  const app = initializeApp({
     credential: cert({
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
       privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     }),
   })
+  globalForFirebase.__contentLoopAdminApp = app
+  return app
 }
 
-// Lazy singletons — only initialized on first actual request, not at module load
-let _db: ReturnType<typeof getFirestore> | undefined
-let _auth: ReturnType<typeof getAuth> | undefined
-
 export function getAdminDb() {
-  if (!_db) {
-    _db = getFirestore(getAdminApp())
-    _db.settings({ ignoreUndefinedProperties: true })
+  if (!globalForFirebase.__contentLoopAdminDb) {
+    const db = getFirestore(getAdminApp())
+    try {
+      db.settings({ ignoreUndefinedProperties: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (!message.includes('already been initialized')) throw error
+    }
+    globalForFirebase.__contentLoopAdminDb = db
   }
-  return _db
+  return globalForFirebase.__contentLoopAdminDb
 }
 
 export function getAdminAuth() {
-  if (!_auth) _auth = getAuth(getAdminApp())
-  return _auth
+  if (!globalForFirebase.__contentLoopAdminAuth) globalForFirebase.__contentLoopAdminAuth = getAuth(getAdminApp())
+  return globalForFirebase.__contentLoopAdminAuth
 }
 
 // Keep backward-compatible aliases for existing routes
