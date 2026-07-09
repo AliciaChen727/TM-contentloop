@@ -8,8 +8,8 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { adminAuth } from '@/lib/firebase/admin'
+import { can } from '@/lib/auth/access'
 import { getDraft, transitionDraft, editDraftContent, deleteDraft, scheduleDraft, unscheduleDraft, writeAudit } from '@/lib/content/draftStore'
 import { HUMAN_DRIVEN_STATUSES, type DraftStatus, type GeneratedContent } from '@/lib/content/draftTypes'
 
@@ -20,11 +20,11 @@ async function uidFromReq(req: NextRequest): Promise<string | null> {
 }
 
 async function canManage(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  const own = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
-  if (own.exists) return true
-  const admin = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-  return admin.exists
+  return can(uid, pageId, 'content.draft')
+}
+
+async function canPublish(uid: string, pageId: string): Promise<boolean> {
+  return can(uid, pageId, 'content.publish')
 }
 
 // GET /api/content-drafts/{id}?pageId= → { draft }
@@ -47,6 +47,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const pageId = req.nextUrl.searchParams.get('pageId')
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canPublish(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const ok = await deleteDraft(pageId, params.id)
   if (!ok) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
@@ -71,12 +72,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   // Scheduling (approved → scheduled) / cancel (scheduled → approved).
   if (unschedule) {
+    if (!(await canPublish(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const r = await unscheduleDraft(pageId, params.id)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
     await writeAudit(pageId, params.id, 'unschedule', uid)
     return NextResponse.json({ draft: r.draft })
   }
   if (scheduleAt !== undefined) {
+    if (!(await canPublish(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const r = await scheduleDraft(pageId, params.id, scheduleAt)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
     await writeAudit(pageId, params.id, 'schedule', uid, { at: scheduleAt })
@@ -94,6 +97,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // 发布流程, not the审核 UI — reject them here.
     if (!HUMAN_DRIVEN_STATUSES.includes(status)) {
       return NextResponse.json({ error: 'that status is not human-settable' }, { status: 400 })
+    }
+    if ((status === 'approved' || status === 'rejected' || status === 'expired') && !(await canPublish(uid, pageId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     const r = await transitionDraft(pageId, params.id, status, uid)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })

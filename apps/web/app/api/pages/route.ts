@@ -3,12 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin, listAllPages } from '@/lib/auth/superadmin'
 import { type Role, isRole, legacyPermsForRole } from '@/lib/auth/roles'
+import { hasPageThreadsConnection } from '@/lib/threads/client'
 
 interface LegacyPerms { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface PageEntry {
   pageId: string
   pageName: string
   igUserId: string | null
+  threadsConnected?: boolean
   permissions?: LegacyPerms | null
   role?: Role
 }
@@ -35,7 +37,10 @@ export async function GET(req: NextRequest) {
   // those pages silently fell back to their pages[0] AND overwrote selectedPageId,
   // so the whole app jumped to the wrong club.
   if (isSuperAdmin(uid)) {
-    const allPages = await listAllPages()
+    const allPages = await Promise.all((await listAllPages()).map(async p => ({
+      ...p,
+      threadsConnected: await hasPageThreadsConnection(p.pageId),
+    })))
     return NextResponse.json({ pages: allPages, isOwner: true, isAdmin: true })
   }
 
@@ -74,6 +79,10 @@ export async function GET(req: NextRequest) {
   }
 
   const combined = [...ownPages, ...memberPages]
+  const pagesWithConnections = await Promise.all(combined.map(async p => ({
+    ...p,
+    threadsConnected: await hasPageThreadsConnection(p.pageId),
+  })))
 
   // 管理權：自己連接的頁 或 被邀為 admin/owner。
   const isAdmin = ownPages.length > 0 || hasInvitedAdmin
@@ -87,8 +96,8 @@ export async function GET(req: NextRequest) {
 
   // ownOnly：只回「可管理」的頁（自己連接 + 受邀 admin/owner），供設定/成員/連結頁使用。
   const pages = ownOnly
-    ? combined.filter(p => ownIds.has(p.pageId) || p.role === 'admin' || p.role === 'owner')
-    : combined
+    ? pagesWithConnections.filter(p => ownIds.has(p.pageId) || p.role === 'admin' || p.role === 'owner')
+    : pagesWithConnections
 
   return NextResponse.json({ pages, isOwner, isAdmin })
 }

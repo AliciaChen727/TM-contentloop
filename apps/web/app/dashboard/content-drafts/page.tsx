@@ -8,8 +8,9 @@ import { useLang } from '@/lib/i18n/LanguageProvider'
 import { DraftCard } from '@/components/content/DraftCard'
 import { DraftComposer } from '@/components/content/DraftComposer'
 import type { ContentDraft, DraftStatus, DraftTarget, GeneratedContent, CreateDraftInput } from '@/lib/content/draftTypes'
+import type { Capability, Role } from '@/lib/auth/roles'
 
-interface PageInfo { pageId: string; pageName: string }
+interface PageInfo { pageId: string; pageName: string; role?: Role; threadsConnected?: boolean; permissions?: { syncAds?: boolean } | null }
 type Tab = 'draft' | 'approved' | 'published' | 'other'
 const TAB_MATCH: Record<Tab, DraftStatus[]> = {
   draft: ['draft'], approved: ['approved', 'scheduled', 'publishing', 'processing'],
@@ -44,6 +45,11 @@ export default function ContentDraftsPage() {
   const [killSwitch, setKillSwitch] = useState(false)
   const [quiet, setQuiet] = useState<{ start: number; end: number } | null>(null)
   const [error, setError] = useState('')
+  const [capabilities, setCapabilities] = useState<Capability[]>([])
+  const canDraft = capabilities.includes('content.draft')
+  const canPublish = capabilities.includes('content.publish')
+  const activePage = pages.find(p => p.pageId === selectedPageId)
+  const unavailableTargets: DraftTarget[] = activePage?.threadsConnected === false ? ['th'] : []
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async user => {
@@ -51,16 +57,16 @@ export default function ContentDraftsPage() {
       const token = await user.getIdToken()
       setIdToken(token)
       try {
-        const res = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
+        const res = await fetch('/api/pages', { headers: { Authorization: `Bearer ${token}` } })
         const body = res.ok ? await res.json() : { pages: [] }
-        const list: PageInfo[] = body.pages ?? []
+        const list: PageInfo[] = (body.pages ?? []).filter((p: PageInfo) => p.role !== 'viewer' && (p.role || p.permissions == null || p.permissions.syncAds))
         setPages(list)
         const saved = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
         const nextPageId = (list.find(p => p.pageId === saved) ?? list[0])?.pageId ?? ''
         setSelectedPageId(nextPageId)
         if (!nextPageId) {
           setDrafts([])
-          setError(L('找不到可管理的粉專，請先連接或確認權限。', 'No manageable pages found. Connect a page or check your access.'))
+          setError(L('找不到可建立草稿的粉專，請先連接或確認權限。', 'No pages with draft access found. Connect a page or check your access.'))
           setLoading(false)
         }
       } catch {
@@ -94,6 +100,19 @@ export default function ContentDraftsPage() {
 
   useEffect(() => { if (idToken && selectedPageId) load(idToken, selectedPageId) }, [idToken, selectedPageId, load])
 
+  useEffect(() => {
+    if (!idToken || !selectedPageId) return
+    let alive = true
+    fetch(`/api/user/role?pageId=${selectedPageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!alive) return
+        setCapabilities(Array.isArray(d?.capabilities) ? d.capabilities : [])
+      })
+      .catch(() => { if (alive) setCapabilities([]) })
+    return () => { alive = false }
+  }, [idToken, selectedPageId])
+
   // Refresh on window focus / tab visibility change only (no polling).
   // Firebase cron handles scheduled publishing server-side, so client
   // polling is unnecessary and was causing page flash every 30s.
@@ -107,21 +126,22 @@ export default function ContentDraftsPage() {
 
   // Load per-page automation settings (Kill Switch + quiet hours).
   useEffect(() => {
-    if (!idToken || !selectedPageId) return
+    if (!idToken || !selectedPageId || !canPublish) return
     fetch(`/api/content-drafts/automation?pageId=${encodeURIComponent(selectedPageId)}`, { headers: { Authorization: `Bearer ${idToken}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.settings) { setKillSwitch(!!d.settings.killSwitch); setQuiet(d.settings.quietHours ?? null) } })
       .catch(() => {})
-  }, [idToken, selectedPageId])
+  }, [idToken, selectedPageId, canPublish])
 
   const saveAutomation = useCallback(async (patch: { killSwitch?: boolean; quietHours?: { start: number; end: number } | null }) => {
+    if (!canPublish) return
     setKillSwitch(v => patch.killSwitch ?? v)
     if (patch.quietHours !== undefined) setQuiet(patch.quietHours)
     await fetch('/api/content-drafts/automation', {
       method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ pageId: selectedPageId, ...patch }),
     }).catch(() => {})
-  }, [idToken, selectedPageId])
+  }, [idToken, selectedPageId, canPublish])
 
   const create = useCallback(async (input: Omit<CreateDraftInput, 'pageId'>) => {
     setBusy(true)
@@ -151,7 +171,11 @@ export default function ContentDraftsPage() {
   const publishAll = useCallback(async (id: string) => {
     const draft = drafts.find(d => d.id === id)
     if (!draft) return
-    const todo = draft.target.filter(t => !draft.publishResults?.[t]?.postId)
+    const unavailable = draft.target.filter(t => t === 'th' && activePage?.threadsConnected === false && !draft.publishResults?.[t]?.postId)
+    if (unavailable.includes('th')) {
+      setError(L('請先建立 Threads 並連結帳號，才能發布 Threads。', 'Connect a Threads account before publishing to Threads.'))
+    }
+    const todo = draft.target.filter(t => !draft.publishResults?.[t]?.postId && !(t === 'th' && activePage?.threadsConnected === false))
     if (todo.length === 0) return
     const names = todo.map(t => t === 'th' ? 'Threads' : t === 'fb' ? 'Facebook' : 'Instagram')
     if (!window.confirm(L(`確定一鍵發布到 ${names.join('、')}？這會真的貼出貼文。`, `Publish to ${names.join(', ')}? This posts for real.`))) return
@@ -175,7 +199,7 @@ export default function ContentDraftsPage() {
       }
       await load(idToken, selectedPageId)
     } finally { setBusy(false); setPublishing(null) }
-  }, [drafts, idToken, selectedPageId, load, L])
+  }, [drafts, activePage?.threadsConnected, idToken, selectedPageId, load, L])
 
   // Duplicate a (usually published) draft into a fresh editable draft.
   const duplicate = useCallback(async (id: string) => {
@@ -225,14 +249,14 @@ export default function ContentDraftsPage() {
             {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
           </select>
         )}
-        <button onClick={() => setComposing(true)} className="ml-auto rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">＋ {L('新草稿', 'New draft')}</button>
+        {canDraft && <button onClick={() => setComposing(true)} className="ml-auto rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">＋ {L('新草稿', 'New draft')}</button>}
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-8">
         <p className="mb-3 text-sm text-gray-500">{L('Agent 生成的內容會先存為草稿，經你核准後才發布。', 'Agent-generated content lands here as drafts; nothing publishes until you approve.')}</p>
 
         {/* Automation controls (S5a): Kill Switch + quiet hours for scheduled publishing. */}
-        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+        {canPublish && <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
           <span className="text-sm font-semibold text-gray-700">⚙️ {L('排程自動化', 'Automation')}</span>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input type="checkbox" checked={killSwitch} onChange={e => saveAutomation({ killSwitch: e.target.checked })} className="h-4 w-4 accent-red-600" />
@@ -258,7 +282,7 @@ export default function ContentDraftsPage() {
             )}
           </span>
           <span className="text-xs text-gray-400">{L('（此時段內到期的排程會延到時段外才發）', '(due posts defer until outside this window)')}</span>
-        </div>
+        </div>}
         <div className="mb-6 flex flex-wrap gap-2">
           {tabBtn('draft', L('待審', 'Draft'))}
           {tabBtn('approved', L('已核准', 'Approved'))}
@@ -277,14 +301,16 @@ export default function ContentDraftsPage() {
                   onEdit={(id, generated) => patch(id, { generated })}
                   onPublishAll={publishAll} onDuplicate={duplicate} onDelete={remove}
                   onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
-                  onUnschedule={(id) => patch(id, { unschedule: true })} />
+                  onUnschedule={(id) => patch(id, { unschedule: true })}
+                  canPublish={canPublish}
+                  unavailableTargets={unavailableTargets} />
               ))}
             </div>
           )}
       </div>
 
       {composing && selectedPageId && (
-        <DraftComposer pageId={selectedPageId} pageName={pages.find(p => p.pageId === selectedPageId)?.pageName} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} />
+        <DraftComposer pageId={selectedPageId} pageName={activePage?.pageName} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} threadsAvailable={activePage?.threadsConnected !== false} />
       )}
     </main>
   )

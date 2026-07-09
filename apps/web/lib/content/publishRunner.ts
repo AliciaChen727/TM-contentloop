@@ -5,7 +5,7 @@
 
 import { adminDb } from '@/lib/firebase/admin'
 import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
-import { getThreadsToken } from '@/lib/threads/client'
+import { getAnyPageThreadsToken, getThreadsToken } from '@/lib/threads/client'
 import { publishThreads } from '@/lib/threads/publish'
 import { publishToFacebook, publishFbStory } from '@/lib/meta/publishFb'
 import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
@@ -47,13 +47,7 @@ export async function runPublish(
       // then scan ALL admins of this page to find any valid Threads token.
       // This fixes the case where the connecting user is an admin but not the owner.
       let tok = await getThreadsToken(byUid, pageId)
-      if (!tok) {
-        const adminSnap = await adminDb.collection('pages').doc(pageId).collection('admins').get()
-        for (const adminDoc of adminSnap.docs) {
-          tok = await getThreadsToken(adminDoc.id, pageId)
-          if (tok) break
-        }
-      }
+      if (!tok) tok = await getAnyPageThreadsToken(pageId)
       if (!tok) {
         console.error(`[publishRunner] Threads token not found after scanning all admins: byUid=${byUid} pageId=${pageId} adminCount=${(await adminDb.collection('pages').doc(pageId).collection('admins').get()).size}`)
         return { ok: false, error: 'Threads 未連接或未授權發布' }

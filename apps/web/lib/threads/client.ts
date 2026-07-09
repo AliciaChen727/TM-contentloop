@@ -27,6 +27,19 @@ export async function getThreadsToken(uid: string, pageId: string): Promise<Thre
   return d.exists ? (d.data() as ThreadsToken) : null
 }
 
+export async function getAnyPageThreadsToken(pageId: string): Promise<ThreadsToken | null> {
+  const adminSnap = await adminDb.collection('pages').doc(pageId).collection('admins').get()
+  for (const adminDoc of adminSnap.docs) {
+    const tok = await getThreadsToken(adminDoc.id, pageId)
+    if (tok) return tok
+  }
+  return null
+}
+
+export async function hasPageThreadsConnection(pageId: string): Promise<boolean> {
+  return (await getAnyPageThreadsToken(pageId)) !== null
+}
+
 // Exchange an authorization code → short-lived token (+ user_id) → long-lived
 // (60-day) token. Falls back to the short token if the long-lived exchange fails.
 export async function exchangeThreadsCode(

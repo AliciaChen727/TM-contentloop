@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { adminAuth } from '@/lib/firebase/admin'
+import { can } from '@/lib/auth/access'
 import { readSheetAsText, sheetsServiceAccountEmail } from '@/lib/messages/sheetsClient'
 import { parseSchedule } from '@/lib/messages/parseSchedule'
 
@@ -10,12 +10,6 @@ async function authUid(req: NextRequest): Promise<string | null> {
   if (!idToken) return null
   try { return (await adminAuth.verifyIdToken(idToken)).uid } catch { return null }
 }
-async function assertAdmin(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  if ((await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()).exists) return true
-  return (await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()).exists
-}
-
 // GET → the SA email the owner must share their sheet with (for the UI).
 export async function GET(req: NextRequest) {
   const uid = await authUid(req)
@@ -31,7 +25,7 @@ export async function POST(req: NextRequest) {
   const pageId: string | undefined = body.pageId
   const sheetUrl: string | undefined = body.sheetUrl
   if (!pageId || !sheetUrl) return NextResponse.json({ error: 'pageId and sheetUrl required' }, { status: 400 })
-  if (!(await assertAdmin(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await can(uid, pageId, 'chatbot.manage'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
     const text = await readSheetAsText(sheetUrl)

@@ -1,9 +1,9 @@
 /**
  * Short-link management (BFF, page-scoped). Phase A = click tracking.
  *
- * GET    ?pageId=           → list links with click counts (admin / viewer / super)
- * POST   { pageId, destination, label?, postId? }  → create link (admin only)
- * DELETE { pageId, slug }   → deactivate link (admin only)
+ * GET    ?pageId=           → list links with click counts (viewer+)
+ * POST   { pageId, destination, label?, postId? }  → create link (editor+)
+ * DELETE { pageId, slug }   → deactivate link (editor+)
  *
  * ISOLATION (CLAUDE.md): every read/write is scoped to a pageId the caller is
  * verified to manage. The global `shortLinks/{slug}` doc only holds the minimal
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { can } from '@/lib/auth/access'
 import { genSlug, isValidDestination } from '@/lib/links/util'
 
 const APP_BASE = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tm-contentloop.vercel.app'
@@ -24,15 +24,11 @@ async function uidFrom(req: NextRequest): Promise<string | null> {
   if (!idToken) return null
   try { return (await adminAuth.verifyIdToken(idToken)).uid } catch { return null }
 }
-async function isAdmin(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  if ((await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()).exists) return true
-  return (await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()).exists
+async function canManage(uid: string, pageId: string): Promise<boolean> {
+  return can(uid, pageId, 'content.draft')
 }
 async function canRead(uid: string, pageId: string): Promise<boolean> {
-  if (await isAdmin(uid, pageId)) return true
-  const viewer = await adminDb.collection('users').doc(uid).collection('viewerAccess').doc('pages').get()
-  return ((viewer.data()?.pages ?? []) as { pageId: string }[]).some(p => p.pageId === pageId)
+  return can(uid, pageId, 'analytics.links')
 }
 const linksCol = (pageId: string) => adminDb.collection('pages').doc(pageId).collection('links')
 
@@ -43,7 +39,7 @@ export async function GET(req: NextRequest) {
   if (!pageId) return NextResponse.json({ error: 'Missing pageId' }, { status: 400 })
   if (!(await canRead(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const admin = await isAdmin(uid, pageId)
+  const manage = await canManage(uid, pageId)
   const snap = await linksCol(pageId).orderBy('createdAt', 'desc').get()
   const links = snap.docs.filter(d => d.data().active !== false).map(d => {
     const x = d.data()
@@ -61,9 +57,9 @@ export async function GET(req: NextRequest) {
       value: x.value ?? 0,
       currency: x.currency ?? 'TWD',
       trackConversion: track,
-      // Setup details only for admins (token is a shared secret).
+      // Setup details only for editor+ (token is a shared secret).
       conversionUrl: track ? `${APP_BASE}/c/${d.id}` : null,
-      webhookUrl: track && admin && x.conversionToken ? `${APP_BASE}/api/links/webhook/${d.id}?token=${x.conversionToken}` : null,
+      webhookUrl: track && manage && x.conversionToken ? `${APP_BASE}/api/links/webhook/${d.id}?token=${x.conversionToken}` : null,
       paramName: track ? 'cl_id' : null,
       createdAt: x.createdAt ?? null,
     }
@@ -78,7 +74,7 @@ export async function POST(req: NextRequest) {
   const { pageId, destination, label, postId, trackConversion, thankYouUrl, value, currency } = b
   if (!pageId || !destination) return NextResponse.json({ error: 'pageId, destination required' }, { status: 400 })
   if (!isValidDestination(destination)) return NextResponse.json({ error: 'Invalid destination URL' }, { status: 400 })
-  if (!(await isAdmin(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // Find a free slug (re-roll on the rare collision).
   let slug = ''
@@ -129,7 +125,7 @@ export async function DELETE(req: NextRequest) {
   const b = (await req.json().catch(() => ({}))) as { pageId?: string; slug?: string }
   const { pageId, slug } = b
   if (!pageId || !slug) return NextResponse.json({ error: 'pageId, slug required' }, { status: 400 })
-  if (!(await isAdmin(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // ISOLATION: confirm this slug actually belongs to the caller's page before
   // touching the global doc — never let one page deactivate another's link.

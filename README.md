@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-09 | RBAC 修正：Dashboard header 改用目前粉專的 page-scoped role/capabilities；Editor 可生成/編輯草稿、管理報名連結與 AI chatbot 設定/測試，但刪除/核准/排程/發布與 chatbot 上架仍限 Admin；未連 Threads 的粉專禁止建立/發布 Threads 草稿 | (本次) |
 | 2026-07-09 | 文件/memory：補充 Meta Development mode 下 ContentLoop admin 共用 owner FB/IG page token 的規則、何時仍需 Meta Developer tester、以及 Threads 獨立 OAuth 例外 | (文件/memory) |
 | 2026-07-09 | RBAC 對齊：Viewer 可進入報名連結追蹤並唯讀統計/CSV；品牌素材庫改為 Viewer 可讀、Editor/Admin 可新增刪除；AI Sidekick 對受邀 viewer/editor 改用頁面 owner/env Claude key，不再要求各自輸入 API key | (本次) |
 | 2026-07-08 | 修復 Threads 發布時遇到 "The requested resource does not exist" 問題：TEXT 類型貼文建立後需短暫同步時間，補上 `waitReady` 輪詢機制並修正其 error retry 邏輯；另修復 Firestore Admin SDK 寫入 `undefined` 導致崩潰問題（啟用 `ignoreUndefinedProperties`），並在「收回核准」時自動清除舊的發布失敗紀錄 | `2612f33` `6b9216e` `6c8dfb9` |

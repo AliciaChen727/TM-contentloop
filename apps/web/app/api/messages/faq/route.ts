@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { can } from '@/lib/auth/access'
 import { INTENTS, type IntentKey } from '@/lib/messages/intents'
 
 // Phase 5-2a：AI agent 自動回覆「設定/知識庫」讀寫。此刀只存設定，尚未接 webhook/發送。
@@ -30,15 +30,6 @@ const DEFAULT_FALLBACK = '感謝您的訊息！我們會盡快由專人回覆您
 const DEFAULT_PERSONA = '親切、簡潔、有禮貌，用「我們」自稱，像分會小編。'
 const emptyConfig = (): FaqConfig => ({ enabled: false, humanHandoffEnabled: true, fallbackMessage: DEFAULT_FALLBACK, answers: {}, knowledgeBase: '', persona: DEFAULT_PERSONA, scheduleEntries: [], meetingTime: '', meetingLocation: '', scheduleSheetUrl: '', replyModel: 'standard', corrections: [] })
 
-// Only page admins (connected the page) or super-admins may read/write bot config.
-async function assertAdmin(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  const own = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
-  if (own.exists) return true
-  const adminDoc = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-  return adminDoc.exists
-}
-
 async function authUid(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return null
@@ -50,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const pageId = req.nextUrl.searchParams.get('pageId')
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
-  if (!(await assertAdmin(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await can(uid, pageId, 'chatbot.manage'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const snap = await adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config').get()
   const config = snap.exists ? { ...emptyConfig(), ...(snap.data() as Partial<FaqConfig>) } : emptyConfig()
@@ -63,7 +54,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const pageId: string | undefined = body.pageId
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
-  if (!(await assertAdmin(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await can(uid, pageId, 'chatbot.manage'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const canDeploy = await can(uid, pageId, 'chatbot.deploy')
+  const configRef = adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config')
+  const existingSnap = await configRef.get()
+  const existingConfig = existingSnap.exists ? { ...emptyConfig(), ...(existingSnap.data() as Partial<FaqConfig>) } : emptyConfig()
 
   const known = new Set(INTENTS.map(i => i.key))
   const inAnswers = (body.answers ?? {}) as Record<string, { answer?: unknown; enabled?: unknown }>
@@ -79,7 +74,7 @@ export async function POST(req: NextRequest) {
     .slice(0, 200)
 
   const config: FaqConfig = {
-    enabled: body.enabled === true,
+    enabled: canDeploy ? body.enabled === true : existingConfig.enabled,
     humanHandoffEnabled: body.humanHandoffEnabled !== false,
     fallbackMessage: String(body.fallbackMessage ?? DEFAULT_FALLBACK).slice(0, 1000),
     answers,
@@ -101,7 +96,6 @@ export async function POST(req: NextRequest) {
       .slice(0, 100),
   }
 
-  await adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config')
-    .set({ ...config, updatedAt: new Date().toISOString(), updatedBy: uid }, { merge: true })
+  await configRef.set({ ...config, updatedAt: new Date().toISOString(), updatedBy: uid }, { merge: true })
   return NextResponse.json({ ok: true, config })
 }

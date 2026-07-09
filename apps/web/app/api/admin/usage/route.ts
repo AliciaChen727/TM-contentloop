@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin } from '@/lib/auth/superadmin'
 
-async function verifyOwner(req: NextRequest): Promise<string | null> {
+async function verifySuperAdmin(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
   if (!idToken) return null
   let uid: string
@@ -14,19 +14,11 @@ async function verifyOwner(req: NextRequest): Promise<string | null> {
   } catch { return null }
 
   if (isSuperAdmin(uid)) return uid
-
-  const tokensSnap = await adminDb.collection('users').doc(uid).collection('metaTokens').get()
-  for (const tokenDoc of tokensSnap.docs) {
-    if (tokenDoc.id === 'userToken' || tokenDoc.id === 'page') continue
-    const pageId = tokenDoc.id
-    const adminDoc = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-    if (adminDoc.data()?.isOwner === true) return uid
-  }
   return null
 }
 
 export async function GET(req: NextRequest) {
-  const uid = await verifyOwner(req)
+  const uid = await verifySuperAdmin(req)
   if (!uid) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const month = req.nextUrl.searchParams.get('month') ?? new Date().toISOString().slice(0, 7)

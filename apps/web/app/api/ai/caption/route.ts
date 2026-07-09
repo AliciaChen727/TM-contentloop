@@ -9,18 +9,14 @@ export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { adminAuth } from '@/lib/firebase/admin'
+import { can } from '@/lib/auth/access'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import { resolvePageProfile } from '@/lib/page-profile'
 import { fetchTopPostExamples } from '@/lib/content/historyExamples'
 
 async function canManage(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  const own = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
-  if (own.exists) return true
-  const admin = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-  return admin.exists
+  return can(uid, pageId, 'content.draft')
 }
 
 function escapeControlCharsInsideJsonStrings(json: string): string {

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { can } from '@/lib/auth/access'
 import { getUserApiKey } from '@/lib/userApiKeys'
 import { generateReply, type AgentConfig } from '@/lib/messages/replyAgent'
 import { getFewShot } from '@/lib/messages/feedbackFewShot'
@@ -20,11 +20,7 @@ export async function POST(req: NextRequest) {
   const message: string = String(body.message ?? '').slice(0, 500)
   if (!pageId || !message.trim()) return NextResponse.json({ error: 'pageId and message required' }, { status: 400 })
 
-  // admin only
-  const isAdmin = isSuperAdmin(uid)
-    || (await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()).exists
-    || (await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()).exists
-  if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await can(uid, pageId, 'chatbot.manage'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const snap = await adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config').get()
   if (!snap.exists) return NextResponse.json({ error: '尚未設定 FAQ' }, { status: 400 })

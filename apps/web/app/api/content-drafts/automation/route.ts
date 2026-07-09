@@ -6,8 +6,8 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { adminAuth } from '@/lib/firebase/admin'
+import { can } from '@/lib/auth/access'
 import { getAutomationSettings, setAutomationSettings } from '@/lib/content/automationStore'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
@@ -16,11 +16,7 @@ async function uidFromReq(req: NextRequest): Promise<string | null> {
   try { return (await adminAuth.verifyIdToken(idToken)).uid } catch { return null }
 }
 async function canManage(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  const own = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
-  if (own.exists) return true
-  const admin = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-  return admin.exists
+  return can(uid, pageId, 'content.publish')
 }
 
 export async function GET(req: NextRequest) {

@@ -25,9 +25,10 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { OnboardingModal } from '@/components/OnboardingModal'
 import { DateField } from '@/components/ui/DateField'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import type { Capability, Role } from '@/lib/auth/roles'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
-interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null }
+interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null; role?: Role }
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
 
 interface FbPost {
@@ -85,8 +86,9 @@ export default function DashboardPage() {
   const [addingPage, setAddingPage] = useState(false)
   const [addPageInput, setAddPageInput] = useState('')
   const [addPageError, setAddPageError] = useState('')
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isOwner, setIsOwner] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [activeRole, setActiveRole] = useState<Role>('viewer')
+  const [activeCapabilities, setActiveCapabilities] = useState<Capability[]>(['page.view'])
   const [userName, setUserName] = useState('')
   const [idToken, setIdToken] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -136,7 +138,6 @@ export default function DashboardPage() {
         const d = await pagesRes.json()
         pageList = d.pages ?? []
         setPages(pageList)
-        setIsOwner(d.isOwner ?? false)
         adminFlag = d.isAdmin ?? false
       }
 
@@ -154,9 +155,19 @@ export default function DashboardPage() {
         localStorage.setItem('selectedPageName', activePageName)
       }
       // Admin flag comes from /api/pages (server-side), not a client Firestore read.
-      setIsAdmin(adminFlag)
+      setActiveRole(activePage?.role ?? (activePage?.permissions == null && adminFlag ? 'admin' : 'viewer'))
       setUserName(u.displayName ?? u.email ?? '')
       setIdToken(idToken)
+
+      if (activePageId) {
+        const roleRes = await fetch(`/api/user/role?pageId=${activePageId}`, { headers })
+        if (roleRes.ok) {
+          const roleJson = await roleRes.json()
+          if (roleJson.role) setActiveRole(roleJson.role)
+          setActiveCapabilities(Array.isArray(roleJson.capabilities) ? roleJson.capabilities : [])
+          setIsSuperAdmin(!!roleJson.isSuperAdmin)
+        }
+      }
 
       if (adminFlag && activePageId) {
         const skipped = sessionStorage.getItem(`onboardingSkipped_${activePageId}`)
@@ -201,9 +212,9 @@ export default function DashboardPage() {
   // Throttled background refresh: on page open, ask the server to claim a sync
   // (only if data is > 3h stale and no other sync is running — Firestore lock).
   // If claimed, silently sync FB/IG/Threads and refetch. Keeps loads fast while
-  // fetching the latest, without hammering the Meta API on every open. Admin only.
+  // fetching the latest, without hammering the Meta API on every open. Editor+ only.
   useEffect(() => {
-    if (!idToken || !selectedPageId || !isAdmin) return
+    if (!idToken || !selectedPageId || !activeCapabilities.includes('data.sync')) return
     let cancelled = false
     const headers = { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' }
     const body = JSON.stringify({ pageId: selectedPageId })
@@ -223,7 +234,7 @@ export default function DashboardPage() {
       } finally { if (!cancelled) setAutoSyncing(false) }
     })()
     return () => { cancelled = true }
-  }, [idToken, selectedPageId, isAdmin, fetchPosts])
+  }, [idToken, selectedPageId, activeCapabilities, fetchPosts])
 
   // Posts in date range (for summary cards)
   const rangedFb = useMemo(() => fbPosts.filter(p => {
@@ -371,6 +382,8 @@ export default function DashboardPage() {
     const found = pages.find(p => p.pageId === newPageId)
     if (found) localStorage.setItem('selectedPageName', found.pageName)
     if (found) setPageData({ pageId: found.pageId, pageName: found.pageName, igUserId: found.igUserId })
+    setActiveRole(found?.role ?? (found?.permissions == null ? 'admin' : 'viewer'))
+    setActiveCapabilities([])
     setFbPosts([])
     setIgPosts([])
     setThreadsPosts([])
@@ -400,6 +413,23 @@ export default function DashboardPage() {
 
 
   async function handleSignOut() { await signOut(auth); router.replace('/auth/login') }
+
+  useEffect(() => {
+    if (!idToken || !selectedPageId) return
+    let alive = true
+    fetch(`/api/user/role?pageId=${selectedPageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!alive || !d) return
+        if (d.role) setActiveRole(d.role)
+        setActiveCapabilities(Array.isArray(d.capabilities) ? d.capabilities : [])
+        setIsSuperAdmin(!!d.isSuperAdmin)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [idToken, selectedPageId])
+
+  const hasCap = useCallback((cap: Capability) => activeCapabilities.includes(cap), [activeCapabilities])
 
   // Manual "sync latest data" — refresh FB + IG posts (incl. reach via post_media_view)
   // for the current page, then refetch. FB/IG sync are per-page and use the caller's own
@@ -446,8 +476,8 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <ProfileMenu
               userName={userName}
-              role={isAdmin ? 'admin' : 'viewer'}
-              isOwner={isOwner}
+              role={activeRole}
+              isSuperAdmin={isSuperAdmin}
               onSignOut={handleSignOut}
             />
             <div className="flex items-center gap-2">
@@ -462,7 +492,7 @@ export default function DashboardPage() {
               ) : (
                 pageData && <p className="text-sm text-gray-900 font-bold">{pageData.pageName}</p>
               )}
-              {isAdmin && (addingPage ? (
+              {(activeRole === 'owner' || activeRole === 'admin') && (addingPage ? (
                 <div className="flex items-center gap-1">
                   <input
                     autoFocus
@@ -487,12 +517,12 @@ export default function DashboardPage() {
               const activePerms = pages.find(p => p.pageId === selectedPageId)?.permissions ?? null
               return (<>
                 <NavMenu items={[
-                  { key: 'ads', icon: '📊', label: L('廣告儀表板', 'Ad Dashboard'), onClick: () => router.push('/dashboard/ads'), show: isAdmin || !!activePerms?.ads },
-                  { key: 'links', icon: '🔗', label: L('報名連結追蹤', 'Link Tracking'), onClick: () => router.push('/dashboard/links'), show: isAdmin || !!activePerms },
-                  { key: 'messages', icon: '💬', label: L('私訊分析', 'Messages'), onClick: () => router.push('/dashboard/messages'), show: isAdmin },
-                  { key: 'drafts', icon: '✍️', label: L('AI 草稿發布', 'AI Drafts'), onClick: () => router.push('/dashboard/content-drafts'), show: isAdmin },
+                  { key: 'ads', icon: '📊', label: L('廣告儀表板', 'Ad Dashboard'), onClick: () => router.push('/dashboard/ads'), show: hasCap('analytics.ads') || !!activePerms?.ads },
+                  { key: 'links', icon: '🔗', label: L('報名連結追蹤', 'Link Tracking'), onClick: () => router.push('/dashboard/links'), show: hasCap('analytics.links') || !!activePerms },
+                  { key: 'messages', icon: '💬', label: L('私訊分析', 'Messages'), onClick: () => router.push('/dashboard/messages'), show: hasCap('analytics.messages') },
+                  { key: 'drafts', icon: '✍️', label: L('AI 草稿發布', 'AI Drafts'), onClick: () => router.push('/dashboard/content-drafts'), show: hasCap('content.draft') },
                 ]} />
-                {(isAdmin || activePerms?.sidekick) && (
+                {(hasCap('sidekick.use') || activePerms?.sidekick) && (
                   <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
                     ✨ AI Sidekick
                   </button>
@@ -532,7 +562,7 @@ export default function DashboardPage() {
                 </div>
               )}
               <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                {isAdmin && (
+                {hasCap('data.sync') && (
                   <button
                     onClick={handleSync}
                     disabled={syncing}
@@ -623,7 +653,7 @@ export default function DashboardPage() {
                 </div>
               )}
               {(() => {
-                const canSidekick = isAdmin || !!pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick
+                const canSidekick = hasCap('sidekick.use') || !!pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick
                 const askAI = canSidekick ? (q: string, a?: boolean) => openSidekick(q, a) : undefined
                 if (typeFilter === 'stories') {
                   return <IgStoriesTable stories={filteredStories} onAskAI={askAI} />
@@ -639,7 +669,7 @@ export default function DashboardPage() {
           </>
         )}
       </div>
-      {(isAdmin || pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick) && (
+      {(hasCap('sidekick.use') || pages.find(p => p.pageId === selectedPageId)?.permissions?.sidekick) && (
         <button className={`ads-sk-fab ${skOpen ? 'hidden' : ''}`} onClick={() => openSidekick()} title="AI Sidekick">✨</button>
       )}
       <AiSidekick
@@ -663,7 +693,7 @@ export default function DashboardPage() {
       <footer className="mt-8 pb-6 text-center">
         <a href="/privacy" className="text-xs text-gray-400 hover:text-gray-600">Privacy Policy</a>
       </footer>
-      {showOnboarding && isAdmin && idToken && (
+      {showOnboarding && hasCap('page.settings') && idToken && (
         <OnboardingModal idToken={idToken} pageId={selectedPageId} onDone={() => setShowOnboarding(false)} />
       )}
     </main>

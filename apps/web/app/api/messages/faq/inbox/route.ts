@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { can } from '@/lib/auth/access'
 
 // List recent webhook-received messages + the agent's DRY-RUN would-be reply.
 export async function GET(req: NextRequest) {
@@ -13,10 +13,7 @@ export async function GET(req: NextRequest) {
 
   const pageId = req.nextUrl.searchParams.get('pageId')
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
-  const isAdmin = isSuperAdmin(uid)
-    || (await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()).exists
-    || (await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()).exists
-  if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await can(uid, pageId, 'chatbot.manage'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const snap = await adminDb.collection('pages').doc(pageId).collection('faqBot').doc('config')
     .collection('inbox').get()

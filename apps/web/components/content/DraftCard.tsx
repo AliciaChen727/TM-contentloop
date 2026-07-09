@@ -39,7 +39,7 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform, canPublish = true, unavailableTargets = [] }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent) => void
@@ -50,6 +50,8 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   onUnschedule: (id: string) => void
   busy: boolean
   publishingPlatform?: DraftTarget | null   // platform currently being published for THIS draft
+  canPublish?: boolean
+  unavailableTargets?: DraftTarget[]
 }) {
   const { L } = useLang()
   const fmtTime = (ms?: number) => ms ? new Date(ms).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
@@ -79,6 +81,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   const retryableFailure = draft.status === 'failed' || (!!publishError && !anyPublished)
   const locked = anyPublished
   const canEdit = draft.status === 'draft' && !locked
+  const unavailable = draft.target.filter(t => unavailableTargets.includes(t) && !draft.publishResults?.[t]?.postId)
 
   function saveEdit() {
     const perPlatform = { ...draft.generated.perPlatform }
@@ -147,6 +150,11 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
       )}
       {draft.publishResult?.error && <p className="mt-2 text-xs text-red-600">⚠ {draft.publishResult.error}</p>}
       {draft.publishResult?.postId && <p className="mt-2 text-xs text-green-700">✓ {L('已發布 ID', 'Post ID')}: {draft.publishResult.postId}</p>}
+      {unavailable.includes('th') && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          {L('請先建立 Threads 並連結帳號，才能發布 Threads。', 'Connect a Threads account before publishing to Threads.')}
+        </p>
+      )}
 
       {/* Pre-publish warnings (FB mixed carousel etc.) — hide once fully published. */}
       {!allPublished && cardViolations.length > 0 && (
@@ -161,11 +169,13 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
 
       {/* Actions — human-in-the-loop gate. Publish itself is S4 (needs Meta scopes). */}
       <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-        {draft.status === 'draft' && !locked && !editing && (<>
+        {canPublish && draft.status === 'draft' && !locked && !editing && (<>
           <button disabled={busy} onClick={() => onTransition(draft.id, 'approved')} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">✓ {L('核准', 'Approve')}</button>
           <button disabled={busy} onClick={() => onTransition(draft.id, 'rejected')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">{L('拒絕', 'Reject')}</button>
-          <button disabled={busy} onClick={() => setEditing(true)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✎ {L('編輯', 'Edit')}</button>
         </>)}
+        {draft.status === 'draft' && !locked && !editing && (
+          <button disabled={busy} onClick={() => setEditing(true)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✎ {L('編輯', 'Edit')}</button>
+        )}
         {editing && (<>
           <button disabled={busy} onClick={saveEdit} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{L('儲存', 'Save')}</button>
           <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600">{L('取消', 'Cancel')}</button>
@@ -178,8 +188,8 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
           ))}
           {/* One-click publish to all remaining platforms at once. */}
           {(() => {
-            const remaining = draft.target.filter(t => !draft.publishResults?.[t]?.postId)
-            if (remaining.length === 0) return null
+            const remaining = draft.target.filter(t => !draft.publishResults?.[t]?.postId && !unavailableTargets.includes(t))
+            if (remaining.length === 0 || !canPublish) return null
             return (
               <button disabled={busy} onClick={() => onPublishAll(draft.id)}
                 className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">
@@ -191,12 +201,12 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
           })()}
           {publishError && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {publishError}</span>}
           {/* Unapprove only while not yet published anywhere. */}
-          {draft.status === 'approved' && !locked && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
+          {canPublish && draft.status === 'approved' && !locked && <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('收回核准', 'Unapprove')}</button>}
         </>)}
         {/* Duplicate — the way to re-post a published draft (a new editable draft). */}
         {locked && <button disabled={busy} onClick={() => onDuplicate(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">📄 {L('複製為新草稿', 'Duplicate')}</button>}
         {/* Schedule (S5) — any approved draft can auto-publish later (all platforms). */}
-        {draft.status === 'approved' && !locked && !retryableFailure && (
+        {canPublish && draft.status === 'approved' && !locked && !retryableFailure && unavailable.length === 0 && (
           <span className="flex flex-wrap items-center gap-1">
             {/* Date */}
             <input
@@ -234,7 +244,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
             >⏰ {L('排程', 'Schedule')}</button>
           </span>
         )}
-        {draft.status === 'scheduled' && (<>
+        {canPublish && draft.status === 'scheduled' && unavailable.length === 0 && (<>
           <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">⏰ {L('已排程', 'Scheduled')}：{fmtTime(draft.schedule?.at)}</span>
           <button disabled={busy} onClick={() => onPublishAll(draft.id)} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-70">{publishingPlatform ? `⏳ ${L('發布中…', 'Publishing…')}` : `🚀 ${L('立即發布', 'Publish now')}`}</button>
           <button disabled={busy} onClick={() => onUnschedule(draft.id)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">✕ {L('取消排程', 'Cancel')}</button>
@@ -242,12 +252,12 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
         {(draft.status === 'rejected' || draft.status === 'expired') && (
           <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('復原為草稿', 'Restore to draft')}</button>
         )}
-        {retryableFailure && (<>
+        {canPublish && retryableFailure && (<>
           {publishError && <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600">⚠ {publishError}</span>}
           <button disabled={busy} onClick={() => onTransition(draft.id, 'approved')} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">🔄 {L('重試發布', 'Retry publish')}</button>
           <button disabled={busy} onClick={() => onTransition(draft.id, 'draft')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 disabled:opacity-50">↩ {L('復原為草稿', 'Restore to draft')}</button>
         </>)}
-        {!editing && (
+        {!editing && canPublish && (
           <button disabled={busy} onClick={() => onDelete(draft.id)}
             className="ml-auto flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50">
             <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h12M8 6V4.5A1.5 1.5 0 019.5 3h1A1.5 1.5 0 0112 4.5V6m2 0v9.5A1.5 1.5 0 0112.5 17h-5A1.5 1.5 0 016 15.5V6M8.5 9v5M11.5 9v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>

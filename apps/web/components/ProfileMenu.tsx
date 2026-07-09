@@ -2,11 +2,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import type { Role } from '@/lib/auth/roles'
 
-export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
+export function ProfileMenu({ userName, role, isSuperAdmin, onSignOut }: {
   userName: string
-  role: 'admin' | 'viewer'
-  isOwner?: boolean
+  role: Role
+  isSuperAdmin?: boolean
   onSignOut: () => void
 }) {
   const { L } = useLang()
@@ -15,6 +16,19 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
   const router = useRouter()
 
   const initial = (userName || '?').charAt(0).toUpperCase()
+  const roleLabel: Record<Role, string> = {
+    owner: 'Owner',
+    admin: 'Admin',
+    editor: 'Editor',
+    viewer: 'Viewer',
+  }
+  const roleColor: Record<Role, string> = {
+    owner: '#4F46E5',
+    admin: '#3B6FD4',
+    editor: '#0EA5E9',
+    viewer: '#9CA3AF',
+  }
+  const canManageMembers = role === 'owner' || role === 'admin'
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -52,13 +66,13 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
           <div style={{ padding: '14px 16px', borderBottom: '1px solid #F3F4F6' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 4 }}>{userName}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: role === 'admin' ? '#3B6FD4' : '#9CA3AF', display: 'inline-block' }} />
-              <span style={{ fontSize: 11, color: '#6B7280' }}>{role === 'admin' ? 'Admin' : 'Viewer'}</span>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: roleColor[role], display: 'inline-block' }} />
+              <span style={{ fontSize: 11, color: '#6B7280' }}>{roleLabel[role]}</span>
             </div>
           </div>
 
           {/* Members link (admin only) */}
-          {role === 'admin' && (
+          {canManageMembers && (
             <div style={{ padding: '6px 8px', borderBottom: '1px solid #F3F4F6' }}>
               <button
                 onClick={() => { setOpen(false); router.push('/dashboard/members') }}
@@ -76,8 +90,8 @@ export function ProfileMenu({ userName, role, isOwner, onSignOut }: {
             </div>
           )}
 
-          {/* Usage report (owner only) */}
-          {isOwner && (
+          {/* Usage report (super owner only) */}
+          {isSuperAdmin && (
             <div style={{ padding: '6px 8px', borderBottom: '1px solid #F3F4F6' }}>
               <button
                 onClick={() => { setOpen(false); router.push('/dashboard/admin') }}

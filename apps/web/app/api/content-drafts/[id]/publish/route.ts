@@ -9,10 +9,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300   // carousel with videos processes async; allow headroom
 
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { adminAuth } from '@/lib/firebase/admin'
+import { can } from '@/lib/auth/access'
 import { getDraft } from '@/lib/content/draftStore'
 import { runPublish } from '@/lib/content/publishRunner'
+import { hasPageThreadsConnection } from '@/lib/threads/client'
 import type { DraftTarget } from '@/lib/content/draftTypes'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
@@ -21,11 +22,7 @@ async function uidFromReq(req: NextRequest): Promise<string | null> {
   try { return (await adminAuth.verifyIdToken(idToken)).uid } catch { return null }
 }
 async function canManage(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  const own = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
-  if (own.exists) return true
-  const admin = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-  return admin.exists
+  return can(uid, pageId, 'content.publish')
 }
 
 // POST { pageId, platform: 'th' | 'fb' | 'ig' }
@@ -40,6 +37,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const draft = await getDraft(pageId, params.id)
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
   if (!draft.target.includes(platform)) return NextResponse.json({ error: `此草稿未包含 ${platform}` }, { status: 400 })
+  if (platform === 'th' && !(await hasPageThreadsConnection(pageId))) {
+    return NextResponse.json({ error: '請先建立 Threads 並連結帳號，才能發布 Threads' }, { status: 409 })
+  }
   if (draft.status !== 'approved' && draft.status !== 'published' && draft.status !== 'scheduled') {
     return NextResponse.json({ error: '需先核准草稿才能發布' }, { status: 409 })
   }

@@ -8,11 +8,12 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { isSuperAdmin } from '@/lib/auth/superadmin'
+import { adminAuth } from '@/lib/firebase/admin'
+import { can } from '@/lib/auth/access'
 import { createDraft, listDrafts, writeAudit } from '@/lib/content/draftStore'
 import { isValidTarget, isValidMediaType, type DraftStatus, type CreateDraftInput, type DraftTarget } from '@/lib/content/draftTypes'
 import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
+import { hasPageThreadsConnection } from '@/lib/threads/client'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -20,14 +21,10 @@ async function uidFromReq(req: NextRequest): Promise<string | null> {
   try { return (await adminAuth.verifyIdToken(idToken)).uid } catch { return null }
 }
 
-// Drafts are unpublished content → only owner / admin / super-admin may see or
-// create them (viewers cannot). Mirrors the diagnosis-status write gate.
+// Drafts are unpublished content → editor+ may see/create/edit drafts; publishing
+// remains admin+ in the publish route.
 async function canManage(uid: string, pageId: string): Promise<boolean> {
-  if (isSuperAdmin(uid)) return true
-  const own = await adminDb.collection('users').doc(uid).collection('metaTokens').doc(pageId).get()
-  if (own.exists) return true
-  const admin = await adminDb.collection('pages').doc(pageId).collection('admins').doc(uid).get()
-  return admin.exists
+  return can(uid, pageId, 'content.draft')
 }
 
 // GET ?pageId=&status=&limit= → { drafts }
@@ -57,6 +54,9 @@ export async function POST(req: NextRequest) {
   // Validate shape (S3 will add字數/尺寸 hard limits; here just structural).
   if (!Array.isArray(target) || target.length === 0 || !target.every(isValidTarget)) {
     return NextResponse.json({ error: 'target must be a non-empty array of fb|ig|th' }, { status: 400 })
+  }
+  if (target.includes('th') && !(await hasPageThreadsConnection(pageId))) {
+    return NextResponse.json({ error: '請先建立 Threads 並連結帳號，才能建立或發布 Threads 草稿' }, { status: 409 })
   }
   if (!isValidMediaType(mediaType)) {
     return NextResponse.json({ error: 'invalid mediaType' }, { status: 400 })

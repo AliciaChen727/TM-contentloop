@@ -7,6 +7,7 @@ import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { parseSchedule, nextMeeting, type ParsedEntry } from '@/lib/messages/parseSchedule'
 import { trackEvent } from '@/lib/analytics/track'
+import type { Capability } from '@/lib/auth/roles'
 
 interface IntentMeta { key: string; zh: string; en: string }
 interface Answer { answer: string; enabled: boolean }
@@ -53,6 +54,8 @@ export default function FaqSettingsPage() {
   const [feedbackSent, setFeedbackSent] = useState(false)
   const [fbStats, setFbStats] = useState<FeedbackStats | null>(null)
   const [inbox, setInbox] = useState<InboxItem[]>([])
+  const [capabilities, setCapabilities] = useState<Capability[]>([])
+  const canDeployBot = capabilities.includes('chatbot.deploy')
 
   const loadFbStats = useCallback(async (t: string, pid: string) => {
     try {
@@ -165,6 +168,10 @@ export default function FaqSettingsPage() {
             if (found?.pageName) setPageName(found.pageName)
           })
           .catch(() => { /* keep fallback name */ })
+        fetch(`/api/user/role?pageId=${encodeURIComponent(pid)}`, { headers: { Authorization: `Bearer ${t}` } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => setCapabilities((d?.capabilities ?? []) as Capability[]))
+          .catch(() => setCapabilities([]))
         load(t, pid)
       }
       else setLoading(false)
@@ -246,8 +253,19 @@ export default function FaqSettingsPage() {
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <label className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-700">{L('啟用自動回覆（總開關）', 'Enable auto-reply (master)')}</span>
-                <input type="checkbox" checked={cfg.enabled} onChange={e => setCfg({ ...cfg, enabled: e.target.checked })} className="h-4 w-4" />
+                <input
+                  type="checkbox"
+                  checked={cfg.enabled}
+                  disabled={!canDeployBot}
+                  onChange={e => { if (canDeployBot) setCfg({ ...cfg, enabled: e.target.checked }) }}
+                  className="h-4 w-4 disabled:cursor-not-allowed disabled:opacity-40"
+                />
               </label>
+              {!canDeployBot && (
+                <p className="mt-2 text-xs text-amber-600">
+                  {L('你可以編輯知識與測試回覆；正式啟用/發布自動回覆需由 Admin 操作。', 'You can edit knowledge and test replies. Only Admins can enable/deploy auto-reply.')}
+                </p>
+              )}
               <label className="mt-3 flex items-center justify-between">
                 <span className="text-sm text-gray-600">{L('沒把握時轉真人（不亂答）', 'Hand off to human when unsure')}</span>
                 <input type="checkbox" checked={cfg.humanHandoffEnabled} onChange={e => setCfg({ ...cfg, humanHandoffEnabled: e.target.checked })} className="h-4 w-4" />

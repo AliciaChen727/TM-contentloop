@@ -145,7 +145,12 @@ export default function LinksPage() {
     .map(d => ({ device: d, ...devAgg[d] }))
   const hasDeviceData = deviceRows.some(r => r.clicks > 0)
   const activePage = pages.find(p => p.pageId === pageId)
-  const canManageLinks = !!activePage && (activePage.role === 'owner' || activePage.role === 'admin' || activePage.permissions == null)
+  const canManageLinks = !!activePage && (
+    activePage.role === 'owner'
+    || activePage.role === 'admin'
+    || activePage.role === 'editor'
+    || activePage.permissions == null
+  )
 
   return (
     <div className="mx-auto max-w-3xl p-6">

@@ -19,14 +19,15 @@ export async function GET(req: NextRequest) {
       capabilities: capabilitiesForRole('owner'),
       isOwner: true,
       isAdmin: true,
+      isSuperAdmin: true,
     })
   }
 
   const pageId = req.nextUrl.searchParams.get('pageId')
-  if (!pageId) return NextResponse.json({ role: null, capabilities: [], isOwner: false, isAdmin: false })
+  if (!pageId) return NextResponse.json({ role: null, capabilities: [], isOwner: false, isAdmin: false, isSuperAdmin: false })
 
   const access = await getUserPageAccess(uid, pageId)
-  if (!access) return NextResponse.json({ role: null, capabilities: [], isOwner: false, isAdmin: false })
+  if (!access) return NextResponse.json({ role: null, capabilities: [], isOwner: false, isAdmin: false, isSuperAdmin: false })
 
   const isAdmin = access.role === 'owner' || access.role === 'admin'
   // 回溯相容：現行 UI 讀 isOwner/isAdmin。舊版 /api/user/role 對「在 admins 子集合的人」
@@ -39,5 +40,6 @@ export async function GET(req: NextRequest) {
     capabilities: access.capabilities,
     isOwner,
     isAdmin,
+    isSuperAdmin: false,
   })
 }
