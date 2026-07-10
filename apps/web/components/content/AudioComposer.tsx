@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { auth, freshIdToken } from '@/lib/firebase/client'
 import { uploadDraftMedia } from '@/lib/firebase/storage'
+import { MusicLibrary } from './MusicLibrary'
 
 // 草稿加音樂（Slice 1）：上傳音檔 → server 端 ffmpeg 合成 → 回傳新影片 URL。
 // 圖片會轉成 12 秒 9:16 影片；影片的原聲會被音樂取代。合成結果直接成為草稿
@@ -21,17 +22,11 @@ export function AudioComposer({ idToken, pageId, media, hasMusic, onComposed, on
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'composing'>('idle')
   const [err, setErr] = useState('')
 
-  async function onAudioFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (fileRef.current) fileRef.current.value = ''
-    const uid = auth.currentUser?.uid
-    if (!file || !media || !uid) return
-    if (file.size > 20 * 1024 * 1024) { setErr(L('音檔請小於 20MB', 'Audio must be under 20MB')); return }
-    setErr('')
+  // 曲庫選曲與一次性上傳共用的合成入口。
+  async function composeWith(audioUrl: string) {
+    if (!media) return
+    setPhase('composing'); setErr('')
     try {
-      setPhase('uploading')
-      const audioUrl = await uploadDraftMedia(uid, file)
-      setPhase('composing')
       const res = await fetch('/api/content-drafts/media/compose', {
         method: 'POST', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId, mediaUrl: media.url, audioUrl, kind: media.kind }),
@@ -42,6 +37,23 @@ export function AudioComposer({ idToken, pageId, media, hasMusic, onComposed, on
     } catch (e) {
       setErr(e instanceof Error ? e.message : L('合成失敗', 'compose failed'))
     } finally {
+      setPhase('idle')
+    }
+  }
+
+  async function onAudioFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (fileRef.current) fileRef.current.value = ''
+    const uid = auth.currentUser?.uid
+    if (!file || !media || !uid) return
+    if (file.size > 20 * 1024 * 1024) { setErr(L('音檔請小於 20MB', 'Audio must be under 20MB')); return }
+    setErr('')
+    try {
+      setPhase('uploading')
+      const audioUrl = await uploadDraftMedia(uid, file)
+      await composeWith(audioUrl)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : L('上傳失敗', 'upload failed'))
       setPhase('idle')
     }
   }
@@ -71,6 +83,7 @@ export function AudioComposer({ idToken, pageId, media, hasMusic, onComposed, on
           </>
         )}
       </div>
+      {!hasMusic && media && <MusicLibrary pageId={pageId} disabled={busy} onPick={composeWith} />}
       <p className="mt-1 text-xs text-gray-400">
         {media?.kind === 'image' && !hasMusic
           ? L('圖片會轉成 12 秒 9:16 影片（模糊背景置中版面）發布；', 'The image becomes a 12s 9:16 video (blurred background); ')

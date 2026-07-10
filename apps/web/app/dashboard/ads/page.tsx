@@ -13,6 +13,7 @@ import { OverviewSection } from '@/components/ads/sections/OverviewSection'
 import { DiagnosisSection, type CardStatus } from '@/components/ads/sections/DiagnosisSection'
 import { CreativeSection } from '@/components/ads/sections/CreativeSection'
 import { BrandAssetsCard } from '@/components/analytics/BrandAssetsCard'
+import { MusicLibraryCard } from '@/components/analytics/MusicLibraryCard'
 import { CreativeTrendsSection } from '@/components/ads/sections/CreativeTrendsSection'
 import { AudienceSection } from '@/components/ads/sections/AudienceSection'
 import { PostsSection } from '@/components/ads/sections/PostsSection'
@@ -992,7 +993,10 @@ export default function AdsPage() {
                   await fetch('/api/ads/experiments', { method: 'POST', headers: { Authorization: `Bearer ${idTokenRef}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: selectedPageId, action: 'delete', experimentId }) })
                 } : undefined}
               />}
-              {active === 'brand' && selectedPageId && idTokenRef && <BrandAssetsCard pageId={selectedPageId} idToken={idTokenRef} />}
+              {active === 'brand' && selectedPageId && idTokenRef && (<>
+                <BrandAssetsCard pageId={selectedPageId} idToken={idTokenRef} />
+                <MusicLibraryCard pageId={selectedPageId} idToken={idTokenRef} />
+              </>)}
               {active === 'trends' && <CreativeTrendsSection trends={adData.creativeTrends ?? []} dateFrom={dateFrom} dateTo={dateTo} conversionType={adData.conversionType} experiments={experiments} creativeLabels={creativeLabels} />}
               {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} deviceBreakdown={adData.deviceBreakdown ?? []} conversionType={adData.conversionType} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
