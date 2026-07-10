@@ -9,6 +9,7 @@ import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
 import { PostPreview } from './PostPreview'
 import { CaptionSettings } from './CaptionSettings'
 import type { DraftTarget, MediaType, CreateDraftInput } from '@/lib/content/draftTypes'
+import type { TaggableEntity, TaggingSelection } from '@/lib/tagging/types'
 
 const TARGETS: { key: DraftTarget; label: string }[] = [
   { key: 'fb', label: 'Facebook' }, { key: 'ig', label: 'Instagram' }, { key: 'th', label: 'Threads' },
@@ -18,7 +19,7 @@ const TH_LIMIT = THREADS_LIMIT
 
 // Manual draft composer (S2+). Upload image/video with live preview, optional
 // AI caption generation (copy-only, no image quota), then save as `draft`.
-export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, busy, threadsAvailable = true, instagramAvailable = true }: {
+export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, busy, threadsAvailable = true, instagramAvailable = true, taggableEntities = [], onSyncTaggableEntities, onTaggableEntityCreated }: {
   pageId: string
   pageName?: string
   idToken: string
@@ -27,6 +28,9 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   busy: boolean
   threadsAvailable?: boolean
   instagramAvailable?: boolean
+  taggableEntities?: TaggableEntity[]
+  onSyncTaggableEntities?: () => void
+  onTaggableEntityCreated?: (entity: TaggableEntity) => void
 }) {
   const { L } = useLang()
   const [targets, setTargets] = useState<DraftTarget[]>(['fb'])
@@ -46,9 +50,18 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const [previewPlat, setPreviewPlat] = useState<DraftTarget>('fb')
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [alsoStory, setAlsoStory] = useState(false)
+  const [showTagging, setShowTagging] = useState(false)
+  const [fbPersonTags, setFbPersonTags] = useState<string[]>([])
+  const [fbPlace, setFbPlace] = useState('')
+  const [igMentions, setIgMentions] = useState<string[]>([])
+  const [igLocation, setIgLocation] = useState('')
+  const [thLocation, setThLocation] = useState('')
+  const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string } | null>(null)
+  const [manualIgUsername, setManualIgUsername] = useState('')
   // Public FB page picture (no token needed for public pages).
   const pageAvatar = `https://graph.facebook.com/${pageId}/picture?type=square&width=64&height=64`
   const fileRef = useRef<HTMLInputElement>(null)
+  const textRef = useRef<HTMLTextAreaElement>(null)
 
   // Effective caption for a platform: tailored → its own body; else the shared one.
   const eff = (t: DraftTarget) => (tailored ? (perBody[t] ?? '') : body)
@@ -80,6 +93,32 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   })))
   const blocked = hasBlockingErrors(violations)
   const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && mediaReady
+  const notHash = (e: TaggableEntity) => !e.displayName.trim().startsWith('#') && !e.fbUserId?.startsWith('#') && !e.fbPageId?.startsWith('#')
+  const fbPeople = taggableEntities.filter(e => notHash(e) && e.type === 'person' && e.enabledPlatforms.includes('fb') && e.confidence === 'ready')
+  const fbCandidatePeople = taggableEntities.filter(e => notHash(e) && e.type === 'person' && e.enabledPlatforms.includes('fb') && e.confidence !== 'ready')
+  const fbLocations = taggableEntities.filter(e => e.type === 'location' && e.enabledPlatforms.includes('fb') && e.locationId)
+  const igPeople = taggableEntities.filter(e => e.type === 'person' && e.enabledPlatforms.includes('ig') && e.igUsername)
+  const igLocations = taggableEntities.filter(e => e.type === 'location' && e.enabledPlatforms.includes('ig') && e.locationId)
+  const thLocations = taggableEntities.filter(e => e.type === 'location' && e.enabledPlatforms.includes('th') && e.locationId)
+  const mentionPlatforms = tailored ? [activePreview] : targets
+  const mentionOptions = [
+    ...(mentionPlatforms.includes('fb') ? fbPeople.map(entity => ({ entity, platform: 'fb' as DraftTarget })) : []),
+    ...(mentionPlatforms.includes('ig') ? igPeople.map(entity => ({ entity, platform: 'ig' as DraftTarget })) : []),
+  ]
+    .filter(({ entity: e }) => {
+      const q = mentionQuery?.query.toLowerCase() ?? ''
+      if (!q) return true
+      return [e.displayName, e.igUsername, e.fbPageId, e.fbUserId].filter(Boolean).some(v => String(v).toLowerCase().includes(q))
+    })
+    .slice(0, 8)
+  const selectedEntities = new Map(taggableEntities.map(e => [e.id, e]))
+  const selectedTags = [
+    ...fbPersonTags.map(id => ({ id, platform: 'fb' as const, label: L('FB 插入姓名', 'FB inserted name') })),
+    ...(fbPlace ? [{ id: fbPlace, platform: 'fb' as const, label: L('FB 地點', 'FB place') }] : []),
+    ...igMentions.map(id => ({ id, platform: 'ig' as const, label: 'IG @' })),
+    ...(igLocation ? [{ id: igLocation, platform: 'ig' as const, label: L('IG 地點', 'IG place') }] : []),
+    ...(thLocation ? [{ id: thLocation, platform: 'th' as const, label: L('Threads 地點', 'Threads place') }] : []),
+  ].map(x => ({ ...x, entity: selectedEntities.get(x.id) })).filter(x => x.entity)
 
   function toggle(t: DraftTarget) {
     if (t === 'ig' && !instagramAvailable) {
@@ -138,7 +177,8 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
     }
     const canStory = needsMedia && (targets.includes('fb') || targets.includes('ig'))
     const topic = targets.includes('th') && threadsTopic.trim() ? threadsTopic.trim().replace(/^#/, '') : ''
-    onCreate({ target: targets, mediaType, generated: {
+    const tagging = buildTagging()
+    onCreate({ target: targets, mediaType, ...(tagging ? { tagging } : {}), generated: {
       perPlatform, ...(needsMedia && firstMediaUrl ? { mediaUrl: firstMediaUrl } : {}),
       ...(isCarousel && mediaUrls.length ? { mediaUrls } : {}),
       ...(canStory && alsoStory ? { alsoStory: true } : {}),
@@ -146,10 +186,141 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
     } })
   }
 
+  function multiValues(e: React.ChangeEvent<HTMLSelectElement>): string[] {
+    return Array.from(e.target.selectedOptions).map(o => o.value).filter(Boolean)
+  }
+
+  function uniqueAdd(setter: React.Dispatch<React.SetStateAction<string[]>>, id: string) {
+    setter(cur => cur.includes(id) ? cur : [...cur, id])
+  }
+
+  function updateMention(value: string, caret: number | null) {
+    if (caret === null) { setMentionQuery(null); return }
+    const before = value.slice(0, caret)
+    const m = before.match(/(^|\s)@([^\s@]{0,30})$/)
+    setMentionQuery(m ? { start: caret - m[2].length - 1, query: m[2] } : null)
+  }
+
+  function onCaptionChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setEditBody(e.target.value)
+    updateMention(e.target.value, e.target.selectionStart)
+  }
+
+  function onCaptionKeyUp(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    updateMention(e.currentTarget.value, e.currentTarget.selectionStart)
+  }
+
+  function onCaptionClick(e: React.MouseEvent<HTMLTextAreaElement>) {
+    updateMention(e.currentTarget.value, e.currentTarget.selectionStart)
+  }
+
+  function insertMention(option: { entity: TaggableEntity; platform: DraftTarget }) {
+    const { entity, platform } = option
+    const el = textRef.current
+    const caret = el?.selectionStart ?? editBody.length
+    const start = mentionQuery?.start ?? caret
+    const label = platform === 'ig' && entity.igUsername
+      ? `@${entity.igUsername.replace(/^@/, '')}`
+      : entity.displayName
+    const next = `${editBody.slice(0, start)}${label} ${editBody.slice(caret)}`
+    setEditBody(next)
+    if (platform === 'fb') {
+      if (entity.type === 'person') uniqueAdd(setFbPersonTags, entity.id)
+    } else if (platform === 'ig') {
+      uniqueAdd(setIgMentions, entity.id)
+    }
+    setMentionQuery(null)
+    window.setTimeout(() => {
+      textRef.current?.focus()
+      const pos = start + label.length + 1
+      textRef.current?.setSelectionRange(pos, pos)
+    }, 0)
+  }
+
+  async function addManualIgMention(usernameInput?: string) {
+    const username = (usernameInput ?? mentionQuery?.query ?? '').replace(/^@/, '').trim().toLowerCase()
+    if (!username || !/^[a-z0-9._]{2,30}$/i.test(username)) return
+    try {
+      const res = await fetch('/api/taggable-entities', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageId,
+          type: 'person',
+          displayName: `@${username}`,
+          igUsername: username,
+          enabledPlatforms: ['ig'],
+          source: 'manual',
+          confidence: 'ready',
+        }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || !d.entity) {
+        setErr(d.error ?? L('新增標記名單失敗', 'Failed to add taggable account'))
+        return
+      }
+      onTaggableEntityCreated?.(d.entity as TaggableEntity)
+      if (mentionQuery) insertMention({ entity: d.entity as TaggableEntity, platform: 'ig' })
+      else uniqueAdd(setIgMentions, (d.entity as TaggableEntity).id)
+      setManualIgUsername('')
+      setErr('')
+    } catch {
+      setErr(L('新增標記名單失敗', 'Failed to add taggable account'))
+    }
+  }
+
+  function removeSelectedTag(platform: DraftTarget, id: string) {
+    if (platform === 'fb') {
+      setFbPersonTags(cur => cur.filter(x => x !== id))
+      if (fbPlace === id) setFbPlace('')
+    } else if (platform === 'ig') {
+      setIgMentions(cur => cur.filter(x => x !== id))
+      if (igLocation === id) setIgLocation('')
+    } else if (thLocation === id) setThLocation('')
+  }
+
+  function buildTagging(): TaggingSelection | undefined {
+    const tagging: TaggingSelection = {}
+    if (targets.includes('fb') && (fbPersonTags.length || fbPlace)) {
+      tagging.fb = {
+        ...(fbPersonTags.length ? { personTags: fbPersonTags } : {}),
+        ...(fbPlace ? { place: fbPlace } : {}),
+      }
+    }
+    if (targets.includes('ig') && (igMentions.length || igLocation)) {
+      tagging.ig = {
+        ...(igMentions.length ? { mentions: igMentions } : {}),
+        ...(igLocation ? { location: igLocation } : {}),
+      }
+    }
+    if (targets.includes('th') && thLocation) tagging.th = { location: thLocation }
+    return Object.keys(tagging).length ? tagging : undefined
+  }
+
+  function SelectMultiple({ label, value, options, onChange }: {
+    label: string
+    value: string[]
+    options: TaggableEntity[]
+    onChange: (v: string[]) => void
+  }) {
+    if (options.length === 0) return null
+    return (
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-gray-500">{label}</span>
+        <select multiple value={value} onChange={e => onChange(multiValues(e))}
+          className="h-20 w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+          {options.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+        </select>
+      </label>
+    )
+  }
+
   const showMedia = needsMedia && media.length > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => {
+      if (e.target === e.currentTarget) onClose()
+    }}>
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="mb-4 text-lg font-bold text-gray-900">✍️ {L('新增內容草稿', 'New content draft')}</h2>
         <div className="grid gap-6 md:grid-cols-2">
@@ -255,9 +426,45 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
               </div>
             </div>
             {tailored && <p className="mb-1 text-xs text-gray-400">{L('各平台文案不同，用右上預覽切換平台來編輯。', 'Per-platform copy — switch platform via the preview tabs to edit each.')}</p>}
-            <textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={5}
-              placeholder={L('輸入貼文文案，或按「AI 生成文案」…', 'Write a caption, or use "AI caption"…')}
-              className="w-full resize-y rounded-lg border border-gray-200 p-3 text-sm text-gray-800" />
+            <div className="relative">
+              <textarea ref={textRef} value={editBody} onChange={onCaptionChange} onKeyUp={onCaptionKeyUp} onClick={onCaptionClick} rows={5}
+                placeholder={L('輸入貼文文案，或按「AI 生成文案」…', 'Write a caption, or use "AI caption"…')}
+                className="w-full resize-y rounded-lg border border-gray-200 p-3 text-sm text-gray-800" />
+              {mentionQuery && (
+                <div className="absolute left-3 top-11 z-20 max-h-48 w-[min(22rem,calc(100%-1.5rem))] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                  {mentionOptions.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-gray-400">
+                      {activePreview === 'fb'
+                        ? L('沒有可用 FB 名單；可先同步歷史貼文中的已知姓名/粉專。', 'No FB list available; sync known names/pages from historical posts first.')
+                        : L('沒有符合的 @帳號', 'No matching @account')}
+                    </div>
+                  ) : mentionOptions.map(({ entity: e, platform }) => (
+                    <button key={`${platform}-${e.id}`} type="button" onMouseDown={ev => { ev.preventDefault(); insertMention({ entity: e, platform }) }}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-blue-50">
+                      <span className="truncate font-semibold text-gray-700">{platform === 'ig' && e.igUsername ? `@${e.igUsername}` : e.displayName}</span>
+                      <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-500">{platform.toUpperCase()} · {e.type}</span>
+                    </button>
+                  ))}
+                  {mentionQuery.query && mentionPlatforms.includes('ig') && /^[a-z0-9._]{2,30}$/i.test(mentionQuery.query) && !igPeople.some(e => e.igUsername?.toLowerCase() === mentionQuery.query.toLowerCase()) && (
+                    <button type="button" onMouseDown={ev => { ev.preventDefault(); addManualIgMention() }}
+                      className="flex w-full items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-left text-blue-700 hover:bg-blue-50">
+                      <span className="truncate font-semibold">{L(`新增 @${mentionQuery.query} 到 IG 名單`, `Add @${mentionQuery.query} to IG list`)}</span>
+                      <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-600">IG</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {selectedTags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedTags.map(({ id, platform, label, entity }) => (
+                  <button key={`${platform}-${label}-${id}`} type="button" onClick={() => removeSelectedTag(platform, id)}
+                    className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                    {label}: {entity!.displayName} ×
+                  </button>
+                ))}
+              </div>
+            )}
             {thWillSplit && <p className="mt-1 text-xs text-purple-600">🧵 {L(`Threads 超過 500 字，將自動切成 ${thSegs.length} 則（1 主貼 + ${thSegs.length - 1} 則留言）。`, `Over 500 chars — Threads auto-splits into ${thSegs.length} (1 main + ${thSegs.length - 1} replies).`)}</p>}
 
             {targets.length > 0 && (
@@ -268,6 +475,95 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
               <input value={threadsTopic} onChange={e => setThreadsTopic(e.target.value)} placeholder={L('Threads 主題標籤（選填，單一，用於分類/被搜尋）', 'Threads topic tag (optional, single)')}
                 className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800" />
             )}
+
+            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <button type="button" onClick={() => setShowTagging(v => !v)}
+                  className="text-sm font-semibold text-gray-700">
+                  {showTagging ? '▾' : '▸'} {L('進階標記', 'Advanced tagging')}
+                </button>
+                <button type="button" onClick={onSyncTaggableEntities}
+                  className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-blue-600 disabled:opacity-40"
+                  disabled={!onSyncTaggableEntities}>
+                  {L('同步名單', 'Sync list')}
+                </button>
+              </div>
+              {showTagging && (
+                <div className="mt-3 space-y-3">
+                  {taggableEntities.length === 0 && <p className="text-xs text-gray-400">{L('尚無可用標記名單。可先同步歷史貼文，或之後手動建立名單。', 'No taggable entities yet. Sync historical posts first or add manually later.')}</p>}
+                  {targets.includes('fb') && (
+                    <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                      <p className="text-xs font-bold text-gray-700">Facebook</p>
+                      {fbPeople.length === 0 && fbLocations.length === 0 && (
+                        <p className="text-xs text-amber-600">
+                          {L('目前沒有 FB 可用名單。因 Meta 限制，FB 個人只支援插入姓名，不支援 clickable link 或真正 tag。', 'No Facebook list yet. Due to Meta limits, FB people are inserted as names only and do not become clickable links or true tags.')}
+                        </p>
+                      )}
+                      {fbCandidatePeople.length > 0 && (
+                        <p className="text-xs text-gray-500">
+                          {L(`已找到 ${fbCandidatePeople.length} 位留言互動候選人；確認後可加入插入姓名名單。`, `${fbCandidatePeople.length} commenter candidates found; after verification they can be used for name insertion.`)}
+                        </p>
+                      )}
+                      <SelectMultiple label={L('插入個人姓名', 'Insert names')} value={fbPersonTags} options={fbPeople} onChange={setFbPersonTags} />
+                      <p className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-500">
+                        {L('因 Meta Graph API 限制，FB 個人只會把姓名插入文案，不會連到 profile，也不會形成真正 tag；目前只有 FB 地點會送 Meta 標記參數。', 'Due to Meta Graph API limits, Facebook people are inserted as plain names only; they will not link to profiles or become true tags. Currently only FB locations are sent as Meta tag parameters.')}
+                      </p>
+                      {fbLocations.length > 0 && (
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-semibold text-gray-500">{L('地點', 'Location')}</span>
+                          <select value={fbPlace} onChange={e => setFbPlace(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                            <option value="">{L('不標記地點', 'No location')}</option>
+                            {fbLocations.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                  {targets.includes('ig') && (
+                    <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                      <p className="text-xs font-bold text-gray-700">Instagram</p>
+                      <SelectMultiple label={L('@帳號', '@accounts')} value={igMentions} options={igPeople} onChange={setIgMentions} />
+                      <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-2">
+                        <p className="mb-2 text-xs font-semibold text-gray-500">{L('手動加入 IG 帳號', 'Manually add IG account')}</p>
+                        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                          <input value={manualIgUsername} onChange={e => setManualIgUsername(e.target.value)}
+                            placeholder={L('@username', '@username')}
+                            className="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700" />
+                          <button type="button" onClick={() => addManualIgMention(manualIgUsername)}
+                            className="rounded-md border border-blue-200 bg-white px-2 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50">
+                            {L('加入', 'Add')}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-gray-400">
+                          {L('IG 發布會把 @username 放進 caption；Instagram 不需要先取得 FB User ID。', 'Instagram publishing adds @username to the caption; it does not require a Facebook User ID.')}
+                        </p>
+                      </div>
+                      {igLocations.length > 0 && (
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-semibold text-gray-500">{L('地點', 'Location')}</span>
+                          <select value={igLocation} onChange={e => setIgLocation(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                            <option value="">{L('不標記地點', 'No location')}</option>
+                            {igLocations.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                  {targets.includes('th') && thLocations.length > 0 && (
+                    <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                      <p className="text-xs font-bold text-gray-700">Threads</p>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-semibold text-gray-500">{L('地點', 'Location')}</span>
+                        <select value={thLocation} onChange={e => setThLocation(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                          <option value="">{L('不標記地點', 'No location')}</option>
+                          {thLocations.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Story is time-sensitive → opt-in separately, not a media type.
                 Needs media + FB/IG (Threads has no stories). */}

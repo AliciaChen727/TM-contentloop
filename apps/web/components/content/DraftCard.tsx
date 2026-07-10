@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
-import type { ContentDraft, DraftTarget, DraftStatus, GeneratedContent } from '@/lib/content/draftTypes'
+import type { ContentDraft, DraftTarget, DraftStatus, GeneratedContent, TaggingSelection } from '@/lib/content/draftTypes'
 import { validateItems } from '@/lib/publish/validateDraft'
+import type { TaggableEntity } from '@/lib/tagging/types'
 
 const PLAT_LABEL: Record<DraftTarget, string> = { fb: 'Facebook', ig: 'Instagram', th: 'Threads' }
 const PLAT_COLOR: Record<DraftTarget, string> = { fb: '#1877F2', ig: '#C13584', th: '#000000' }
@@ -39,10 +41,10 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform, canPublish = true, unavailableTargets = [] }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform, canPublish = true, unavailableTargets = [], taggableEntities = [] }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
-  onEdit: (id: string, generated: GeneratedContent) => void
+  onEdit: (id: string, generated: GeneratedContent, tagging?: TaggingSelection) => void
   onPublishAll: (id: string) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
@@ -52,6 +54,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   publishingPlatform?: DraftTarget | null   // platform currently being published for THIS draft
   canPublish?: boolean
   unavailableTargets?: DraftTarget[]
+  taggableEntities?: TaggableEntity[]
 }) {
   const { L } = useLang()
   const fmtTime = (ms?: number) => ms ? new Date(ms).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
@@ -66,6 +69,13 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   const [bodies, setBodies] = useState<Record<string, string>>(
     Object.fromEntries(draft.target.map(t => [t, draft.generated.perPlatform[t]?.body ?? ''])),
   )
+  const [fbPersonTags, setFbPersonTags] = useState<string[]>(draft.tagging?.fb?.personTags ?? [])
+  const [fbPlace, setFbPlace] = useState(draft.tagging?.fb?.place ?? '')
+  const [igMentions, setIgMentions] = useState<string[]>(draft.tagging?.ig?.mentions ?? [])
+  const [igLocation, setIgLocation] = useState(draft.tagging?.ig?.location ?? '')
+  const [thLocation, setThLocation] = useState(draft.tagging?.th?.location ?? '')
+  const [mentionQuery, setMentionQuery] = useState<{ target: DraftTarget; start: number; query: string } | null>(null)
+  const editRefs = useRef<Partial<Record<DraftTarget, HTMLTextAreaElement | null>>>({})
 
   const rec = draft.generated.recommendation
   // Option A: once ANY platform is published the draft is LOCKED — published
@@ -82,11 +92,108 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   const locked = anyPublished
   const canEdit = draft.status === 'draft' && !locked
   const unavailable = draft.target.filter(t => unavailableTargets.includes(t) && !draft.publishResults?.[t]?.postId)
+  const notHash = (e: TaggableEntity) => !e.displayName.trim().startsWith('#') && !e.fbUserId?.startsWith('#') && !e.fbPageId?.startsWith('#')
+  const fbPeople = taggableEntities.filter(e => notHash(e) && e.type === 'person' && e.enabledPlatforms.includes('fb') && e.confidence === 'ready')
+  const fbLocations = taggableEntities.filter(e => e.type === 'location' && e.enabledPlatforms.includes('fb') && e.locationId)
+  const igPeople = taggableEntities.filter(e => e.type === 'person' && e.enabledPlatforms.includes('ig') && e.igUsername)
+  const igLocations = taggableEntities.filter(e => e.type === 'location' && e.enabledPlatforms.includes('ig') && e.locationId)
+  const thLocations = taggableEntities.filter(e => e.type === 'location' && e.enabledPlatforms.includes('th') && e.locationId)
+
+  function multiValues(e: ChangeEvent<HTMLSelectElement>): string[] {
+    return Array.from(e.target.selectedOptions).map(o => o.value)
+  }
+
+  function SelectMultiple({ label, value, options, onChange }: {
+    label: string
+    value: string[]
+    options: TaggableEntity[]
+    onChange: (v: string[]) => void
+  }) {
+    if (options.length === 0) return null
+    return (
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-gray-500">{label}</span>
+        <select multiple value={value} onChange={e => onChange(multiValues(e))}
+          className="h-20 w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+          {options.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+        </select>
+      </label>
+    )
+  }
+
+  function uniqueAdd(setter: React.Dispatch<React.SetStateAction<string[]>>, id: string) {
+    setter(cur => cur.includes(id) ? cur : [...cur, id])
+  }
+
+  function updateMention(target: DraftTarget, value: string, caret: number | null) {
+    if (caret === null || (target !== 'fb' && target !== 'ig')) { setMentionQuery(null); return }
+    const before = value.slice(0, caret)
+    const m = before.match(/(^|\s)@([^\s@]{0,30})$/)
+    setMentionQuery(m ? { target, start: caret - m[2].length - 1, query: m[2] } : null)
+  }
+
+  function mentionOptions(target: DraftTarget): TaggableEntity[] {
+    const options = target === 'fb' ? fbPeople : target === 'ig' ? igPeople : []
+    const q = mentionQuery?.target === target ? mentionQuery.query.toLowerCase() : ''
+    return options
+      .filter(e => {
+        if (!q) return true
+        return [e.displayName, e.igUsername, e.fbPageId, e.fbUserId].filter(Boolean).some(v => String(v).toLowerCase().includes(q))
+      })
+      .slice(0, 8)
+  }
+
+  function onBodyChange(target: DraftTarget, value: string, caret: number | null) {
+    setBodies(b => ({ ...b, [target]: value }))
+    updateMention(target, value, caret)
+  }
+
+  function insertMention(target: DraftTarget, entity: TaggableEntity) {
+    const current = bodies[target] ?? ''
+    const el = editRefs.current[target]
+    const caret = el?.selectionStart ?? current.length
+    const start = mentionQuery?.target === target ? mentionQuery.start : caret
+    const label = target === 'ig' && entity.igUsername
+      ? `@${entity.igUsername.replace(/^@/, '')}`
+      : entity.displayName
+    const next = `${current.slice(0, start)}${label} ${current.slice(caret)}`
+    setBodies(b => ({ ...b, [target]: next }))
+    if (target === 'fb') {
+      if (entity.type === 'person') uniqueAdd(setFbPersonTags, entity.id)
+    } else if (target === 'ig') {
+      uniqueAdd(setIgMentions, entity.id)
+    }
+    setMentionQuery(null)
+    window.setTimeout(() => {
+      const ref = editRefs.current[target]
+      ref?.focus()
+      const pos = start + label.length + 1
+      ref?.setSelectionRange(pos, pos)
+    }, 0)
+  }
+
+  function buildTagging(): TaggingSelection {
+    const tagging: TaggingSelection = {}
+    if (draft.target.includes('fb') && (fbPersonTags.length || fbPlace)) {
+      tagging.fb = {
+        ...(fbPersonTags.length ? { personTags: fbPersonTags } : {}),
+        ...(fbPlace ? { place: fbPlace } : {}),
+      }
+    }
+    if (draft.target.includes('ig') && (igMentions.length || igLocation)) {
+      tagging.ig = {
+        ...(igMentions.length ? { mentions: igMentions } : {}),
+        ...(igLocation ? { location: igLocation } : {}),
+      }
+    }
+    if (draft.target.includes('th') && thLocation) tagging.th = { location: thLocation }
+    return tagging
+  }
 
   function saveEdit() {
     const perPlatform = { ...draft.generated.perPlatform }
     for (const t of draft.target) perPlatform[t] = { ...perPlatform[t], body: bodies[t] ?? '' }
-    onEdit(draft.id, { ...draft.generated, perPlatform })
+    onEdit(draft.id, { ...draft.generated, perPlatform }, buildTagging())
     setEditing(false)
   }
 
@@ -132,8 +239,34 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
                 {t === 'th' && <span className={`text-xs font-semibold ${over ? 'text-red-600' : 'text-gray-400'}`}>{bodies[t]?.length ?? 0}/{TH_LIMIT}</span>}
               </div>
               {editing && canEdit ? (
-                <textarea value={bodies[t] ?? ''} onChange={e => setBodies(b => ({ ...b, [t]: e.target.value }))}
-                  className="w-full resize-y rounded-md border border-gray-200 p-2 text-sm text-gray-800" rows={3} />
+                <div className="relative">
+                  <textarea
+                    ref={el => { editRefs.current[t] = el }}
+                    value={bodies[t] ?? ''}
+                    onChange={e => onBodyChange(t, e.target.value, e.target.selectionStart)}
+                    onKeyUp={e => updateMention(t, e.currentTarget.value, e.currentTarget.selectionStart)}
+                    onClick={e => updateMention(t, e.currentTarget.value, e.currentTarget.selectionStart)}
+                    className="w-full resize-y rounded-md border border-gray-200 p-2 text-sm text-gray-800"
+                    rows={3}
+                  />
+                  {mentionQuery?.target === t && (t === 'fb' || t === 'ig') && (
+                    <div className="absolute left-2 top-10 z-20 max-h-48 w-[min(22rem,calc(100%-1rem))] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                      {mentionOptions(t).length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-gray-400">
+                          {t === 'fb'
+                            ? L('沒有符合的 FB 個人名單；FB 只支援插入姓名。', 'No matching Facebook people list; Facebook supports name insertion only.')
+                            : L('沒有符合的 IG @帳號', 'No matching IG @account')}
+                        </div>
+                      ) : mentionOptions(t).map(e => (
+                        <button key={`${t}-${e.id}`} type="button" onMouseDown={ev => { ev.preventDefault(); insertMention(t, e) }}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-blue-50">
+                          <span className="truncate font-semibold text-gray-700">{t === 'ig' && e.igUsername ? `@${e.igUsername}` : e.displayName}</span>
+                          <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-500">{t.toUpperCase()} · {e.type}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <p className="whitespace-pre-wrap text-sm text-gray-800">{draft.generated.perPlatform[t]?.body || <span className="text-gray-400">（無文案）</span>}</p>
               )}
@@ -144,6 +277,59 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
           )
         })}
       </div>
+
+      {editing && canEdit && (
+        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="mb-2 text-sm font-semibold text-gray-700">{L('進階標記', 'Advanced tagging')}</p>
+          <div className="space-y-3">
+            {draft.target.includes('fb') && (
+              <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                <p className="text-xs font-bold text-gray-700">Facebook</p>
+                <SelectMultiple label={L('插入個人姓名', 'Insert names')} value={fbPersonTags} options={fbPeople} onChange={setFbPersonTags} />
+                <p className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-500">
+                  {L('因 Meta Graph API 限制，FB 個人只會把姓名插入文案，不會連到 profile，也不會形成真正 tag；目前只有 FB 地點會送 Meta 標記參數。', 'Due to Meta Graph API limits, Facebook people are inserted as plain names only; they will not link to profiles or become true tags. Currently only FB locations are sent as Meta tag parameters.')}
+                </p>
+                {fbLocations.length > 0 && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-gray-500">{L('地點', 'Location')}</span>
+                    <select value={fbPlace} onChange={e => setFbPlace(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                      <option value="">{L('不標記地點', 'No location')}</option>
+                      {fbLocations.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
+            {draft.target.includes('ig') && (
+              <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                <p className="text-xs font-bold text-gray-700">Instagram</p>
+                <SelectMultiple label={L('@帳號', '@accounts')} value={igMentions} options={igPeople} onChange={setIgMentions} />
+                {igLocations.length > 0 && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-gray-500">{L('地點', 'Location')}</span>
+                    <select value={igLocation} onChange={e => setIgLocation(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                      <option value="">{L('不標記地點', 'No location')}</option>
+                      {igLocations.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
+            {draft.target.includes('th') && thLocations.length > 0 && (
+              <div className="space-y-2 rounded-md border border-gray-200 bg-white p-2">
+                <p className="text-xs font-bold text-gray-700">Threads</p>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-gray-500">{L('地點', 'Location')}</span>
+                  <select value={thLocation} onChange={e => setThLocation(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                    <option value="">{L('不標記地點', 'No location')}</option>
+                    {thLocations.map(e => <option key={e.id} value={e.id}>{e.displayName}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {rec && (
         <p className="mt-2 text-xs text-gray-500">📱 {L('裝置建議', 'Device rec')}：<span className="font-semibold">{rec.format}</span> — {rec.why}</p>

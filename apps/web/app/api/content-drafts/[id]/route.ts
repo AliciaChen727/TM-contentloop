@@ -11,7 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth } from '@/lib/firebase/admin'
 import { can } from '@/lib/auth/access'
 import { getDraft, transitionDraft, editDraftContent, deleteDraft, scheduleDraft, unscheduleDraft, writeAudit } from '@/lib/content/draftStore'
-import { HUMAN_DRIVEN_STATUSES, type DraftStatus, type GeneratedContent } from '@/lib/content/draftTypes'
+import { HUMAN_DRIVEN_STATUSES, type DraftStatus, type GeneratedContent, type TaggingSelection } from '@/lib/content/draftTypes'
+import { validateTaggingSelection } from '@/lib/tagging/server'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -61,12 +62,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const uid = await uidFromReq(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { pageId, status, generated, scheduleAt, unschedule } = (await req.json().catch(() => ({}))) as {
-    pageId?: string; status?: DraftStatus; generated?: GeneratedContent; scheduleAt?: number; unschedule?: boolean
+  const { pageId, status, generated, tagging, scheduleAt, unschedule } = (await req.json().catch(() => ({}))) as {
+    pageId?: string; status?: DraftStatus; generated?: GeneratedContent; tagging?: TaggingSelection; scheduleAt?: number; unschedule?: boolean
   }
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!status && !generated && scheduleAt === undefined && !unschedule) {
+  if (!status && !generated && tagging === undefined && scheduleAt === undefined && !unschedule) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
   }
 
@@ -86,8 +87,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ draft: r.draft })
   }
 
-  if (generated) {
-    const r = await editDraftContent(pageId, params.id, generated)
+  if (generated || tagging !== undefined) {
+    if (tagging !== undefined) {
+      const current = await getDraft(pageId, params.id)
+      if (!current) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
+      const tagCheck = await validateTaggingSelection(pageId, current.target, tagging)
+      if (!tagCheck.ok) return NextResponse.json({ error: tagCheck.error }, { status: 422 })
+    }
+    const r = await editDraftContent(pageId, params.id, generated, tagging)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.code })
     await writeAudit(pageId, params.id, 'edit', uid)
     if (!status) return NextResponse.json({ draft: r.draft })

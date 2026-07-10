@@ -40,12 +40,28 @@ export interface GeneratedContent {
   threadsTopicTag?: string                          // Threads 主題標籤（topic_tag，分類/可被搜尋）
 }
 
+export interface TaggingSelection {
+  fb?: {
+    pageMentions?: string[]
+    personTags?: string[]
+    place?: string
+  }
+  ig?: {
+    mentions?: string[]
+    location?: string
+  }
+  th?: {
+    location?: string
+  }
+}
+
 export interface ContentDraft {
   id: string
   pageId: string
   target: DraftTarget[]                             // 可多選同時發
   mediaType: MediaType
   generated: GeneratedContent
+  tagging?: TaggingSelection
   schedule?: { mode: 'now' | 'scheduled'; at?: number }
   status: DraftStatus
   createdByUid: string
@@ -64,6 +80,7 @@ export interface CreateDraftInput {
   target: DraftTarget[]
   mediaType: MediaType
   generated: GeneratedContent
+  tagging?: TaggingSelection
   schedule?: { mode: 'now' | 'scheduled'; at?: number }
 }
 

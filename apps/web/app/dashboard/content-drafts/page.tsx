@@ -7,8 +7,9 @@ import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { DraftCard } from '@/components/content/DraftCard'
 import { DraftComposer } from '@/components/content/DraftComposer'
-import type { ContentDraft, DraftStatus, DraftTarget, GeneratedContent, CreateDraftInput } from '@/lib/content/draftTypes'
+import type { ContentDraft, DraftStatus, DraftTarget, GeneratedContent, CreateDraftInput, TaggingSelection } from '@/lib/content/draftTypes'
 import type { Capability, Role } from '@/lib/auth/roles'
+import type { TaggableEntity } from '@/lib/tagging/types'
 
 interface PageInfo { pageId: string; pageName: string; role?: Role; igUserId?: string | null; threadsConnected?: boolean; permissions?: { syncAds?: boolean } | null }
 type Tab = 'draft' | 'approved' | 'published' | 'other'
@@ -46,6 +47,8 @@ export default function ContentDraftsPage() {
   const [quiet, setQuiet] = useState<{ start: number; end: number } | null>(null)
   const [error, setError] = useState('')
   const [capabilities, setCapabilities] = useState<Capability[]>([])
+  const [taggableEntities, setTaggableEntities] = useState<TaggableEntity[]>([])
+  const [syncingTags, setSyncingTags] = useState(false)
   const canDraft = capabilities.includes('content.draft')
   const canPublish = capabilities.includes('content.publish')
   const activePage = pages.find(p => p.pageId === selectedPageId)
@@ -91,6 +94,15 @@ export default function ContentDraftsPage() {
     } catch { setError(L('讀取失敗', 'Failed to load')) } finally { setLoading(false) }
   }, [L])
 
+  const loadTaggableEntities = useCallback(async (token: string, pageId: string) => {
+    try {
+      const res = await fetch(`/api/taggable-entities?pageId=${encodeURIComponent(pageId)}`, { headers: { Authorization: `Bearer ${token}` } })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) setTaggableEntities((d.entities ?? []) as TaggableEntity[])
+      else setTaggableEntities([])
+    } catch { setTaggableEntities([]) }
+  }, [])
+
   // Silent refresh — same fetch but WITHOUT setLoading(true), so the UI
   // doesn't flash to "Loading…". Used for background refetches on tab focus.
   const silentLoad = useCallback(async (token: string, pageId: string) => {
@@ -101,7 +113,12 @@ export default function ContentDraftsPage() {
     } catch { /* silent — don't show error on background refresh */ }
   }, [])
 
-  useEffect(() => { if (idToken && selectedPageId) load(idToken, selectedPageId) }, [idToken, selectedPageId, load])
+  useEffect(() => {
+    if (idToken && selectedPageId) {
+      load(idToken, selectedPageId)
+      loadTaggableEntities(idToken, selectedPageId)
+    }
+  }, [idToken, selectedPageId, load, loadTaggableEntities])
 
   useEffect(() => {
     if (!idToken || !selectedPageId) return
@@ -158,7 +175,24 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false) }
   }, [idToken, selectedPageId, load, L])
 
-  const patch = useCallback(async (id: string, payload: { status?: DraftStatus; generated?: GeneratedContent; scheduleAt?: number; unschedule?: boolean }) => {
+  const syncTaggableEntities = useCallback(async () => {
+    if (!idToken || !selectedPageId) return
+    setSyncingTags(true); setError('')
+    try {
+      const res = await fetch('/api/taggable-entities/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: selectedPageId }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) setTaggableEntities((d.entities ?? []) as TaggableEntity[])
+      else setError(d.error ?? L('同步標記名單失敗', 'Failed to sync tagging list'))
+    } catch {
+      setError(L('同步標記名單失敗', 'Failed to sync tagging list'))
+    } finally { setSyncingTags(false) }
+  }, [idToken, selectedPageId, L])
+
+  const patch = useCallback(async (id: string, payload: { status?: DraftStatus; generated?: GeneratedContent; tagging?: TaggingSelection; scheduleAt?: number; unschedule?: boolean }) => {
     setBusy(true)
     try {
       const res = await fetch(`/api/content-drafts/${id}`, {
@@ -221,7 +255,7 @@ export default function ContentDraftsPage() {
     try {
       const res = await fetch('/api/content-drafts', {
         method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: selectedPageId, target: d.target, mediaType: d.mediaType, generated: d.generated }),
+        body: JSON.stringify({ pageId: selectedPageId, target: d.target, mediaType: d.mediaType, generated: d.generated, tagging: d.tagging }),
       })
       if (res.ok) { setTab('draft'); await load(idToken, selectedPageId) }
       else { const e = await res.json(); setError(e.error ?? L('複製失敗', 'Duplicate failed')) }
@@ -261,7 +295,15 @@ export default function ContentDraftsPage() {
             {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
           </select>
         )}
-        {canDraft && <button onClick={() => setComposing(true)} className="ml-auto rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">＋ {L('新草稿', 'New draft')}</button>}
+        {canDraft && (
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={syncTaggableEntities} disabled={syncingTags}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-600 disabled:opacity-50">
+              {syncingTags ? L('同步中…', 'Syncing…') : L('同步標記名單', 'Sync tagging list')}
+            </button>
+            <button onClick={() => setComposing(true)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">＋ {L('新草稿', 'New draft')}</button>
+          </div>
+        )}
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-8">
@@ -310,19 +352,32 @@ export default function ContentDraftsPage() {
               {shown.map(d => (
                 <DraftCard key={d.id} draft={d} busy={busy} publishingPlatform={publishing?.id === d.id ? publishing.platform : null}
                   onTransition={(id, status) => patch(id, { status })}
-                  onEdit={(id, generated) => patch(id, { generated })}
+                  onEdit={(id, generated, tagging) => patch(id, { generated, tagging })}
                   onPublishAll={publishAll} onDuplicate={duplicate} onDelete={remove}
                   onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
                   onUnschedule={(id) => patch(id, { unschedule: true })}
                   canPublish={canPublish}
-                  unavailableTargets={unavailableTargets} />
+                  unavailableTargets={unavailableTargets}
+                  taggableEntities={taggableEntities} />
               ))}
             </div>
           )}
       </div>
 
       {composing && selectedPageId && (
-        <DraftComposer pageId={selectedPageId} pageName={activePage?.pageName} idToken={idToken} busy={busy} onClose={() => setComposing(false)} onCreate={create} threadsAvailable={activePage?.threadsConnected !== false} instagramAvailable={!!activePage?.igUserId} />
+        <DraftComposer
+          pageId={selectedPageId}
+          pageName={activePage?.pageName}
+          idToken={idToken}
+          busy={busy}
+          onClose={() => setComposing(false)}
+          onCreate={create}
+          threadsAvailable={activePage?.threadsConnected !== false}
+          instagramAvailable={!!activePage?.igUserId}
+          taggableEntities={taggableEntities}
+          onSyncTaggableEntities={syncTaggableEntities}
+          onTaggableEntityCreated={entity => setTaggableEntities(cur => cur.some(e => e.id === entity.id) ? cur : [...cur, entity])}
+        />
       )}
     </main>
   )

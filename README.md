@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-10 | AI 草稿標記第一版：新增 `pages/{pageId}/taggableEntities` 已知標記名單、同步歷史貼文與 Graph API 回補 FB posts（`message_tags`/`tags`/`place`/`comments.from`）、草稿 `tagging` 欄位與 server-side 驗證；Composer/編輯頁加「進階標記」與 textarea `@` 搜尋選取，並用 chips 顯示已選項目；Admin/Editor 可從已知名單選 FB 個人插入姓名/地點、IG @/地點、Threads 地點；發布時 FB 地點會轉成 Meta API payload，FB 個人因 Meta 限制只插入純文字姓名，不支援 profile link 或真正 tag；FB 粉專不提供選取或自動插入。Follower/FB 名單限制已文件化：Meta 不提供完整 follower 身分清單，IG username 也不能直接轉成 FB tag，留言者先列候選需確認；`#hashtag` 會排除在個人名單外，IG 可手動新增 `@username`。詳見 `docs/content-draft-tagging-plan.md` | (本次) |
 | 2026-07-09 | RBAC 修正：Dashboard header 改用目前粉專的 page-scoped role/capabilities；Editor 可生成/編輯草稿、管理報名連結與 AI chatbot 設定/測試，但刪除/核准/排程/發布與 chatbot 上架仍限 Admin；未連 IG/Threads 的粉專禁止建立/發布對應平台草稿 | (本次) |
 | 2026-07-09 | 文件/memory：補充 Meta Development mode 下 ContentLoop admin 共用 owner FB/IG page token 的規則、何時仍需 Meta Developer tester、以及 Threads 獨立 OAuth 例外 | (文件/memory) |
 | 2026-07-09 | RBAC 對齊：Viewer 可進入報名連結追蹤並唯讀統計/CSV；品牌素材庫改為 Viewer 可讀、Editor/Admin 可新增刪除；AI Sidekick 對受邀 viewer/editor 改用頁面 owner/env Claude key，不再要求各自輸入 API key | (本次) |

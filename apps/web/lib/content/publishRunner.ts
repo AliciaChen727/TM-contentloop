@@ -11,6 +11,7 @@ import { publishToFacebook, publishFbStory } from '@/lib/meta/publishFb'
 import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
 import { recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
 import type { ContentDraft, DraftTarget } from '@/lib/content/draftTypes'
+import { resolvePublishTagging } from '@/lib/tagging/server'
 
 async function getMetaCreds(pageId: string): Promise<{ accessToken?: string; igUserId?: string }> {
   const owner = await resolvePageOwnerUid(pageId)
@@ -31,6 +32,12 @@ function composeText(pp?: { body?: string; hashtags?: string[] }): string {
   return tags.length ? `${body}\n\n${tags.map(h => `#${h}`).join(' ')}` : body
 }
 
+function appendIgMentions(text: string, usernames?: string[]): string {
+  const tags = (usernames ?? []).map(u => u.replace(/^@/, '')).filter(Boolean)
+  const missing = tags.filter(u => !new RegExp(`(^|\\s)@${u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`, 'i').test(text))
+  return missing.length ? `${text.trim()}\n\n${missing.map(u => `@${u}`).join(' ')}`.trim() : text
+}
+
 export type PublishResult =
   | { ok: true; postId: string; storyId?: string; storyNote?: string }
   | { ok: false; error: string }
@@ -43,6 +50,7 @@ export async function runPublish(
   const g = draft.generated
   const media = { mediaType: draft.mediaType, mediaUrl: g.mediaUrl, mediaUrls: g.mediaUrls }
   try {
+    const tagging = await resolvePublishTagging(pageId, draft.tagging)
     let result: { ok: true; postId: string; permalink?: string } | { ok: false; error: string }
     let storyId: string | undefined
     let storyNote: string | undefined
@@ -58,17 +66,27 @@ export async function runPublish(
         return { ok: false, error: 'Threads 未連接或未授權發布' }
       }
 
-      const r = await publishThreads(tok.accessToken, { text: g.perPlatform.th?.body ?? '', ...media, topicTag: g.threadsTopicTag })
+      const r = await publishThreads(tok.accessToken, { text: g.perPlatform.th?.body ?? '', ...media, topicTag: g.threadsTopicTag, locationId: tagging.th?.locationId })
       result = r.ok ? { ok: true, postId: r.rootId, permalink: r.permalink } : r
     } else {
       const creds = await getMetaCreds(pageId)
       if (!creds.accessToken) return { ok: false, error: '找不到粉專存取權杖，請重新連接粉專授權' }
       const text = composeText(g.perPlatform[platform])
       if (platform === 'fb') {
-        result = await publishToFacebook(pageId, creds.accessToken, { text, ...media })
+        result = await publishToFacebook(pageId, creds.accessToken, {
+          text,
+          ...media,
+          pageMentionIds: tagging.fb?.pageMentionIds,
+          personTagIds: tagging.fb?.personTagIds,
+          placeId: tagging.fb?.placeId,
+        })
       } else {
         if (!creds.igUserId) return { ok: false, error: '此粉專未連動 IG 商業帳號' }
-        result = await publishToInstagram(creds.igUserId, creds.accessToken, { text, ...media })
+        result = await publishToInstagram(creds.igUserId, creds.accessToken, {
+          text: appendIgMentions(text, tagging.ig?.usernames),
+          ...media,
+          locationId: tagging.ig?.locationId,
+        })
       }
       // Story (opt-in) — fully isolated: a Story failure never fails the post.
       if (result.ok && g.alsoStory) {

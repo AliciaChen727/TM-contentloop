@@ -15,6 +15,7 @@ import { isValidTarget, isValidMediaType, type DraftStatus, type CreateDraftInpu
 import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
 import { hasPageThreadsConnection } from '@/lib/threads/client'
 import { hasPageInstagramConnection } from '@/lib/content/publishRunner'
+import { validateTaggingSelection } from '@/lib/tagging/server'
 
 async function uidFromReq(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   const uid = await uidFromReq(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = (await req.json().catch(() => ({}))) as Partial<CreateDraftInput>
-  const { pageId, target, mediaType, generated, schedule } = body
+  const { pageId, target, mediaType, generated, schedule, tagging } = body
   if (!pageId) return NextResponse.json({ error: 'pageId required' }, { status: 400 })
   if (!(await canManage(uid, pageId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -82,8 +83,10 @@ export async function POST(req: NextRequest) {
   if (hasBlockingErrors(violations)) {
     return NextResponse.json({ error: 'validation failed', violations: violations.filter(v => v.severity === 'error') }, { status: 422 })
   }
+  const tagCheck = await validateTaggingSelection(pageId, target, tagging)
+  if (!tagCheck.ok) return NextResponse.json({ error: tagCheck.error }, { status: 422 })
 
-  const draft = await createDraft({ pageId, target, mediaType, generated, schedule }, uid)
-  await writeAudit(pageId, draft.id, 'create', uid, { target, mediaType })
+  const draft = await createDraft({ pageId, target, mediaType, generated, tagging, schedule }, uid)
+  await writeAudit(pageId, draft.id, 'create', uid, { target, mediaType, tagging: !!tagging })
   return NextResponse.json({ draft }, { status: 201 })
 }

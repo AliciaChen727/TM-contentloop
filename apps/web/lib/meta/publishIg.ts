@@ -52,13 +52,15 @@ export async function publishIgStory(
   return { ok: true, postId: pub.id }
 }
 
-export interface IgPublishInput { text: string; mediaType: MediaType; mediaUrl?: string; mediaUrls?: string[] }
+export interface IgPublishInput { text: string; mediaType: MediaType; mediaUrl?: string; mediaUrls?: string[]; locationId?: string }
 
 // IG requires media (no text-only posts). Returns published media id + permalink.
 export async function publishToInstagram(
   igUserId: string, token: string, input: IgPublishInput,
 ): Promise<{ ok: true; postId: string; permalink?: string } | { ok: false; error: string }> {
   const { text, mediaType, mediaUrl } = input
+  const withLocation = (params: Record<string, string>): Record<string, string> =>
+    input.locationId ? { ...params, location_id: input.locationId } : params
   const urls = (input.mediaUrls ?? []).filter(Boolean)
   const isCarousel = mediaType === 'carousel' && urls.length >= 2
 
@@ -71,18 +73,18 @@ export async function publishToInstagram(
     }))
     const bad = children.find(c => c.error || !c.id)
     if (bad) return { ok: false, error: bad.error ?? 'carousel child failed' }
-    const c = await createContainer(igUserId, token, { media_type: 'CAROUSEL', children: children.map(x => x.id!).join(','), caption: text }, true)
+    const c = await createContainer(igUserId, token, withLocation({ media_type: 'CAROUSEL', children: children.map(x => x.id!).join(','), caption: text }), true)
     if (c.error || !c.id) return { ok: false, error: c.error ?? 'carousel container failed' }
     containerId = c.id
   } else if (!mediaUrl) {
     return { ok: false, error: 'Instagram 需要圖片或影片（不支援純文字）' }
   } else if (mediaType === 'video' || mediaType === 'reels' || isVideoUrl(mediaUrl)) {
-    const c = await createContainer(igUserId, token, { media_type: 'REELS', video_url: mediaUrl, caption: text }, true)
+    const c = await createContainer(igUserId, token, withLocation({ media_type: 'REELS', video_url: mediaUrl, caption: text }), true)
     if (c.error || !c.id) return { ok: false, error: c.error ?? 'video container failed' }
     containerId = c.id
   } else {
     // Poll even for images — publishing an unready container can fail.
-    const c = await createContainer(igUserId, token, { image_url: mediaUrl, caption: text }, true)
+    const c = await createContainer(igUserId, token, withLocation({ image_url: mediaUrl, caption: text }), true)
     if (c.error || !c.id) return { ok: false, error: c.error ?? 'image container failed' }
     containerId = c.id
   }

@@ -68,6 +68,7 @@ export interface ThreadsPublishInput {
   mediaUrls?: string[]   // carousel (2–10 items); each item may be image or video
   mediaType: MediaType
   topicTag?: string      // Threads topic_tag (single, no # needed)
+  locationId?: string
 }
 
 const isVideoUrl = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
@@ -75,7 +76,7 @@ const isVideoUrl = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
 // Build a CAROUSEL container: one child container per item → the carousel parent.
 // Returns the carousel creation id (unpublished) or an error.
 async function createCarouselContainer(
-  token: string, urls: string[], text: string, topicTag?: string,
+  token: string, urls: string[], text: string, topicTag?: string, locationId?: string,
 ): Promise<{ id?: string; error?: string }> {
   // Build all child containers IN PARALLEL — video children each poll up to ~60s,
   // so sequential (N × 60s) blows past the serverless limit. Parallel ≈ one poll.
@@ -95,6 +96,7 @@ async function createCarouselContainer(
   return post('me/threads', {
     access_token: token, media_type: 'CAROUSEL', children: children.join(','), text,
     ...(topicTag?.trim() ? { topic_tag: topicTag.trim() } : {}),
+    ...(locationId ? { location_id: locationId } : {}),
   })
 }
 
@@ -137,7 +139,7 @@ export async function publishThreads(
   // Root post: a CAROUSEL (2–10 items) or a single TEXT/IMAGE/VIDEO container.
   let rootId: string
   if (isCarousel) {
-    const carousel = await createCarouselContainer(token, carouselUrls, parts[0], input.topicTag)
+    const carousel = await createCarouselContainer(token, carouselUrls, parts[0], input.topicTag, input.locationId)
     if (carousel.error || !carousel.id) return { ok: false, error: carousel.error ?? 'carousel build failed' }
     // The carousel PARENT also finalizes async (esp. with video children) — publishing
     // before it's FINISHED yields "resource does not exist". Poll it first.
@@ -149,6 +151,7 @@ export async function publishThreads(
   } else {
     const rootParams: Record<string, string> = { media_type: tmt, text: parts[0] }
     if (input.topicTag?.trim()) rootParams.topic_tag = input.topicTag.trim()
+    if (input.locationId) rootParams.location_id = input.locationId
     if (hasMedia && tmt === 'IMAGE') rootParams.image_url = input.mediaUrl!
     if (hasMedia && tmt === 'VIDEO') rootParams.video_url = input.mediaUrl!
     const root = await createAndPublish(token, rootParams, isVideo)

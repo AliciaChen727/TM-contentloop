@@ -81,13 +81,30 @@ export async function publishFbStory(
   return { ok: true, postId: id }
 }
 
-export interface FbPublishInput { text: string; mediaType: MediaType; mediaUrl?: string; mediaUrls?: string[] }
+export interface FbPublishInput {
+  text: string
+  mediaType: MediaType
+  mediaUrl?: string
+  mediaUrls?: string[]
+  /** Deprecated: FB Page text mentions are not reliable in this flow. */
+  pageMentionIds?: string[]
+  /** Deprecated: FB personal profile links/tags are not supported in this flow. */
+  personTagIds?: string[]
+  placeId?: string
+}
+
+function addFbTagParams(params: Record<string, string>, input: FbPublishInput): Record<string, string> {
+  const next = { ...params }
+  if (input.placeId) next.place = input.placeId
+  return next
+}
 
 // Returns the published post id + a permalink.
 export async function publishToFacebook(
   pageId: string, pageToken: string, input: FbPublishInput,
 ): Promise<{ ok: true; postId: string; permalink: string } | { ok: false; error: string }> {
-  const { text, mediaType, mediaUrl } = input
+  const { mediaType, mediaUrl } = input
+  const text = input.text
   const urls = (input.mediaUrls ?? []).filter(Boolean)
   const isCarousel = mediaType === 'carousel' && urls.length >= 2
 
@@ -101,11 +118,11 @@ export async function publishToFacebook(
     const bad = fbids.find(r => r.error || !r.id)
     if (bad) return { ok: false, error: bad.error ?? 'photo upload failed' }
     const attached = fbids.map(r => ({ media_fbid: r.id! }))
-    const r = await post(`${pageId}/feed`, { message: text, attached_media: JSON.stringify(attached), access_token: pageToken })
+    const r = await post(`${pageId}/feed`, addFbTagParams({ message: text, attached_media: JSON.stringify(attached), access_token: pageToken }, input))
     if (r.error || !r.id) return { ok: false, error: r.error ?? 'feed post failed' }
     postId = r.id
   } else if (mediaType === 'text' || !mediaUrl) {
-    const r = await post(`${pageId}/feed`, { message: text, access_token: pageToken })
+    const r = await post(`${pageId}/feed`, addFbTagParams({ message: text, access_token: pageToken }, input))
     if (r.error || !r.id) return { ok: false, error: r.error ?? 'feed post failed' }
     postId = r.id
   } else if (mediaType === 'reels') {
@@ -117,7 +134,7 @@ export async function publishToFacebook(
     if (r.error || !r.id) return { ok: false, error: r.error ?? 'video post failed' }
     postId = r.id
   } else {
-    const r = await post(`${pageId}/photos`, { url: mediaUrl, caption: text, access_token: pageToken })
+    const r = await post(`${pageId}/photos`, addFbTagParams({ url: mediaUrl, caption: text, access_token: pageToken }, input))
     postId = r.postId ?? r.id
     if (r.error || !postId) return { ok: false, error: r.error ?? 'photo post failed' }
   }

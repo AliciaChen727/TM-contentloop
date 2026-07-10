@@ -37,6 +37,7 @@ function fromDoc(pageId: string, id: string, d: FirebaseFirestore.DocumentData):
     target: d.target ?? [],
     mediaType: d.mediaType ?? 'text',
     generated: d.generated ?? { perPlatform: {} },
+    tagging: d.tagging ?? undefined,
     schedule: d.schedule ?? undefined,
     status: (d.status ?? 'draft') as DraftStatus,
     createdByUid: d.createdByUid ?? '',
@@ -58,6 +59,7 @@ export async function createDraft(input: CreateDraftInput, byUid: string): Promi
     target: input.target,
     mediaType: input.mediaType,
     generated: input.generated,
+    tagging: input.tagging,
     schedule: input.schedule,
     status: 'draft',
     createdByUid: byUid,
@@ -70,6 +72,7 @@ export async function createDraft(input: CreateDraftInput, byUid: string): Promi
   // Strip undefined (Firestore rejects it) — schedule may be absent.
   const doc: Record<string, unknown> = { ...draft }
   if (draft.schedule === undefined) delete doc.schedule
+  if (draft.tagging === undefined) delete doc.tagging
   await ref.set(doc)
   return draft
 }
@@ -187,7 +190,7 @@ export async function unscheduleDraft(
 }
 
 export async function editDraftContent(
-  pageId: string, id: string, generated: ContentDraft['generated'],
+  pageId: string, id: string, generated?: ContentDraft['generated'], tagging?: ContentDraft['tagging'],
 ): Promise<{ ok: true; draft: ContentDraft } | { ok: false; error: string; code: number }> {
   const ref = col(pageId).doc(id)
   const dd = await ref.get()
@@ -195,7 +198,9 @@ export async function editDraftContent(
   const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
   // Only editable while still a draft — approved/published content is frozen.
   if (current.status !== 'draft') return { ok: false, error: 'only draft-status content is editable', code: 409 }
-  const patch = { generated, updatedAt: Date.now() }
+  const patch: Record<string, unknown> = { updatedAt: Date.now() }
+  if (generated !== undefined) patch.generated = generated
+  if (tagging !== undefined) patch.tagging = tagging
   await ref.set(patch, { merge: true })
-  return { ok: true, draft: { ...current, ...patch } }
+  return { ok: true, draft: { ...current, ...patch } as ContentDraft }
 }
