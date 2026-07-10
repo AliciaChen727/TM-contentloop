@@ -38,6 +38,7 @@ export interface GeneratedContent {
   recommendation?: DraftRecommendation
   alsoStory?: boolean                               // 同時把媒體發成限動 Story（IG/FB，時效性）
   threadsTopicTag?: string                          // Threads 主題標籤（topic_tag，分類/可被搜尋）
+  fbCoverImageUrl?: string                          // 影片草稿的 FB 封面截圖：dev mode 期間 FB 改發此圖（影片僅 App role 可見），IG/Threads 照發影片
 }
 
 export interface TaggingSelection {

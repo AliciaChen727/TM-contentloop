@@ -6,9 +6,11 @@ import { auth } from '@/lib/firebase/client'
 import { uploadDraftMedia } from '@/lib/firebase/storage'
 import { splitForThreads, THREADS_LIMIT } from '@/lib/publish/threadsSplit'
 import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
-import { FB_STORY_ENABLED } from '@/lib/content/fbStoryFlag'
+import { FB_STORY_ENABLED, FB_VIDEO_ENABLED } from '@/lib/content/fbStoryFlag'
 import { PostPreview } from './PostPreview'
 import { StoryPreview } from './StoryPreview'
+import { AudioComposer } from './AudioComposer'
+import { FbCoverPicker } from './FbCoverPicker'
 import { CaptionSettings } from './CaptionSettings'
 import type { DraftTarget, MediaType, CreateDraftInput } from '@/lib/content/draftTypes'
 import type { TaggableEntity, TaggingSelection } from '@/lib/tagging/types'
@@ -52,6 +54,10 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const [previewPlat, setPreviewPlat] = useState<DraftTarget>('fb')
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [previewStory, setPreviewStory] = useState(false)   // IG Story 預覽 tab
+  // 音樂合成前的原始媒體（供「移除音樂」還原）；null = 尚未加音樂。
+  const [musicOriginal, setMusicOriginal] = useState<{ media: { url: string; kind: 'image' | 'video'; preview: string }; mediaType: MediaType } | null>(null)
+  // FB 封面截圖（dev mode：FB 影片一般人看不到 → FB 改發此圖）。
+  const [fbCover, setFbCover] = useState<string | null>(null)
   const [alsoStory, setAlsoStory] = useState(false)
   const [showTagging, setShowTagging] = useState(false)
   const [fbPersonTags, setFbPersonTags] = useState<string[]>([])
@@ -139,10 +145,26 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   }
   function onMediaTypeChange(m: MediaType) {
     setMediaType(m)
+    setMusicOriginal(null)   // 換媒體型態 = 放棄已合成的音樂版本
+    setFbCover(null)
     if (m === 'text') setMedia([])
     else if (m !== 'carousel') setMedia(cur => cur.slice(0, 1))   // single types keep 1
   }
-  function removeMedia(i: number) { setMedia(cur => cur.filter((_, idx) => idx !== i)) }
+  function removeMedia(i: number) { setMedia(cur => cur.filter((_, idx) => idx !== i)); setMusicOriginal(null); setFbCover(null) }
+
+  function onMusicComposed(videoUrl: string) {
+    setMusicOriginal({ media: media[0], mediaType })
+    setMedia([{ url: videoUrl, kind: 'video', preview: videoUrl }])
+    setFbCover(null)   // 影片換了，舊封面作廢
+    if (mediaType === 'image') setMediaType('video')   // 圖＋音樂已轉成影片
+  }
+  function onMusicRestore() {
+    if (!musicOriginal) return
+    setMedia([musicOriginal.media])
+    setMediaType(musicOriginal.mediaType)
+    setMusicOriginal(null)
+    setFbCover(null)
+  }
   function addPasteUrl() {
     const url = pasteUrl.trim()
     if (!url || media.length >= maxMedia) return
@@ -189,6 +211,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
       ...(isCarousel && mediaUrls.length ? { mediaUrls } : {}),
       ...(canStory && alsoStory ? { alsoStory: true } : {}),
       ...(topic ? { threadsTopicTag: topic } : {}),
+      ...(fbCover && targets.includes('fb') && media[0]?.kind === 'video' ? { fbCoverImageUrl: fbCover } : {}),
     } })
   }
 
@@ -415,6 +438,19 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                     <button onClick={addPasteUrl} className="rounded-lg border border-gray-300 px-3 text-xs font-semibold text-gray-600">{L('加入', 'Add')}</button>
                   </span>
                 </>)}
+                {/* 音樂（Slice 1）：單圖/單影片可加音檔，合成結果直接取代草稿媒體。
+                    輪播不支援（Meta 輪播是多張相片，無單一影片可掛音軌）。 */}
+                {!isCarousel && media.length === 1 && (
+                  <AudioComposer idToken={idToken} pageId={pageId}
+                    media={musicOriginal ? null : { url: media[0].url, kind: media[0].kind }}
+                    hasMusic={!!musicOriginal}
+                    onComposed={onMusicComposed} onRestore={onMusicRestore} />
+                )}
+                {/* FB 封面截圖：dev mode 期間 API 發的 FB 影片一般人看不到 →
+                    截封面圖讓 FB 發圖片、IG/Threads 照發影片。Live 後不顯示。 */}
+                {!FB_VIDEO_ENABLED && targets.includes('fb') && !isCarousel && media.length === 1 && media[0].kind === 'video' && (
+                  <FbCoverPicker pageId={pageId} videoUrl={media[0].url} cover={fbCover} onCover={setFbCover} />
+                )}
               </div>
             )}
 
@@ -662,7 +698,11 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                 <div className={previewDevice === 'mobile' ? 'mx-auto max-w-[340px]' : ''}>
                   {storyPreviewOn
                     ? <StoryPreview mediaItems={media.map(m => ({ url: m.preview, kind: m.kind }))} pageName={pageName} pageAvatar={pageAvatar} />
-                    : <PostPreview platform={activePreview} body={eff(activePreview)} mediaItems={media.map(m => ({ url: m.preview, kind: m.kind }))} hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />}
+                    : <PostPreview platform={activePreview} body={eff(activePreview)}
+                        mediaItems={activePreview === 'fb' && fbCover && media[0]?.kind === 'video'
+                          ? [{ url: fbCover, kind: 'image' as const }]   // FB 將發封面圖（dev mode）
+                          : media.map(m => ({ url: m.preview, kind: m.kind }))}
+                        hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />}
                 </div>
               )}
           </div>

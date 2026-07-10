@@ -17,3 +17,10 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const googleProvider = new GoogleAuthProvider()
 export const facebookProvider = new FacebookAuthProvider()
+
+// 呼叫當下取得有效的 ID token（SDK 會自動用 refresh token 換新，成本極低）。
+// 不要把 token 存進 state 再重複使用 —— ID token 一小時過期，頁面開超過
+// 一小時後所有 API 會開始回 401 Invalid token（2026-07-11 生成文案實際發生）。
+export async function freshIdToken(): Promise<string> {
+  return (await auth.currentUser?.getIdToken()) ?? ''
+}

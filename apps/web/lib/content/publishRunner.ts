@@ -8,7 +8,7 @@ import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { getAnyPageThreadsToken, getThreadsToken } from '@/lib/threads/client'
 import { publishThreads } from '@/lib/threads/publish'
 import { publishToFacebook, publishFbStory } from '@/lib/meta/publishFb'
-import { FB_STORY_ENABLED, FB_STORY_DISABLED_NOTE } from '@/lib/content/fbStoryFlag'
+import { FB_STORY_ENABLED, FB_STORY_DISABLED_NOTE, FB_VIDEO_ENABLED } from '@/lib/content/fbStoryFlag'
 import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
 import { recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
 import type { ContentDraft, DraftTarget } from '@/lib/content/draftTypes'
@@ -79,9 +79,13 @@ export async function runPublish(
       if (!creds.accessToken) return { ok: false, error: '找不到粉專存取權杖，請重新連接粉專授權' }
       const text = composeText(g.perPlatform[platform])
       if (platform === 'fb') {
+        // Dev mode：API 發的 FB 影片（會被轉 Reel）一般人看不到 → 有封面截圖
+        // 就改發圖片貼文；IG/Threads 仍發影片。Live mode（flag 開）恢復發影片。
+        const useFbCover = !FB_VIDEO_ENABLED && !!g.fbCoverImageUrl
+          && (draft.mediaType === 'video' || draft.mediaType === 'reels')
         result = await publishToFacebook(pageId, creds.accessToken, {
           text,
-          ...media,
+          ...(useFbCover ? { mediaType: 'image' as const, mediaUrl: g.fbCoverImageUrl } : media),
           pageMentionIds: tagging.fb?.pageMentionIds,
           personTagIds: tagging.fb?.personTagIds,
           placeId: tagging.fb?.placeId,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { freshIdToken } from '@/lib/firebase/client'
 import type { Industry } from '@/lib/profile-types'
 import {
   COPY_GOALS, TONE_PRESETS, fieldsForIndustry, type CopyGoal,
@@ -34,7 +35,7 @@ export function CaptionSettings({ pageId, idToken, targets, mediaType, seed, onG
   const multiPlatform = targets.filter(t => ['fb', 'ig', 'th'].includes(t)).length > 1
 
   useEffect(() => {
-    fetch(`/api/pages/${pageId}/profile`, { headers: { Authorization: `Bearer ${idToken}` } })
+    freshIdToken().then(t => fetch(`/api/pages/${pageId}/profile`, { headers: { Authorization: `Bearer ${t || idToken}` } }))
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.industry) setIndustry(d.industry as Industry) })
       .catch(() => {})
@@ -49,7 +50,7 @@ export function CaptionSettings({ pageId, idToken, targets, mediaType, seed, onG
     setBusy(true); setErr('')
     try {
       const res = await fetch('/api/ai/caption', {
-        method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pageId, targets, mediaType, seed, lang: language, useHistory,
           perPlatform: perPlatform && multiPlatform,

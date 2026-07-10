@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
-import { auth } from '@/lib/firebase/client'
+import { auth, freshIdToken } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { DraftCard } from '@/components/content/DraftCard'
 import { DraftComposer } from '@/components/content/DraftComposer'
@@ -64,7 +64,7 @@ export default function ContentDraftsPage() {
       const token = await user.getIdToken()
       setIdToken(token)
       try {
-        const res = await fetch('/api/pages', { headers: { Authorization: `Bearer ${token}` } })
+        const res = await fetch('/api/pages', { headers: { Authorization: `Bearer ${(await freshIdToken()) || token}` } })
         const body = res.ok ? await res.json() : { pages: [] }
         const list: PageInfo[] = (body.pages ?? []).filter((p: PageInfo) => p.role !== 'viewer' && (p.role || p.permissions == null || p.permissions.syncAds))
         setPages(list)
@@ -88,7 +88,7 @@ export default function ContentDraftsPage() {
   const load = useCallback(async (token: string, pageId: string) => {
     setLoading(true); setError('')
     try {
-      const res = await fetch(`/api/content-drafts?pageId=${encodeURIComponent(pageId)}&limit=100`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`/api/content-drafts?pageId=${encodeURIComponent(pageId)}&limit=100`, { headers: { Authorization: `Bearer ${(await freshIdToken()) || token}` } })
       const d = await res.json()
       if (!res.ok) { setError(d.error ?? L('讀取失敗', 'Failed to load')); setDrafts([]); return }
       setDrafts((d.drafts ?? []) as ContentDraft[])
@@ -97,7 +97,7 @@ export default function ContentDraftsPage() {
 
   const loadTaggableEntities = useCallback(async (token: string, pageId: string) => {
     try {
-      const res = await fetch(`/api/taggable-entities?pageId=${encodeURIComponent(pageId)}`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`/api/taggable-entities?pageId=${encodeURIComponent(pageId)}`, { headers: { Authorization: `Bearer ${(await freshIdToken()) || token}` } })
       const d = await res.json().catch(() => ({}))
       if (res.ok) setTaggableEntities((d.entities ?? []) as TaggableEntity[])
       else setTaggableEntities([])
@@ -108,7 +108,7 @@ export default function ContentDraftsPage() {
   // doesn't flash to "Loading…". Used for background refetches on tab focus.
   const silentLoad = useCallback(async (token: string, pageId: string) => {
     try {
-      const res = await fetch(`/api/content-drafts?pageId=${encodeURIComponent(pageId)}&limit=100`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`/api/content-drafts?pageId=${encodeURIComponent(pageId)}&limit=100`, { headers: { Authorization: `Bearer ${(await freshIdToken()) || token}` } })
       const d = await res.json()
       if (res.ok) setDrafts((d.drafts ?? []) as ContentDraft[])
     } catch { /* silent — don't show error on background refresh */ }
@@ -124,7 +124,7 @@ export default function ContentDraftsPage() {
   useEffect(() => {
     if (!idToken || !selectedPageId) return
     let alive = true
-    fetch(`/api/user/role?pageId=${selectedPageId}`, { headers: { Authorization: `Bearer ${idToken}` } })
+    freshIdToken().then(t => fetch(`/api/user/role?pageId=${selectedPageId}`, { headers: { Authorization: `Bearer ${t || idToken}` } }))
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!alive) return
@@ -149,7 +149,7 @@ export default function ContentDraftsPage() {
   // Load per-page automation settings (Kill Switch + quiet hours).
   useEffect(() => {
     if (!idToken || !selectedPageId || !canPublish) return
-    fetch(`/api/content-drafts/automation?pageId=${encodeURIComponent(selectedPageId)}`, { headers: { Authorization: `Bearer ${idToken}` } })
+    freshIdToken().then(t => fetch(`/api/content-drafts/automation?pageId=${encodeURIComponent(selectedPageId)}`, { headers: { Authorization: `Bearer ${t || idToken}` } }))
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.settings) { setKillSwitch(!!d.settings.killSwitch); setQuiet(d.settings.quietHours ?? null) } })
       .catch(() => {})
@@ -160,7 +160,7 @@ export default function ContentDraftsPage() {
     setKillSwitch(v => patch.killSwitch ?? v)
     if (patch.quietHours !== undefined) setQuiet(patch.quietHours)
     await fetch('/api/content-drafts/automation', {
-      method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      method: 'POST', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ pageId: selectedPageId, ...patch }),
     }).catch(() => {})
   }, [idToken, selectedPageId, canPublish])
@@ -169,7 +169,7 @@ export default function ContentDraftsPage() {
     setBusy(true)
     try {
       const res = await fetch('/api/content-drafts', {
-        method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: selectedPageId, ...input }),
       })
       if (res.ok) { setComposing(false); await load(idToken, selectedPageId) }
@@ -183,7 +183,7 @@ export default function ContentDraftsPage() {
     try {
       const res = await fetch('/api/taggable-entities/sync', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: selectedPageId }),
       })
       const d = await res.json().catch(() => ({}))
@@ -198,7 +198,7 @@ export default function ContentDraftsPage() {
     setBusy(true)
     try {
       const res = await fetch(`/api/content-drafts/${id}`, {
-        method: 'PATCH', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: selectedPageId, ...payload }),
       })
       if (res.ok) await load(idToken, selectedPageId)
@@ -233,7 +233,7 @@ export default function ContentDraftsPage() {
         setPublishing({ id, platform })
         try {
           const res = await fetch(`/api/content-drafts/${id}/publish`, {
-            method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+            method: 'POST', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ pageId: selectedPageId, platform }),
           })
           const d = await res.json().catch(() => ({}))
@@ -257,7 +257,7 @@ export default function ContentDraftsPage() {
     try {
       const res = await fetch(`/api/content-drafts/${id}/fb-story`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: selectedPageId }),
       })
       const d = await res.json().catch(() => ({}))
@@ -277,7 +277,7 @@ export default function ContentDraftsPage() {
     setBusy(true)
     try {
       const res = await fetch('/api/content-drafts', {
-        method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: selectedPageId, target: d.target, mediaType: d.mediaType, generated: d.generated, tagging: d.tagging }),
       })
       if (res.ok) { setTab('draft'); await load(idToken, selectedPageId) }
@@ -290,7 +290,7 @@ export default function ContentDraftsPage() {
     setBusy(true)
     try {
       const res = await fetch(`/api/content-drafts/${id}?pageId=${encodeURIComponent(selectedPageId)}`, {
-        method: 'DELETE', headers: { Authorization: `Bearer ${idToken}` },
+        method: 'DELETE', headers: { Authorization: `Bearer ${(await freshIdToken()) || idToken}` },
       })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? L('刪除失敗', 'Delete failed')) }
       await load(idToken, selectedPageId)

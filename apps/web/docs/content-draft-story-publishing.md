@@ -39,6 +39,18 @@ ContentLoop 的 AI 草稿可勾選「同時發佈限動 Story」。發布流程�
 
 因此這個限制（或渲染問題）是 FB Story surface 特有，不是 dev mode 對所有內容的全面封鎖；也不需要連 IG Story 一起停用。
 
+**2026-07-11 追加：FB 影片（Reels）在 dev mode 下對一般人完全不可見。** 完整對照實驗（同一支影片、同一粉專）：
+
+| 發布方式 | 一般 viewer 可見 |
+|---|---|
+| ContentLoop API `POST /{pageId}/videos`（FB 自動轉 Reel） | ❌ 不可見，且數小時後被整個移除（API 也查不到） |
+| ContentLoop 同 token 走官方 `POST /{pageId}/video_reels` resumable flow | ❌ 只有發布者/App role 看得到 |
+| Meta Business Suite 手動上傳同一支影片 | ✅ 所有人看得到 |
+
+已排除：音樂版權（Business Suite 傳同檔可見）、檔案格式（IG 同檔正常）、端點差異（兩個端點都不行）。結論＝**dev mode App 透過 API 發的 FB 影片內容一律被壓制**，與 FB Story 黑畫面同族。注意 FB 會把粉專影片一律轉成 Reel（`permalink /reel/…`），且新 Reel 會自動出現在限動列（story tray）——一開始誤判成「FB Story 又被發出」或「IG 轉發」，其實是同一支被壓制的 Reel。
+
+**過渡對策（FB 封面截圖 fallback）**：影片草稿（含圖＋音樂合成的）目標含 FB 時，composer 顯示 `FbCoverPicker`——使用者從影片截一張封面 JPEG（`generated.fbCoverImageUrl`，`/api/content-drafts/media/frame` + ffmpeg），發布時 FB 改發**圖片貼文**（一般人看得到），IG/Threads 照發完整音樂影片。不截圖則 FB 照發影片（僅測試者可見，UI 有警告）。
+
 驗證方式：
 
 1. 選一位目前看得到黑畫面的 Facebook 個人帳號。
@@ -64,11 +76,11 @@ FB 圖片 Story 不再直接使用主貼原圖，也不再走 `photo_stories`。
 
 IG Story 仍沿用原流程；Threads 沒有 Story。
 
-## FB Story 發布開關（Development mode 期間停用）
+## FB Story／FB 影片開關（Development mode 期間限制）
 
-在 Meta App 完成 App Review 切到 Live mode 之前，FB Story 發布已整體停用（2026-07-10），避免發出只有 App role 看得到的黑畫面 Story。IG Story 不受影響（已實測一般 viewer 看得到）。
+在 Meta App 完成 App Review 切到 Live mode 之前：FB Story 發布整體停用（2026-07-10）、FB 影片改走封面圖 fallback（2026-07-11）。IG／Threads 不受影響。
 
-- **開關**：`NEXT_PUBLIC_FB_STORY_ENABLED`（單一事實來源 `lib/content/fbStoryFlag.ts`）。未設定＝停用；go live 後設為 `1` 即重開，不需改程式。
+- **統一開關**：`NEXT_PUBLIC_META_APP_LIVE`（單一事實來源 `lib/content/fbStoryFlag.ts`）。未設定＝dev mode 限制生效；**go live 後設為 `1`，FB Story 與 FB 完整影片（含音樂）一次恢復**，封面圖欄位備而不用，舊草稿與排程草稿都不用改。舊變數 `NEXT_PUBLIC_FB_STORY_ENABLED` 仍可單獨重開 Story（向後相容）。
 - **UI**（`DraftComposer`）：只選 FB 時限動勾選 disabled；FB+IG 時仍可勾但只發 IG，並顯示琥珀色說明「FB 限動暫停發布」。
 - **Server**（`publishRunner.runPublish`）：FB 平台遇到 `alsoStory=true` 一律跳過 Story 並回 `storyNote` 說明——涵蓋排程中、開關生效前建立的舊草稿，主貼照常發布。
 - **補發 FB 限動**：UI 按鈕在停用期間**整顆隱藏**（跟 flag 連動，重開後自動回來且僅 owner 可見）；API repair path 保留 owner-only 可直接呼叫——留給 Tester 驗證與上線後補發歷史 Story 使用。
