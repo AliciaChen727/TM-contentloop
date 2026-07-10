@@ -47,6 +47,7 @@ export default function ContentDraftsPage() {
   const [quiet, setQuiet] = useState<{ start: number; end: number } | null>(null)
   const [error, setError] = useState('')
   const [capabilities, setCapabilities] = useState<Capability[]>([])
+  const [role, setRole] = useState<Role | null>(null)
   const [taggableEntities, setTaggableEntities] = useState<TaggableEntity[]>([])
   const [syncingTags, setSyncingTags] = useState(false)
   const canDraft = capabilities.includes('content.draft')
@@ -128,8 +129,9 @@ export default function ContentDraftsPage() {
       .then(d => {
         if (!alive) return
         setCapabilities(Array.isArray(d?.capabilities) ? d.capabilities : [])
+        setRole(d?.role ?? null)
       })
-      .catch(() => { if (alive) setCapabilities([]) })
+      .catch(() => { if (alive) { setCapabilities([]); setRole(null) } })
     return () => { alive = false }
   }, [idToken, selectedPageId])
 
@@ -247,6 +249,27 @@ export default function ContentDraftsPage() {
     } finally { setBusy(false); setPublishing(null) }
   }, [drafts, activePage?.igUserId, activePage?.threadsConnected, idToken, selectedPageId, load, L])
 
+  const republishFbStory = useCallback(async (id: string) => {
+    const draft = drafts.find(d => d.id === id)
+    if (!draft?.publishResults?.fb?.postId) return
+    if (!window.confirm(L('只補發 Facebook 限動？這不會重新發布 FB 主貼，也不會更動 IG / Threads。', 'Repost only the Facebook Story? This will not republish the FB feed post or change IG / Threads.'))) return
+    setBusy(true); setError(''); setPublishing({ id, platform: 'fb' })
+    try {
+      const res = await fetch(`/api/content-drafts/${id}/fb-story`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: selectedPageId }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) setError(d.error ?? L('補發 FB 限動失敗', 'Failed to repost FB Story'))
+      await load(idToken, selectedPageId)
+    } catch {
+      setError(L('補發 FB 限動失敗', 'Failed to repost FB Story'))
+    } finally {
+      setBusy(false); setPublishing(null)
+    }
+  }, [drafts, idToken, selectedPageId, load, L])
+
   // Duplicate a (usually published) draft into a fresh editable draft.
   const duplicate = useCallback(async (id: string) => {
     const d = drafts.find(x => x.id === id)
@@ -353,10 +376,11 @@ export default function ContentDraftsPage() {
                 <DraftCard key={d.id} draft={d} busy={busy} publishingPlatform={publishing?.id === d.id ? publishing.platform : null}
                   onTransition={(id, status) => patch(id, { status })}
                   onEdit={(id, generated, tagging) => patch(id, { generated, tagging })}
-                  onPublishAll={publishAll} onDuplicate={duplicate} onDelete={remove}
+                  onPublishAll={publishAll} onRepublishFbStory={republishFbStory} onDuplicate={duplicate} onDelete={remove}
                   onSchedule={(id, atMs) => patch(id, { scheduleAt: atMs })}
                   onUnschedule={(id) => patch(id, { unschedule: true })}
                   canPublish={canPublish}
+                  isOwner={role === 'owner'}
                   unavailableTargets={unavailableTargets}
                   taggableEntities={taggableEntities} />
               ))}

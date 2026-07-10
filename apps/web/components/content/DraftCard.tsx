@@ -5,6 +5,7 @@ import type { ChangeEvent } from 'react'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import type { ContentDraft, DraftTarget, DraftStatus, GeneratedContent, TaggingSelection } from '@/lib/content/draftTypes'
 import { validateItems } from '@/lib/publish/validateDraft'
+import { FB_STORY_ENABLED } from '@/lib/content/fbStoryFlag'
 import type { TaggableEntity } from '@/lib/tagging/types'
 
 const PLAT_LABEL: Record<DraftTarget, string> = { fb: 'Facebook', ig: 'Instagram', th: 'Threads' }
@@ -41,11 +42,12 @@ function StatusPill({ status }: { status: DraftStatus }) {
   return <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: s.bg, color: s.fg }}>{s.text}</span>
 }
 
-export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform, canPublish = true, unavailableTargets = [], taggableEntities = [] }: {
+export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onRepublishFbStory, onDuplicate, onDelete, onSchedule, onUnschedule, busy, publishingPlatform, canPublish = true, isOwner = false, unavailableTargets = [], taggableEntities = [] }: {
   draft: ContentDraft
   onTransition: (id: string, status: DraftStatus) => void
   onEdit: (id: string, generated: GeneratedContent, tagging?: TaggingSelection) => void
   onPublishAll: (id: string) => void
+  onRepublishFbStory?: (id: string) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
   onSchedule: (id: string, atMs: number) => void
@@ -53,6 +55,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   busy: boolean
   publishingPlatform?: DraftTarget | null   // platform currently being published for THIS draft
   canPublish?: boolean
+  isOwner?: boolean   // FB Story repair 僅 owner（dev mode 黑畫面驗證/上線後補發用）
   unavailableTargets?: DraftTarget[]
   taggableEntities?: TaggableEntity[]
 }) {
@@ -91,6 +94,14 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
   const retryableFailure = draft.status === 'failed' || (!!publishError && !anyPublished)
   const locked = anyPublished
   const canEdit = draft.status === 'draft' && !locked
+  // FB Story 停用期間（dev mode 黑畫面）整顆隱藏；重開 flag 後自動回來。
+  const canRepairFbStory = FB_STORY_ENABLED
+    && canPublish
+    && isOwner
+    && !editing
+    && !!draft.generated.alsoStory
+    && !!draft.publishResults?.fb?.postId
+    && !!(draft.generated.mediaUrl || draft.generated.mediaUrls?.[0])
   const unavailable = draft.target.filter(t => unavailableTargets.includes(t) && !draft.publishResults?.[t]?.postId)
   const notHash = (e: TaggableEntity) => !e.displayName.trim().startsWith('#') && !e.fbUserId?.startsWith('#') && !e.fbPageId?.startsWith('#')
   const fbPeople = taggableEntities.filter(e => notHash(e) && e.type === 'person' && e.enabledPlatforms.includes('fb') && e.confidence === 'ready')
@@ -385,6 +396,16 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onDuplica
           {draft.target.filter(t => draft.publishResults?.[t]?.postId).map(t => (
             <a key={t} href={draft.publishResults![t]!.permalink} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">✓ {PLAT_LABEL[t]} {L('已發布', 'published')}{draft.publishResults![t]!.storyId ? L('＋限動', '+Story') : ''} ↗</a>
           ))}
+          {canRepairFbStory && onRepublishFbStory && (
+            <button
+              disabled={busy}
+              onClick={() => onRepublishFbStory(draft.id)}
+              title={L('只補發 Facebook 限動，不重發主貼或其他平台。', 'Only repost the Facebook Story; main posts and other platforms are unchanged.')}
+              className="rounded-lg border border-pink-200 bg-pink-50 px-3 py-1.5 text-xs font-semibold text-pink-700 disabled:opacity-50"
+            >
+              📸 {L('補發 FB 限動', 'Repost FB Story')}
+            </button>
+          )}
           {/* One-click publish to all remaining platforms at once. */}
           {(() => {
             const remaining = draft.target.filter(t => !draft.publishResults?.[t]?.postId && !unavailableTargets.includes(t))

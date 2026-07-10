@@ -6,7 +6,9 @@ import { auth } from '@/lib/firebase/client'
 import { uploadDraftMedia } from '@/lib/firebase/storage'
 import { splitForThreads, THREADS_LIMIT } from '@/lib/publish/threadsSplit'
 import { validateItems, hasBlockingErrors } from '@/lib/publish/validateDraft'
+import { FB_STORY_ENABLED } from '@/lib/content/fbStoryFlag'
 import { PostPreview } from './PostPreview'
+import { StoryPreview } from './StoryPreview'
 import { CaptionSettings } from './CaptionSettings'
 import type { DraftTarget, MediaType, CreateDraftInput } from '@/lib/content/draftTypes'
 import type { TaggableEntity, TaggingSelection } from '@/lib/tagging/types'
@@ -49,6 +51,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const [err, setErr] = useState('')
   const [previewPlat, setPreviewPlat] = useState<DraftTarget>('fb')
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [previewStory, setPreviewStory] = useState(false)   // IG Story 預覽 tab
   const [alsoStory, setAlsoStory] = useState(false)
   const [showTagging, setShowTagging] = useState(false)
   const [fbPersonTags, setFbPersonTags] = useState<string[]>([])
@@ -79,6 +82,9 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   const thSegs = targets.includes('th') ? splitForThreads(withTags(eff('th'))) : []
   const thWillSplit = thSegs.length > 1
   const needsMedia = mediaType !== 'text'
+  // IG Story 預覽 tab：勾了限動且目標含 IG 才出現（FB 限動停用中，見 fbStoryFlag）。
+  const showStoryTab = alsoStory && needsMedia && targets.includes('ig')
+  const storyPreviewOn = previewStory && showStoryTab
   const isCarousel = mediaType === 'carousel'
   const maxMedia = isCarousel ? 10 : 1
   const uploading = uploadQueue !== null
@@ -175,7 +181,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
         ? { body: withTags(eff('th')) }
         : { body: eff(t), ...(tags.length ? { hashtags: tags } : {}), ...(needsMedia && firstMediaUrl ? { mediaUrl: firstMediaUrl } : {}) }
     }
-    const canStory = needsMedia && (targets.includes('fb') || targets.includes('ig'))
+    const canStory = needsMedia && ((FB_STORY_ENABLED && targets.includes('fb')) || targets.includes('ig'))
     const topic = targets.includes('th') && threadsTopic.trim() ? threadsTopic.trim().replace(/^#/, '') : ''
     const tagging = buildTagging()
     onCreate({ target: targets, mediaType, ...(tagging ? { tagging } : {}), generated: {
@@ -566,22 +572,40 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
             </div>
 
             {/* Story is time-sensitive → opt-in separately, not a media type.
-                Needs media + FB/IG (Threads has no stories). */}
-            {needsMedia && (targets.includes('fb') || targets.includes('ig')) && (
-              <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3">
-                <input type="checkbox" checked={alsoStory} onChange={e => setAlsoStory(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
-                <span>
-                  <span className="block text-sm font-semibold text-gray-700">📸 {L('同時發佈限動 Story', 'Also post as Story')}</span>
-                  <span className="block text-xs text-gray-400">{L('把這則媒體同時發成 24 小時限動（時效性內容）。', 'Also publish this media as a 24h Story.')}</span>
-                  {alsoStory && (
-                    <span className="mt-1 block text-xs font-semibold text-pink-600">
-                      {L('限動將發佈到：', 'Story will post to: ')}
-                      {targets.filter(t => t === 'fb' || t === 'ig').map(t => t === 'ig' ? 'Instagram' : 'Facebook').join(L('、', ', '))}
+                Needs media + FB/IG (Threads has no stories). FB Story is gated
+                off while the Meta app is in dev mode (viewers see black). */}
+            {needsMedia && (targets.includes('fb') || targets.includes('ig')) && (() => {
+              const storyTargets = targets.filter(t => (t === 'fb' && FB_STORY_ENABLED) || t === 'ig')
+              const storyDisabled = storyTargets.length === 0
+              return (
+                <label className={`mt-3 flex items-start gap-2 rounded-lg border border-gray-200 p-3 ${storyDisabled ? 'opacity-70' : 'cursor-pointer'}`}>
+                  <input type="checkbox" checked={alsoStory && !storyDisabled} disabled={storyDisabled} onChange={e => setAlsoStory(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600" />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-700">📸 {L('同時發佈限動 Story', 'Also post as Story')}</span>
+                    <span className="block text-xs text-gray-400">
+                      {L(
+                        '把這則媒體同時發成 24 小時限動；FB 圖片限動會自動轉成 9:16 短影片，輪播只取第一張。',
+                        'Also publish this media as a 24h Story; Facebook image Stories are converted to a 9:16 short video, and carousel uses the first item only.',
+                      )}
                     </span>
-                  )}
-                </span>
-              </label>
-            )}
+                    {!FB_STORY_ENABLED && targets.includes('fb') && (
+                      <span className="mt-1 block text-xs font-semibold text-amber-600">
+                        {L(
+                          'FB 限動暫停發布：Meta App 尚在開發模式，一般觀眾會看到黑畫面，待審核上線後開放。',
+                          'FB Stories are paused: the Meta app is still in Development mode, so regular viewers see a black screen. They will reopen after App Review.',
+                        )}
+                      </span>
+                    )}
+                    {alsoStory && !storyDisabled && (
+                      <span className="mt-1 block text-xs font-semibold text-pink-600">
+                        {L('限動將發佈到：', 'Story will post to: ')}
+                        {storyTargets.map(t => t === 'ig' ? 'Instagram' : 'Facebook').join(L('、', ', '))}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )
+            })()}
             {/* Hide the obvious "empty caption" nag; show the informative ones. */}
             {(() => {
               const shown = violations.filter(v => v.code !== 'empty')
@@ -606,11 +630,17 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                 {targets.length > 0 && (
                   <div className="flex gap-1">
                     {targets.map(t => (
-                      <button key={t} onClick={() => setPreviewPlat(t)}
-                        className={`rounded-md px-2 py-1 text-xs font-semibold ${activePreview === t ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500'}`}>
+                      <button key={t} onClick={() => { setPreviewPlat(t); setPreviewStory(false) }}
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${activePreview === t && !storyPreviewOn ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500'}`}>
                         {PLAT_TAB[t]}
                       </button>
                     ))}
+                    {showStoryTab && (
+                      <button onClick={() => setPreviewStory(true)}
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${storyPreviewOn ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500'}`}>
+                        📸 {L('限動', 'Story')}
+                      </button>
+                    )}
                   </div>
                 )}
                 {/* Device preview toggle (desktop / mobile), like Meta's composer. */}
@@ -630,7 +660,9 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
               ? <div className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">{L('請先選發布平台', 'Select a platform')}</div>
               : (
                 <div className={previewDevice === 'mobile' ? 'mx-auto max-w-[340px]' : ''}>
-                  <PostPreview platform={activePreview} body={eff(activePreview)} mediaItems={media.map(m => ({ url: m.preview, kind: m.kind }))} hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />
+                  {storyPreviewOn
+                    ? <StoryPreview mediaItems={media.map(m => ({ url: m.preview, kind: m.kind }))} pageName={pageName} pageAvatar={pageAvatar} />
+                    : <PostPreview platform={activePreview} body={eff(activePreview)} mediaItems={media.map(m => ({ url: m.preview, kind: m.kind }))} hashtags={tags} showMedia={!!showMedia} pageName={pageName} pageAvatar={pageAvatar} />}
                 </div>
               )}
           </div>

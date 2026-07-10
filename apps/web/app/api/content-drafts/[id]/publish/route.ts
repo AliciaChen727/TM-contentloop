@@ -43,7 +43,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (platform === 'ig' && !(await hasPageInstagramConnection(pageId))) {
     return NextResponse.json({ error: '請先建立 IG 並連結 Meta 帳號，才能發布 IG' }, { status: 409 })
   }
-  if (draft.status !== 'approved' && draft.status !== 'published' && draft.status !== 'scheduled') {
+  // 'failed' is allowed so one platform's failure doesn't block the rest of a
+  // multi-platform publish (the per-platform idempotency check below still
+  // prevents double-posting anything that already went out). 2026-07-10 實例:
+  // FB 假失敗把草稿標成 failed，IG 因此被 409 擋下完全沒發。
+  if (draft.status !== 'approved' && draft.status !== 'published' && draft.status !== 'scheduled' && draft.status !== 'failed') {
     return NextResponse.json({ error: '需先核准草稿才能發布' }, { status: 409 })
   }
   // Idempotent: an already-published platform is a no-op (never double-post).

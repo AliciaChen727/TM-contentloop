@@ -4,9 +4,19 @@
 // FB feed does not support mixed photo+video carousels — carousel = photos.
 
 import type { MediaType } from '@/lib/content/draftTypes'
+import sharp from 'sharp'
+import { createHash, randomUUID } from 'crypto'
+import { getStorage } from 'firebase-admin/storage'
+import ffmpegPath from 'ffmpeg-static'
+import { spawn } from 'child_process'
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
 
 const BASE = 'https://graph.facebook.com/v21.0'
 const isVideoUrl = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
+const FB_STORY_WIDTH = 1080
+const FB_STORY_HEIGHT = 1920
 
 async function post(path: string, params: Record<string, string>): Promise<{ id?: string; postId?: string; error?: string }> {
   const res = await fetch(`${BASE}/${path}`, {
@@ -26,6 +36,118 @@ async function rawPost(url: string, params: Record<string, string>, headers?: Re
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const j: any = await res.json().catch(() => ({}))
   return { ok: res.ok && !j.error, j }
+}
+
+async function uploadPublicJpeg(path: string, data: Buffer): Promise<string> {
+  return uploadPublicFile(path, data, 'image/jpeg')
+}
+
+async function uploadPublicMp4(path: string, data: Buffer): Promise<string> {
+  return uploadPublicFile(path, data, 'video/mp4')
+}
+
+async function uploadPublicFile(path: string, data: Buffer, contentType: string): Promise<string> {
+  const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'contentloop-dev.firebasestorage.app'
+  const token = randomUUID()
+  await getStorage().bucket(bucketName).file(path).save(data, {
+    contentType,
+    metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+  })
+  return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
+}
+
+async function prepareFbStoryImageBuffer(mediaUrl: string): Promise<Buffer> {
+  const res = await fetch(mediaUrl)
+  if (!res.ok) throw new Error(`FB Story image fetch failed (${res.status})`)
+  const input = Buffer.from(await res.arrayBuffer())
+  const meta = await sharp(input).metadata()
+  if (!meta.width || !meta.height) throw new Error('FB Story image metadata unavailable')
+
+  // FB photo_stories accepts many images, but non-9:16 source photos have shown
+  // black screens for public viewers. Publish a normalized 9:16 JPEG instead of
+  // handing Page Stories the feed/carousel source directly.
+  const background = await sharp(input)
+    .resize(FB_STORY_WIDTH, FB_STORY_HEIGHT, { fit: 'cover' })
+    .blur(36)
+    .modulate({ brightness: 0.72, saturation: 0.9 })
+    .jpeg({ quality: 88, mozjpeg: true })
+    .toBuffer()
+
+  const foreground = await sharp(input)
+    .rotate()
+    .resize(FB_STORY_WIDTH, FB_STORY_HEIGHT, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      withoutEnlargement: false,
+    })
+    .png()
+    .toBuffer()
+
+  return sharp(background)
+    .composite([{ input: foreground, gravity: 'center' }])
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toBuffer()
+}
+
+async function imageBufferToStoryVideo(input: Buffer): Promise<Buffer> {
+  const ffmpegBin = ffmpegPath
+  if (!ffmpegBin) throw new Error('ffmpeg-static binary unavailable')
+  const dir = await mkdtemp(join(tmpdir(), 'contentloop-fb-story-'))
+  const inputPath = join(dir, 'story.jpg')
+  const outputPath = join(dir, 'story.mp4')
+  try {
+    await writeFile(inputPath, input)
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(ffmpegBin, [
+        '-y',
+        '-loop', '1',
+        '-framerate', '30',
+        '-i', inputPath,
+        '-f', 'lavfi',
+        '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+        '-t', '6',
+        '-r', '30',
+        '-shortest',
+        '-c:v', 'libx264',
+        '-profile:v', 'baseline',
+        '-level', '4.0',
+        '-preset', 'veryfast',
+        '-crf', '20',
+        '-pix_fmt', 'yuv420p',
+        '-colorspace', 'bt709',
+        '-color_primaries', 'bt709',
+        '-color_trc', 'bt709',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-ac', '2',
+        '-movflags', '+faststart',
+        outputPath,
+      ])
+      let stderr = ''
+      proc.stderr.on('data', (chunk: Buffer) => { stderr += String(chunk).slice(-4000) })
+      proc.on('error', reject)
+      proc.on('close', (code: number | null) => {
+        if (code === 0) resolve()
+        else reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-1000)}`))
+      })
+    })
+    return readFile(outputPath)
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+async function prepareFbStoryVideo(pageId: string, mediaUrl: string): Promise<{ storyImageUrl: string; storyVideoUrl: string }> {
+  const image = await prepareFbStoryImageBuffer(mediaUrl)
+  const hash = createHash('sha1').update(mediaUrl).digest('hex').slice(0, 12)
+  const ts = Date.now()
+  const [storyImageUrl, video] = await Promise.all([
+    uploadPublicJpeg(`generated/fb-stories/${pageId}/${ts}-${hash}.jpg`, image),
+    imageBufferToStoryVideo(image),
+  ])
+  const storyVideoUrl = await uploadPublicMp4(`generated/fb-stories/${pageId}/${ts}-${hash}.mp4`, video)
+  return { storyImageUrl, storyVideoUrl }
 }
 
 // Wait until a resumable video finished uploading/processing before finish.
@@ -68,17 +190,22 @@ export async function publishFbReel(
   return publishFbVideoResumable(pageId, pageToken, videoUrl, 'video_reels', { video_state: 'PUBLISHED', description })
 }
 
-// FB Page Story (24h). Video → resumable video_stories; image → 2-step photo_stories.
+// FB Page Story (24h). Video → resumable video_stories. Images are converted
+// into short 9:16 MP4 videos and also use video_stories; this avoids a Meta
+// photo_stories rendering issue where public viewers can see a black screen.
 export async function publishFbStory(
   pageId: string, pageToken: string, mediaUrl: string,
-): Promise<{ ok: true; postId: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; postId: string; storyImageUrl?: string; storyVideoUrl?: string } | { ok: false; error: string }> {
   if (isVideoUrl(mediaUrl)) return publishFbVideoResumable(pageId, pageToken, mediaUrl, 'video_stories', {})
-  const up = await post(`${pageId}/photos`, { url: mediaUrl, published: 'false', access_token: pageToken })
-  if (up.error || !up.id) return { ok: false, error: up.error ?? 'story photo upload failed' }
-  const r = await post(`${pageId}/photo_stories`, { photo_id: up.id, access_token: pageToken })
-  const id = r.postId ?? r.id
-  if (r.error || !id) return { ok: false, error: r.error ?? 'photo_stories failed' }
-  return { ok: true, postId: id }
+  let storyMedia: { storyImageUrl: string; storyVideoUrl: string }
+  try {
+    storyMedia = await prepareFbStoryVideo(pageId, mediaUrl)
+  } catch (e) {
+    return { ok: false, error: `FB 限動圖片轉影片失敗：${e instanceof Error ? e.message : 'unknown error'}` }
+  }
+  const r = await publishFbVideoResumable(pageId, pageToken, storyMedia.storyVideoUrl, 'video_stories', {})
+  if (!r.ok) return r
+  return { ok: true, postId: r.postId, ...storyMedia }
 }
 
 export interface FbPublishInput {
@@ -97,6 +224,28 @@ function addFbTagParams(params: Record<string, string>, input: FbPublishInput): 
   const next = { ...params }
   if (input.placeId) next.place = input.placeId
   return next
+}
+
+// Meta can return a transient error (e.g. code 1 "Please reduce the amount of
+// data…") even though the write actually succeeded — 2026-07-10 實測：photo post
+// 已出現在粉專，但 API 回錯誤，導致記成失敗且拿不到 postId（重試會重複發文）。
+// 所以宣告失敗前先回讀粉專最近貼文：文案開頭吻合 + 幾分鐘內 → 視為已發出。
+async function findJustPublishedPost(pageId: string, pageToken: string, text: string): Promise<string | null> {
+  const head = text.trim().slice(0, 40)
+  if (!head) return null
+  // 逾時型錯誤的貼文可能晚幾秒才出現在 feed → 等 3s / 8s 各查一次。
+  for (const delay of [3000, 8000]) {
+    await sleep(delay)
+    try {
+      const r = await fetch(`${BASE}/${pageId}/feed?fields=id,created_time,message&limit=5&access_token=${encodeURIComponent(pageToken)}`)
+      const d = await r.json().catch(() => ({})) as { data?: { id?: string; created_time?: string; message?: string }[] }
+      for (const p of d.data ?? []) {
+        const ageMs = Date.now() - new Date(p.created_time ?? 0).getTime()
+        if (p.id && ageMs >= 0 && ageMs < 10 * 60_000 && (p.message ?? '').trim().startsWith(head)) return p.id
+      }
+    } catch { /* verification is best-effort */ }
+  }
+  return null
 }
 
 // Returns the published post id + a permalink.
@@ -119,12 +268,18 @@ export async function publishToFacebook(
     if (bad) return { ok: false, error: bad.error ?? 'photo upload failed' }
     const attached = fbids.map(r => ({ media_fbid: r.id! }))
     const r = await post(`${pageId}/feed`, addFbTagParams({ message: text, attached_media: JSON.stringify(attached), access_token: pageToken }, input))
-    if (r.error || !r.id) return { ok: false, error: r.error ?? 'feed post failed' }
     postId = r.id
+    if (r.error || !postId) {
+      postId = (await findJustPublishedPost(pageId, pageToken, text)) ?? undefined
+      if (!postId) return { ok: false, error: r.error ?? 'feed post failed' }
+    }
   } else if (mediaType === 'text' || !mediaUrl) {
     const r = await post(`${pageId}/feed`, addFbTagParams({ message: text, access_token: pageToken }, input))
-    if (r.error || !r.id) return { ok: false, error: r.error ?? 'feed post failed' }
     postId = r.id
+    if (r.error || !postId) {
+      postId = (await findJustPublishedPost(pageId, pageToken, text)) ?? undefined
+      if (!postId) return { ok: false, error: r.error ?? 'feed post failed' }
+    }
   } else if (mediaType === 'reels') {
     const r = await publishFbReel(pageId, pageToken, mediaUrl, text)
     if (!r.ok) return r
@@ -136,7 +291,10 @@ export async function publishToFacebook(
   } else {
     const r = await post(`${pageId}/photos`, addFbTagParams({ url: mediaUrl, caption: text, access_token: pageToken }, input))
     postId = r.postId ?? r.id
-    if (r.error || !postId) return { ok: false, error: r.error ?? 'photo post failed' }
+    if (r.error || !postId) {
+      postId = (await findJustPublishedPost(pageId, pageToken, text)) ?? undefined
+      if (!postId) return { ok: false, error: r.error ?? 'photo post failed' }
+    }
   }
 
   return { ok: true, postId: postId!, permalink: `https://www.facebook.com/${postId}` }

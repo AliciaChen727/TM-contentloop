@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['@google/genai'],
+    serverComponentsExternalPackages: ['@google/genai', 'ffmpeg-static'],
   },
   // Firebase Auth same-origin fix: serve the auth handler from our own domain so
   // signInWithPopup no longer does a cross-domain (firebaseapp.com) handshake —

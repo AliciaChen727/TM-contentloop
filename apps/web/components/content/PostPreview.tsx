@@ -12,7 +12,7 @@ const PLAT_META: Record<DraftTarget, { fallbackName: string; accent: string }> =
 }
 const IG_CAPTION_LIMIT = 125   // IG folds the caption after ~125 chars with "…more"
 
-type MediaItem = { url: string; kind: 'image' | 'video' }
+export type MediaItem = { url: string; kind: 'image' | 'video' }
 
 function One({ url, kind, crop }: { url: string; kind: 'image' | 'video'; crop?: '4/5' | '1/1' }) {
   // Cap height so a wide preview panel doesn't blow media up. Cropped (IG) keeps

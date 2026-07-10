@@ -8,6 +8,7 @@ import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { getAnyPageThreadsToken, getThreadsToken } from '@/lib/threads/client'
 import { publishThreads } from '@/lib/threads/publish'
 import { publishToFacebook, publishFbStory } from '@/lib/meta/publishFb'
+import { FB_STORY_ENABLED, FB_STORY_DISABLED_NOTE } from '@/lib/content/fbStoryFlag'
 import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
 import { recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
 import type { ContentDraft, DraftTarget } from '@/lib/content/draftTypes'
@@ -42,6 +43,10 @@ export type PublishResult =
   | { ok: true; postId: string; storyId?: string; storyNote?: string }
   | { ok: false; error: string }
 
+export type StoryRepairResult =
+  | { ok: true; postId: string; storyId: string; storyImageUrl?: string; storyVideoUrl?: string }
+  | { ok: false; error: string }
+
 // Publish `draft` to one platform (+ Story if opted in). Records the outcome +
 // audit. `byUid` is the actor (a uid, or 'cron'). Never throws — returns error.
 export async function runPublish(
@@ -54,6 +59,7 @@ export async function runPublish(
     let result: { ok: true; postId: string; permalink?: string } | { ok: false; error: string }
     let storyId: string | undefined
     let storyNote: string | undefined
+    const storyAudit: Record<string, unknown> = {}
 
     if (platform === 'th') {
       // For cron publishes (byUid='cron'), try the caller first (no-op for 'cron'),
@@ -89,14 +95,26 @@ export async function runPublish(
         })
       }
       // Story (opt-in) — fully isolated: a Story failure never fails the post.
-      if (result.ok && g.alsoStory) {
+      // FB Story gated off until the Meta app is Live (dev-mode viewers see a
+      // black screen); covers scheduled/legacy drafts that pre-date the gate.
+      if (result.ok && g.alsoStory && platform === 'fb' && !FB_STORY_ENABLED) {
+        storyNote = FB_STORY_DISABLED_NOTE
+      } else if (result.ok && g.alsoStory) {
         const storyMedia = g.mediaUrl ?? g.mediaUrls?.[0]
         if (storyMedia) {
           try {
             const s = platform === 'fb'
               ? await publishFbStory(pageId, creds.accessToken, storyMedia)
               : await publishIgStory(creds.igUserId!, creds.accessToken, storyMedia)
-            if (s.ok) storyId = s.postId
+            if (s.ok) {
+              storyId = s.postId
+              if (platform === 'fb' && 'storyImageUrl' in s && s.storyImageUrl) {
+                storyAudit.storyImageUrl = s.storyImageUrl
+              }
+              if (platform === 'fb' && 'storyVideoUrl' in s && s.storyVideoUrl) {
+                storyAudit.storyVideoUrl = s.storyVideoUrl
+              }
+            }
             else storyNote = `限動發布失敗：${s.error}`
           } catch (e) { storyNote = `限動發布失敗：${e instanceof Error ? e.message : 'error'}` }
         }
@@ -115,12 +133,54 @@ export async function runPublish(
     await recordPublishOutcome(pageId, draft.id, platform, outcome as Parameters<typeof recordPublishOutcome>[3])
     const auditData: Record<string, unknown> = { postId: result.postId }
     if (storyId !== undefined) auditData.storyId = storyId
+    Object.assign(auditData, storyAudit)
     await writeAudit(pageId, draft.id, `publish:${platform}`, byUid, auditData)
     return { ok: true, postId: result.postId, storyId, storyNote }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unexpected publish error'
     await recordPublishOutcome(pageId, draft.id, platform, { error: msg }).catch(() => {})
     await writeAudit(pageId, draft.id, `publish:${platform}:error`, byUid, { error: msg }).catch(() => {})
+    return { ok: false, error: msg }
+  }
+}
+
+// Repair path for an already-published FB draft whose Story needs to be
+// re-created. This intentionally does not call publishToFacebook, so the main
+// FB/IG/Threads posts are left untouched.
+export async function republishFbStoryOnly(
+  pageId: string, draft: ContentDraft, byUid: string,
+): Promise<StoryRepairResult> {
+  const fbResult = draft.publishResults?.fb
+  if (!fbResult?.postId) return { ok: false, error: 'FB 主貼尚未發布，不能只補發限動' }
+  const storyMedia = draft.generated.mediaUrl ?? draft.generated.mediaUrls?.[0]
+  if (!storyMedia) return { ok: false, error: '此草稿沒有可補發限動的媒體' }
+
+  try {
+    const creds = await getMetaCreds(pageId)
+    if (!creds.accessToken) return { ok: false, error: '找不到粉專存取權杖，請重新連接粉專授權' }
+
+    const story = await publishFbStory(pageId, creds.accessToken, storyMedia)
+    if (!story.ok) {
+      await writeAudit(pageId, draft.id, 'publish:fb-story:repair:failed', byUid, { error: story.error, fbPostId: fbResult.postId })
+      return { ok: false, error: story.error }
+    }
+
+    const outcome: Parameters<typeof recordPublishOutcome>[3] = {
+      postId: fbResult.postId,
+      storyId: story.postId,
+    }
+    if (fbResult.permalink) outcome.permalink = fbResult.permalink
+    await recordPublishOutcome(pageId, draft.id, 'fb', outcome)
+
+    const auditData: Record<string, unknown> = { fbPostId: fbResult.postId, storyId: story.postId }
+    if (story.storyImageUrl) auditData.storyImageUrl = story.storyImageUrl
+    if (story.storyVideoUrl) auditData.storyVideoUrl = story.storyVideoUrl
+    await writeAudit(pageId, draft.id, 'publish:fb-story:repair', byUid, auditData)
+
+    return { ok: true, postId: fbResult.postId, storyId: story.postId, storyImageUrl: story.storyImageUrl, storyVideoUrl: story.storyVideoUrl }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unexpected story repair error'
+    await writeAudit(pageId, draft.id, 'publish:fb-story:repair:error', byUid, { error: msg, fbPostId: fbResult.postId }).catch(() => {})
     return { ok: false, error: msg }
   }
 }
