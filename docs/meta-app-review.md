@@ -159,17 +159,44 @@ Threads 時會找該 page 下已連過 Threads 的 admin token；至少要有一
 （文字/圖片/影片/限動）只有 App role 看得到 —— ContentLoop 的 FB 發布在 go live 前
 等於「預覽模式」。發文功能真正上線的唯一路徑就是把發文權限送過 App Review。
 
-**送審 App**：`832755139382467`（同第一輪）。**先確認第一輪審查狀態**——若還在
-審查中，通常要等結果出來才能提交新一批權限；若已通過，直接發起新的權限申請。
+**送審 App**：`832755139382467`（同第一輪）。
 
-### 權限清單（2 個）
+### 7.0 目前狀態（2026-07-12 console 實查）＋下一步
+
+**現況**：第一輪唯讀權限批次「等待應用程式審查」中（`pages_read_engagement`、
+`pages_read_user_content` 等顯示該狀態）。**發文權限尚未送審**——`pages_manage_posts`
+狀態是「可供測試」（Standard Access，開發模式測試用），其「新增到應用程式審查」
+按鈕被鎖住，console 提示「此要求已在等待審查中…或先等目前的這項要求完成」＝
+**第一輪批次審完之前，不能把新權限加進審查**。`instagram_content_publish` 同理。
+
+**第一輪等待期間的待辦（現在就能做）**：
+
+1. [ ] **準備 reviewer 測試帳號**：能登入 ContentLoop、是測試粉專 admin、粉專連動
+       IG 商業帳號、能走完「建草稿→核准→發布」。
+2. [ ] **預錄第二輪 screencast**：腳本見 7.2；英文介面、拍到授權畫面與發布後 FB/IG
+       實際出現貼文。
+3. [ ] 等待期間**不要密集測試發文**（dev mode 貼文外部本來就看不到，密集發文+刪除
+       只會製造混亂）；正式對外 FB 貼文一律用 Meta Business Suite 手動發。
+
+**第一輪結果出來後的行動**：
+
+- **通過** → 立刻發起第二輪：把 `pages_manage_posts` + `instagram_content_publish`
+  「新增到應用程式審查」（此時按鈕解鎖），附 7.1 用途說明 + 7.2 screencast。
+- **退件** → 看退件理由對照第 6 節自檢清單補件（最常見：screencast 沒拍到實際資料、
+  測試帳號走不完流程、`business_management` 缺企業驗證）→ 修正後重送，第二輪順延。
+
+**第二輪通過後**：App 切 Live mode → Vercel 設 `NEXT_PUBLIC_META_APP_LIVE=1` 重新部署
+→ **用非 App role 帳號**驗證 FB 貼文/影片/限動外部可見（驗收鐵則：App Admin 自己看到
+不算數）→ 預覽模式警告與封面截圖 fallback 自動退場。
+
+### 7.1 權限清單（2 個）
 
 | # | 權限 | ContentLoop 用途（送審說明用） | Screencast 要拍到 |
 |---|------|------|------|
 | 1 | `pages_manage_posts` | 使用者在 ContentLoop 撰寫/核准 AI 草稿後，發布貼文到自己管理的 FB 粉專（含排程發布） | 草稿核准 → 一鍵發布 → FB 粉專出現該貼文 |
 | 2 | `instagram_content_publish` | 同一草稿同步發布到連動的 IG 商業帳號（貼文/Reels/限動） | 同一次發布 → IG 帳號出現貼文與限動 |
 
-### Screencast 腳本（發文流程一鏡到底）
+### 7.2 Screencast 腳本（發文流程一鏡到底）
 
 1. 登入 ContentLoop（用 reviewer 可登入的測試帳號）→ 進「內容草稿」
 2. 建立草稿：選 FB+IG → 上傳圖片 → 輸入文案（或按 AI 生成）
@@ -178,7 +205,7 @@ Threads 時會找該 page 下已連過 Threads 的 admin token；至少要有一
 5. 開 IG：帳號出現同一篇貼文（→ `instagram_content_publish`）
 6. （加分）回 ContentLoop 展示排程發布設定畫面，說明 cron 也走同一 API
 
-### 注意事項
+### 7.3 注意事項
 
 - **HITL 是加分項**：送審說明要強調「所有發布都需使用者手動核准後觸發，絕不自動亂發」
   ——Meta 對發文類權限最在意濫用，我們的草稿→核准→發布流程正好是防濫用設計。
