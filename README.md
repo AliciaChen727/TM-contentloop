@@ -158,6 +158,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-12 | App Review 第二輪規劃（發文權限）：`docs/meta-app-review.md` 新增第 7 節——在 app `832755139382467` 送 `pages_manage_posts` + `instagram_content_publish`（附 content-drafts 發布流程 screencast 腳本、HITL 防濫用說明、測試帳號注意事項）；Threads 免送（獨立 OAuth）。App 對照更正入 memory：832=實際串接/送審 App、858=僅 FB 登入（Firebase Auth provider） | 4d16ed4 |
 | 2026-07-12 | 草稿編輯器：FB 為目標且未 go live 時顯示「FB 發布僅預覽模式」警告橫幅；隱藏 FB 封面截圖 UI（前提已證偽，留著誤導使用者），欄位/發布邏輯保留供 go live 後續用 | 68b7aa8 |
 | 2026-07-12 | 排查定案（文件/memory 更正）：**dev mode 期間 API 發到 FB 的所有內容（文字/圖片/影片/封面截圖）僅 App role 可見**，外部帳號逐篇驗證確認；先前「文字/圖片豁免」為誤判（僅用 App Admin 帳號驗收），「暫時性降觸及」假設作廢。IG/Threads 不受影響、Business Suite 手動發正常。產品結論：go live 前 ContentLoop 的 FB 發布視為預覽模式，正式 FB 貼文用 Business Suite 手動發；App Review 優先級提高；驗收鐵則=可見度一律用非 App role 帳號驗證。詳見 `apps/web/docs/content-draft-story-publishing.md` | (文件) |
 | 2026-07-11 | 草稿背景音樂 Slice 2（粉專曲庫）＋ ffmpeg 正式環境修復：(1) **粉專曲庫** — 新增 `pages/{pageId}/musicTracks`（page-scoped），管理端在廣告儀表板「品牌素材庫」頁新增 `MusicLibraryCard`（上傳/命名/試聽/刪除），草稿編輯器 `AudioComposer` 新增「從曲庫選擇」（唯讀選用），一次上傳、重複使用。查證 Meta／Canva 官方音樂曲庫皆不開放第三方 API（Canva Assets API 僅支援 image/video），故仍走音訊燒入媒體檔的合成路線。(2) **ffmpeg 正式環境 ENOENT 修復** — Vercel file tracing 追不到 `ffmpeg-static` 二進位檔（monorepo workspaces 又裝在 repo 根目錄），導致音樂合成／FB 封面截圖／發布／限動補發／排程 cron 五條 route 在正式環境全部失敗；修法於 `next.config.mjs` 用 `outputFileTracingIncludes` 逐一宣告打包。詳見 `apps/web/docs/content-draft-music.md` | 3cda738 |
