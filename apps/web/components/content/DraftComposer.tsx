@@ -10,7 +10,6 @@ import { FB_STORY_ENABLED, FB_VIDEO_ENABLED } from '@/lib/content/fbStoryFlag'
 import { PostPreview } from './PostPreview'
 import { StoryPreview } from './StoryPreview'
 import { AudioComposer } from './AudioComposer'
-import { FbCoverPicker } from './FbCoverPicker'
 import { CaptionSettings } from './CaptionSettings'
 import type { DraftTarget, MediaType, CreateDraftInput } from '@/lib/content/draftTypes'
 import type { TaggableEntity, TaggingSelection } from '@/lib/tagging/types'
@@ -392,6 +391,16 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                 </a>
               </p>
             )}
+            {/* dev mode 定案（2026-07-12，外部帳號逐篇驗證）：API 發到 FB 的所有內容
+                （文字/圖片/影片）只有 App role 看得到，一律不是「大眾可見」的正式發布。 */}
+            {!FB_VIDEO_ENABLED && targets.includes('fb') && (
+              <p className="-mt-2 mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                {L(
+                  '⚠ Meta App 審核通過前，發到 FB 的內容僅 App 測試者可見（預覽模式），一般觀眾看不到。正式對外的 FB 貼文請先用 Meta Business Suite 手動發布。',
+                  '⚠ Until Meta App Review passes, content published to FB is visible to app testers only (preview mode) — regular viewers cannot see it. For a real public FB post, publish manually via Meta Business Suite for now.',
+                )}
+              </p>
+            )}
 
             <label className="mb-1 block text-sm font-semibold text-gray-700">{L('媒體型態', 'Media type')}</label>
             <select value={mediaType} onChange={e => onMediaTypeChange(e.target.value as MediaType)}
@@ -446,11 +455,11 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
                     hasMusic={!!musicOriginal}
                     onComposed={onMusicComposed} onRestore={onMusicRestore} />
                 )}
-                {/* FB 封面截圖：dev mode 期間 API 發的 FB 影片一般人看不到 →
-                    截封面圖讓 FB 發圖片、IG/Threads 照發影片。Live 後不顯示。 */}
-                {!FB_VIDEO_ENABLED && targets.includes('fb') && !isCarousel && media.length === 1 && media[0].kind === 'video' && (
-                  <FbCoverPicker pageId={pageId} videoUrl={media[0].url} cover={fbCover} onCover={setFbCover} />
-                )}
+                {/* FB 封面截圖 UI 停用（2026-07-12）：原本假設 dev mode 只擋 FB 影片、
+                    圖片可見，讓 FB 改發封面圖來補救；但外部帳號逐篇驗證後發現 dev
+                    mode 期間 FB 圖片一樣只有 App role 看得到，封面截圖對可見度沒有
+                    幫助。保留元件與 fbCoverImageUrl 欄位/發布邏輯，只隱藏這裡的 UI，
+                    避免誤導使用者以為截圖能讓大眾看到。見 docs/content-draft-story-publishing.md。 */}
               </div>
             )}
 
