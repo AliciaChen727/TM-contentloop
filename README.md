@@ -24,6 +24,7 @@
 | 1 | Meta OAuth + 定時抓 FB/IG 成效 + 儀表板 | ✅ 已上線 | — |
 | 2 | 站內通知中心（紅點）+ 排程 email 告警 | ✅ 已上線 | `docs/phase-2-notification-center.md` |
 | 3 | AI Sidekick 優化 loop + 自我學習（評審 / 品質分 / feedback memory，Anthropic 原生 agent） | 🔄 進行中 | `docs/phase-3-sidekick-self-learning.md` |
+| 3B | Agent 工具化（自查 Firestore、跨粉專比較、自我檢查、Bug 回報→HITL→修復） | 📋 規劃定稿 | `docs/phase-3b-agent-tooling.md` |
 | 4 | 半自動廣告更新（Meta Marketing API 寫入，需 App Review） | 📋 規劃中 | `docs/phase-4-ad-automation.md` |
 
 延伸整合：**Threads**（內容成效，獨立 OAuth）、**GA4**（電商客戶用 Google Ads 的補充數據）— 皆 PoC／骨架階段，見 `docs/`。
@@ -158,6 +159,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-11 | Phase 3B 規劃定稿 + **Slice 15**：`docs/phase-3b-agent-tooling.md`（tool-use agent 升級、跨粉專總覽、bug 回報→雙重 HITL→修復，Slices 15–19）；新增 `lib/ai/tools/pageDataTools.ts`（Firestore 工具層＋pageId 白名單隔離）；診斷卡片 agent 升級 sonnet tool loop（`runDiagnosisAgentWithTools`，查趨勢＋核數字，fallback haiku 單發）；裝 `@anthropic-ai/claude-agent-sdk` | (本 commit) |
 | 2026-07-12 | App Review 第二輪規劃（發文權限）：`docs/meta-app-review.md` 新增第 7 節——在 app `832755139382467` 送 `pages_manage_posts` + `instagram_content_publish`（附 content-drafts 發布流程 screencast 腳本、HITL 防濫用說明、測試帳號注意事項）；Threads 免送（獨立 OAuth）。App 對照更正入 memory：832=實際串接/送審 App、858=僅 FB 登入（Firebase Auth provider） | 4d16ed4 |
 | 2026-07-12 | 草稿編輯器：FB 為目標且未 go live 時顯示「FB 發布僅預覽模式」警告橫幅；隱藏 FB 封面截圖 UI（前提已證偽，留著誤導使用者），欄位/發布邏輯保留供 go live 後續用 | 68b7aa8 |
 | 2026-07-12 | 排查定案（文件/memory 更正）：**dev mode 期間 API 發到 FB 的所有內容（文字/圖片/影片/封面截圖）僅 App role 可見**，外部帳號逐篇驗證確認；先前「文字/圖片豁免」為誤判（僅用 App Admin 帳號驗收），「暫時性降觸及」假設作廢。IG/Threads 不受影響、Business Suite 手動發正常。產品結論：go live 前 ContentLoop 的 FB 發布視為預覽模式，正式 FB 貼文用 Business Suite 手動發；App Review 優先級提高；驗收鐵則=可見度一律用非 App role 帳號驗證。詳見 `apps/web/docs/content-draft-story-publishing.md` | (文件) |

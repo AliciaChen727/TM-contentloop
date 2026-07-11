@@ -14,6 +14,7 @@ import { getFewShotExamples, formatFewShot } from '@/lib/sidekick/feedbackRetrie
 import { evaluateOutput } from '@/lib/sidekick/evaluator'
 import { writeFeedback } from '@/lib/sidekick/feedbackStore'
 import { diagnosisCardKey } from '@/lib/ads/diagnosisCardKey'
+import { buildPageDataTools } from '@/lib/ai/tools/pageDataTools'
 
 export interface EvalKeys { geminiKey?: string | null; anthropicKey?: string | null }
 
@@ -61,6 +62,51 @@ async function evaluateAndStore(
   return finalCards
 }
 
+// Tool-use addendum appended to the system prompt when the agent runs with the
+// Firestore tool loop (Slice 15). Keeps the base prompt (cacheable) unchanged.
+function toolAddendum(en = false): string {
+  if (en) {
+    return [
+      '',
+      'You have tools: get_ad_insights (account trend + creatives), get_posts (recent FB/IG organic posts), get_feedback_memory (past adopted/high-scored advice for this page).',
+      'Before writing the cards: use tools to check the trend behind each finding and to VERIFY every number you cite — cite only numbers present in the input or tool results, never computed or invented.',
+      'You may think briefly between tool calls, but your FINAL reply must be the strict JSON array only — no other text.',
+    ].join('\n')
+  }
+  return [
+    '',
+    '你有工具可用：get_ad_insights（帳戶趨勢＋素材）、get_posts（近期 FB/IG 自然貼文）、get_feedback_memory（此粉專過去被採用/高分的建議）。',
+    '寫卡片前：先用工具查看各發現背後的趨勢，並「核對」你引用的每個數字——只能引用輸入或工具回傳中存在的數字，絕不可自行推算或編造。',
+    '工具呼叫之間可以簡短思考，但「最終回覆」只能是嚴格的 JSON 陣列，不得有任何其他文字。',
+  ].join('\n')
+}
+
+// Tool-loop version (Slice 15): sonnet + Firestore tools, whitelist = this page
+// only. Multi-step: inspect trend → verify numbers → emit cards. Falls back to
+// null on any failure (caller then tries the single-shot haiku path).
+export async function runDiagnosisAgentWithTools(
+  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false,
+): Promise<AiDiagCard[] | null> {
+  try {
+    const anthropic = new Anthropic({ apiKey })
+    const tools = buildPageDataTools({ allowedPageIds: [pageId] })
+    const final = await anthropic.beta.messages.toolRunner({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2400,
+      max_iterations: 6,
+      system: [{ type: 'text', text: agentSystemPrompt(en) + '\n' + toolAddendum(en), cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: `pageId: ${pageId}\n${agentUserMessage(items, summary, fewShot)}` }],
+      tools,
+    })
+    // Final answer = the LAST text block (earlier blocks may be inter-tool notes).
+    const texts = final.content.filter((b) => b.type === 'text')
+    const raw = texts.length ? texts[texts.length - 1].text : ''
+    return parseAndEnforceCards(raw, items)
+  } catch {
+    return null
+  }
+}
+
 // One Haiku call → enforced cards (or null on failure / bad output).
 export async function runDiagnosisAgent(
   items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false,
@@ -98,7 +144,11 @@ export async function getOrGenerateDiagnosisCards(
   const fewShot = formatFewShot(
     await getFewShotExamples(pageId, { source: 'diagnosis', goal: typeof summary.goal === 'string' ? summary.goal : null }),
   )
-  let cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en)
+  // Primary: sonnet tool-loop (trend inspection + number verification, Slice 15);
+  // fallback: the original single-shot haiku call. Retry-on-low-score inside
+  // evaluateAndStore stays single-shot to bound latency/cost.
+  let cards = await runDiagnosisAgentWithTools(pageId, items, summary, apiKey, fewShot, en)
+  if (!cards) cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en)
   if (!cards) return null
 
   // Quality evaluator (Slice 11): score → retry-once-if-low → store evalScore.

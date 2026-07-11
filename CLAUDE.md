@@ -116,8 +116,8 @@ users/{uid}
 - UI：`components/NotificationBell.tsx` 掛在 dashboard header。BFF 架構（全走 Admin SDK + verifyIdToken）→ **不需要 firestore.rules**。
 
 ## 🤖 使用的 Model
-- `claude-sonnet-4-6`：AI Sidekick 對話、洞察報告（`api/insights/report`）
-- `claude-haiku-4-5`：素材生成（`api/ai/creative`）
+- `claude-sonnet-4-6`：AI Sidekick 對話、洞察報告（`api/insights/report`）、診斷卡片 agent（Slice 15 起走 tool loop，`runDiagnosisAgentWithTools`；失敗 fallback haiku 單次呼叫）
+- `claude-haiku-4-5`：素材生成（`api/ai/creative`）、診斷卡片 fallback
 - 診斷引擎本身 = 規則，**無 model**
 - 告警 email：nodemailer + Gmail（寄件者 `courage727@gmail.com`，App Password）
 
