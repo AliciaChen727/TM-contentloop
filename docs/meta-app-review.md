@@ -7,6 +7,13 @@
 > ✅ **狀態：已於 2026-07-05 送出 App Review（app `832755139382467`）**，等 Meta 審查結果。
 > 審查期間你仍是 app admin，開發模式下功能照常。若被退件，多半是測試帳號流程或
 > Business Verification（`business_management`）——依退件說明補件後重送。
+>
+> 🆕 **第二輪（發文權限）已規劃，見第 7 節**——2026-07-12 外部帳號驗證確認 dev mode
+> 期間 API 發到 FB 的所有內容僅 App role 可見，發文功能上線的唯一解法就是這輪審查。
+>
+> 📌 **App 對照（2026-07-12 確認）**：`832755139382467` = 實際串接 App（連粉專/token/
+> 發文/送審都是它）；`858795133298101` = 只用在 FB 登入（Firebase Auth 的 Facebook
+> 登入提供者），與 Graph API 功能和送審無關。
 
 ---
 
@@ -146,8 +153,50 @@ Threads 時會找該 page 下已連過 Threads 的 admin token；至少要有一
 
 ---
 
+## 7. 第二輪送審：發文權限（2026-07-12 規劃）
+
+**動機**：外部帳號逐篇驗證確認，Development mode 期間 API 發到 FB 的**所有內容**
+（文字/圖片/影片/限動）只有 App role 看得到 —— ContentLoop 的 FB 發布在 go live 前
+等於「預覽模式」。發文功能真正上線的唯一路徑就是把發文權限送過 App Review。
+
+**送審 App**：`832755139382467`（同第一輪）。**先確認第一輪審查狀態**——若還在
+審查中，通常要等結果出來才能提交新一批權限；若已通過，直接發起新的權限申請。
+
+### 權限清單（2 個）
+
+| # | 權限 | ContentLoop 用途（送審說明用） | Screencast 要拍到 |
+|---|------|------|------|
+| 1 | `pages_manage_posts` | 使用者在 ContentLoop 撰寫/核准 AI 草稿後，發布貼文到自己管理的 FB 粉專（含排程發布） | 草稿核准 → 一鍵發布 → FB 粉專出現該貼文 |
+| 2 | `instagram_content_publish` | 同一草稿同步發布到連動的 IG 商業帳號（貼文/Reels/限動） | 同一次發布 → IG 帳號出現貼文與限動 |
+
+### Screencast 腳本（發文流程一鏡到底）
+
+1. 登入 ContentLoop（用 reviewer 可登入的測試帳號）→ 進「內容草稿」
+2. 建立草稿：選 FB+IG → 上傳圖片 → 輸入文案（或按 AI 生成）
+3. 按「核准」→ 按「一鍵發布」→ 畫面顯示逐平台發布中/成功
+4. 開新分頁：FB 粉專顯示剛發布的貼文（→ `pages_manage_posts`）
+5. 開 IG：帳號出現同一篇貼文（→ `instagram_content_publish`）
+6. （加分）回 ContentLoop 展示排程發布設定畫面，說明 cron 也走同一 API
+
+### 注意事項
+
+- **HITL 是加分項**：送審說明要強調「所有發布都需使用者手動核准後觸發，絕不自動亂發」
+  ——Meta 對發文類權限最在意濫用，我們的草稿→核准→發布流程正好是防濫用設計。
+- **測試帳號要能走完發布**：reviewer 的測試帳號需要是某個測試粉專的 admin 且該粉專
+  連動了 IG 商業帳號，否則 reviewer 無法重現流程（最容易卡關的點）。
+- **IG 一起送、Threads 不用**：`instagram_content_publish` 與 `pages_manage_posts`
+  同 App 同輪送；Threads 走獨立 OAuth（`graph.threads.net`），不在 Meta App Review
+  範圍，且 `threads_content_publish` 開發模式即可用、目前運作正常。
+- 通過後：Vercel 設 `NEXT_PUBLIC_META_APP_LIVE=1` → FB Story／FB 完整影片（含音樂）
+  一次恢復、預覽模式警告與封面截圖 fallback 自動退場（見 `lib/content/fbStoryFlag.ts`）。
+- 第 4 節「移除 pages_manage_posts」是第一輪的歷史決策；S4b 之後 `SCOPES` 已加回
+  `pages_manage_posts` + `instagram_content_publish`（開發模式供 admin 授權用），
+  與本輪送審一致。
+
+---
+
 ## 附錄：本輪不送審的項目
 
-- `pages_manage_posts` — 見第 4 節，本輪移除
+- `pages_manage_posts` — 見第 4 節，第一輪移除；**第二輪送審（見第 7 節）**
 - Threads（`threads_basic` / `threads_manage_insights`）— 獨立產品，日後單獨送
 - Google/GA4 串接 — 屬 Google OAuth 審查，與 Meta 無關
