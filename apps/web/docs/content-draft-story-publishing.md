@@ -49,7 +49,11 @@ ContentLoop 的 AI 草稿可勾選「同時發佈限動 Story」。發布流程�
 
 已排除：音樂版權（Business Suite 傳同檔可見）、檔案格式（IG 同檔正常）、端點差異（兩個端點都不行）。結論＝**dev mode App 透過 API 發的 FB 影片內容一律被壓制**，與 FB Story 黑畫面同族。注意 FB 會把粉專影片一律轉成 Reel（`permalink /reel/…`），且新 Reel 會自動出現在限動列（story tray）——一開始誤判成「FB Story 又被發出」或「IG 轉發」，其實是同一支被壓制的 Reel。
 
-**過渡對策（FB 封面截圖 fallback）**：影片草稿（含圖＋音樂合成的）目標含 FB 時，composer 顯示 `FbCoverPicker`——使用者從影片截一張封面 JPEG（`generated.fbCoverImageUrl`，`/api/content-drafts/media/frame` + ffmpeg），發布時 FB 改發**圖片貼文**（一般人看得到），IG/Threads 照發完整音樂影片。不截圖則 FB 照發影片（僅測試者可見，UI 有警告）。
+**過渡對策（FB 封面截圖 fallback）**：影片草稿（含圖＋音樂合成的）目標含 FB 時，composer 顯示 `FbCoverPicker`——使用者從影片截一張封面 JPEG（`generated.fbCoverImageUrl`，`/api/content-drafts/media/frame` + ffmpeg），發布時 FB 改發**圖片貼文**，IG/Threads 照發完整音樂影片。不截圖則 FB 照發影片（僅測試者可見，UI 有警告）。
+
+**2026-07-12 最終定案：dev mode 期間 API 發到 FB 的「所有內容」都只有 App role 看得到。** 使用者用非 App role 帳號逐篇驗證：ContentLoop 發的 FB 貼文（不分文字/圖片/影片/封面截圖）外部帳號一律看不到，只有 App Admin 本人與粉專視角可見；Business Suite 手動發的完全正常。這正是 Meta 官方文件的字面規定（dev mode 產生的資料僅 App role 可見）——先前以為「文字/圖片豁免」是誤判，因為一直只用 App Admin 自己的帳號驗收，沒有逐篇外部驗證。曾提出的「密集測試觸發暫時性降觸及」假設同時作廢。IG／Threads 不受影響（實測外部可見；Threads 為獨立 App）。
+
+**產品面結論**：App Review 通過切 Live mode 之前，**ContentLoop 的 FB 發布整體視為「預覽/測試模式」**——發出去的內容只有測試者看得到，正式對外的 FB 貼文請先用 Meta Business Suite 手動發。`FbCoverPicker` 封面截圖在 dev mode 期間對可見度沒有幫助（圖片一樣被擋），其價值保留到特殊情境（go live 後若仍想讓 FB 發圖不發影片）。App Review 的優先級因此提高。
 
 驗證方式：
 
