@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   const now = Date.now()
-  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0, specificDetected = 0
+  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0, specificDetected = 0, inconclusive = 0
 
   const pages = await adminDb.collection('pages').get()
   for (const page of pages.docs) {
@@ -100,16 +100,32 @@ export async function POST(req: NextRequest) {
       let willEffectScore = false
       const adoptedAtMs = d.adoptedAt?.toMillis?.() ?? null
       if (humanAction === 'adopted' && d.metricsBefore && adoptedAtMs && (now - adoptedAtMs) >= SEVEN_DAYS && !d.effectScored) {
-        const before = d.metricsBefore as Metrics
-        adMetricsAfter = {
-          ctr: metricsNow.ctr, cpc: metricsNow.cpc, roas: metricsNow.roas,
-          deltaVsBefore: {
-            ctr: Number((metricsNow.ctr - before.ctr).toFixed(2)),
-            cpc: Number((metricsNow.cpc - before.cpc).toFixed(2)),
-            roas: Number((metricsNow.roas - before.roas).toFixed(2)),
-          },
+        // Attribution guard (2026-07-12): the delta only means something while
+        // ads are still DELIVERING. If the page had no spend in the current
+        // window, metricsNow is all zeros and the "delta" would just measure
+        // "the campaign ended" — a false negative that would poison learning.
+        // Mark inconclusive instead; it never enters effect scoring or stats.
+        const windowSpend = Number((snapData.summary as Record<string, unknown> | undefined)?.spend) || 0
+        if (windowSpend <= 0) {
+          await fbCol.doc(doc.id).set({
+            effectScored: true,
+            effectInconclusive: true,
+            effectInconclusiveReason: 'no_spend_in_window',
+            effectCheckedAt: FieldValue.serverTimestamp(),
+          }, { merge: true })
+          inconclusive++
+        } else {
+          const before = d.metricsBefore as Metrics
+          adMetricsAfter = {
+            ctr: metricsNow.ctr, cpc: metricsNow.cpc, roas: metricsNow.roas,
+            deltaVsBefore: {
+              ctr: Number((metricsNow.ctr - before.ctr).toFixed(2)),
+              cpc: Number((metricsNow.cpc - before.cpc).toFixed(2)),
+              roas: Number((metricsNow.roas - before.roas).toFixed(2)),
+            },
+          }
+          willEffectScore = true
         }
-        willEffectScore = true
       }
 
       // 2) Score at most twice: first after humanAction, again when effect opens.
@@ -177,5 +193,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected, specificDetected })
+  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected, specificDetected, inconclusive })
 }

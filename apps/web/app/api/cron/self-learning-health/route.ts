@@ -48,6 +48,43 @@ async function checkFeedbackVolume(): Promise<string[]> {
   return issues
 }
 
+// Judge validity (2026-07-12): does the LLM evaluator's score actually predict
+// human adoption? Compares mean evalScore of adopted/edited vs rejected docs
+// across all pages. If the gap is missing or inverted (with enough samples),
+// the rubric — the foundation of the whole self-learning loop — needs review.
+async function checkJudgeValidity(): Promise<{ issues: string[]; stats: Record<string, unknown> }> {
+  const norm10 = (v: unknown) => (typeof v === 'number' ? (v <= 5 ? v * 2 : v) : null)
+  let adoptedSum = 0, adoptedN = 0, rejectedSum = 0, rejectedN = 0
+  try {
+    const pages = await adminDb.collection('pages').listDocuments()
+    for (const p of pages) {
+      const snap = await p.collection('sidekickFeedback').orderBy('createdAt', 'desc').limit(300).get().catch(() => null)
+      for (const doc of snap?.docs ?? []) {
+        const d = doc.data()
+        const score = norm10(d.evalScore)
+        if (score === null) continue
+        if (d.humanAction === 'adopted' || d.humanAction === 'edited') { adoptedSum += score; adoptedN++ }
+        else if (d.humanAction === 'rejected') { rejectedSum += score; rejectedN++ }
+      }
+    }
+  } catch { /* best-effort */ }
+  const avgAdopted = adoptedN ? adoptedSum / adoptedN : null
+  const avgRejected = rejectedN ? rejectedSum / rejectedN : null
+  const gap = avgAdopted !== null && avgRejected !== null ? avgAdopted - avgRejected : null
+  const stats = {
+    adoptedN, rejectedN,
+    avgScoreAdopted: avgAdopted !== null ? Number(avgAdopted.toFixed(2)) : null,
+    avgScoreRejected: avgRejected !== null ? Number(avgRejected.toFixed(2)) : null,
+    gap: gap !== null ? Number(gap.toFixed(2)) : null,
+  }
+  const issues: string[] = []
+  // Only alert with a meaningful sample — tiny data would just be noise.
+  if (adoptedN >= 10 && rejectedN >= 5 && gap !== null && gap < 0.5) {
+    issues.push(`評審效度警告：被採納建議的平均評分（${stats.avgScoreAdopted}）沒有明顯高於被拒絕的（${stats.avgScoreRejected}，差距 ${stats.gap} < 0.5）→ LLM 評審分數與人類採納脫鉤，建議檢視 evaluator rubric（樣本：採納 ${adoptedN}、拒絕 ${rejectedN}）。`)
+  }
+  return { issues, stats }
+}
+
 async function sendHealthEmail(issues: string[]): Promise<boolean> {
   const GMAIL_USER = process.env.GMAIL_USER
   const to = process.env.HEALTH_ALERT_EMAIL ?? GMAIL_USER
@@ -75,10 +112,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const [modelIssues, volumeIssues] = await Promise.all([checkModels(), checkFeedbackVolume()])
-  const issues = [...modelIssues, ...volumeIssues]
+  const [modelIssues, volumeIssues, judge] = await Promise.all([checkModels(), checkFeedbackVolume(), checkJudgeValidity()])
+  const issues = [...modelIssues, ...volumeIssues, ...judge.issues]
   const emailed = issues.length > 0 ? await sendHealthEmail(issues) : false
 
-  console.log('[cron/self-learning-health]', JSON.stringify({ issues, emailed }))
-  return NextResponse.json({ ok: true, issueCount: issues.length, issues, emailed })
+  console.log('[cron/self-learning-health]', JSON.stringify({ issues, emailed, judgeStats: judge.stats }))
+  return NextResponse.json({ ok: true, issueCount: issues.length, issues, emailed, judgeStats: judge.stats })
 }
