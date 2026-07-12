@@ -10,6 +10,10 @@ import { adminDb } from '@/lib/firebase/admin'
 export interface AllowedPage {
   pageId: string
   pageName: string
+  // 'admin' = own OAuth connection or invited admin/owner; 'viewer' = invited
+  // with ads read permission only. Query tools accept both; admin-only surfaces
+  // (e.g. 跨粉專總覽) must filter to access === 'admin'.
+  access: 'admin' | 'viewer'
 }
 
 export async function resolveAllowedPages(uid: string): Promise<AllowedPage[]> {
@@ -23,10 +27,10 @@ export async function resolveAllowedPages(uid: string): Promise<AllowedPage[]> {
     if (d.id === 'page') {
       // Legacy single-page doc: pageId lives in a field.
       const pid = typeof data.pageId === 'string' ? data.pageId : null
-      if (pid && !byId.has(pid)) byId.set(pid, { pageId: pid, pageName: data.pageName ?? '' })
+      if (pid && !byId.has(pid)) byId.set(pid, { pageId: pid, pageName: data.pageName ?? '', access: 'admin' })
       continue
     }
-    byId.set(d.id, { pageId: d.id, pageName: data.pageName ?? '' })
+    byId.set(d.id, { pageId: d.id, pageName: data.pageName ?? '', access: 'admin' })
   }
 
   // 2) Invited pages with ads access (admin/owner role, or legacy ads permission).
@@ -36,8 +40,10 @@ export async function resolveAllowedPages(uid: string): Promise<AllowedPage[]> {
       viewerSnap.data()?.pages ?? []
     for (const vp of vps) {
       if (!vp.pageId || byId.has(vp.pageId)) continue
-      const allowed = vp.role === 'admin' || vp.role === 'owner' || vp.permissions?.ads === true
-      if (allowed) byId.set(vp.pageId, { pageId: vp.pageId, pageName: vp.pageName ?? '' })
+      const isAdmin = vp.role === 'admin' || vp.role === 'owner'
+      if (isAdmin || vp.permissions?.ads === true) {
+        byId.set(vp.pageId, { pageId: vp.pageId, pageName: vp.pageName ?? '', access: isAdmin ? 'admin' : 'viewer' })
+      }
     }
   } catch { /* viewerAccess is optional */ }
 

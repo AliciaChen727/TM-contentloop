@@ -159,6 +159,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-12 | **Phase 3B Slices 16–17 + cron 跨頁污染根治**：(1) Sidekick 接 Tool Runner（查 Firestore、`compare_pages` 跨粉專比較、當前粉專範圍鐵則、貼文用內容+連結描述）；(2) `/dashboard/compare` 跨粉專總覽（admin-only：廣告表格＋全域日期篩選＋粉專多選＋素材趨勢圖＋廣告受眾＋IG 粉絲樣貌＋貼文比較），內容儀表板加 IG 粉絲樣貌卡；(3) cron 廣告 snapshot 改頁過濾聚合（修 Legacy/D67 花費互相污染，詳 memory `project_cron_ads_page_filter`）＋ manual sync shared 寫入改任何頁匹配素材即寫（已結束戰役的趨勢/受眾才進得了共享快照）＋ cron 新增 IG `follower_demographics` 每日同步 | (本 commit) |
 | 2026-07-11 | Phase 3B 規劃定稿 + **Slice 15**：`docs/phase-3b-agent-tooling.md`（tool-use agent 升級、跨粉專總覽、bug 回報→雙重 HITL→修復，Slices 15–19）；新增 `lib/ai/tools/pageDataTools.ts`（Firestore 工具層＋pageId 白名單隔離）；診斷卡片 agent 升級 sonnet tool loop（`runDiagnosisAgentWithTools`，查趨勢＋核數字，fallback haiku 單發）；裝 `@anthropic-ai/claude-agent-sdk` | (本 commit) |
 | 2026-07-12 | App Review 第二輪規劃（發文權限）：`docs/meta-app-review.md` 新增第 7 節——在 app `832755139382467` 送 `pages_manage_posts` + `instagram_content_publish`（附 content-drafts 發布流程 screencast 腳本、HITL 防濫用說明、測試帳號注意事項）；Threads 免送（獨立 OAuth）。App 對照更正入 memory：832=實際串接/送審 App、858=僅 FB 登入（Firebase Auth provider） | 4d16ed4 |
 | 2026-07-12 | 草稿編輯器：FB 為目標且未 go live 時顯示「FB 發布僅預覽模式」警告橫幅；隱藏 FB 封面截圖 UI（前提已證偽，留著誤導使用者），欄位/發布邏輯保留供 go live 後續用 | 68b7aa8 |

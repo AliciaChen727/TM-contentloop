@@ -67,10 +67,12 @@ Agent SDK：讀 issue → 改 code → tsc/eslint/build 三關 → 開 PR（無 
 
 ## 5. Vertical Slices（一次一片，三關全綠才 commit）
 
-- [ ] **Slice 15** — `lib/ai/tools/` 工具層 + 白名單隔離 + 診斷批次接 Tool Runner（模型升 sonnet；自我核數步驟）。
-- [ ] **Slice 16** — Sidekick 接工具（含 `compare_pages`，限 ~5 輪）。
-- [ ] **Slice 17** — 「跨粉專總覽」獨立儀表板頁（BFF route + 比較卡片 UI）。
-- [ ] **Slice 18** — Bug 回報 pipeline（捕捉 → `bugReports` → 通知 → GitHub Issue）。
+- [x] **Slice 15** — `lib/ai/tools/` 工具層 + 白名單隔離 + 診斷批次接 Tool Runner（模型升 sonnet；自我核數步驟）。(08a089f)
+- [x] **Slice 16** — Sidekick 接工具（含 `compare_pages`，限 ~5 輪）＋當前粉專範圍鐵則＋貼文用內容+連結描述（禁 postId）＋`promoted90d`（90 天貼文層，歷史比較用）。(7929b09+)
+- [x] **Slice 17** — 「跨粉專總覽」`/dashboard/compare`（admin-only，功能選單入口）：廣告表格＋全域日期篩選（30/90/自訂，套用表格與趨勢與貼文）＋粉專多選 chips＋素材趨勢圖（圖例：柱=花費/線=CTR）＋廣告受眾＋**IG 粉絲樣貌**（`follower_demographics`，cron 每日寫 `igFollowerDemographics`）＋貼文比較；內容儀表板加 `IgAudienceCard`（成效趨勢下方，`/api/pages/ig-audience` 逐頁驗權）。
+  - 附帶修復：cron 跨頁污染（見 memory `project_cron_ads_page_filter`）；manual sync shared 寫入原以「有 ACTIVE 素材」為條件 → 已結束戰役的趨勢/受眾永遠進不了共享快照，改為任何頁匹配素材即寫。
+  - 已知限制：Meta 無「貼文層」受眾 API；FB 粉專年齡性別分佈已被 Meta 移除 → 自然受眾以 IG 帳號層為準。
+- [ ] **Slice 18** — Bug 回報 pipeline（捕捉 → `bugReports` → 通知 → GitHub Issue）。首個範例案例＝本次 cron 跨頁污染（三層快照不一致即可自動偵測的訊號）。
 - [ ] **Slice 19** — Bug 修復 agent（GitHub Actions + Agent SDK + PR flow，雙重 HITL）。
 
 ## 6. 開放問題

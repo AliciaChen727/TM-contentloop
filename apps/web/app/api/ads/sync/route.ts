@@ -802,9 +802,13 @@ export async function POST(req: NextRequest) {
     },
   }, { merge: true })
 
-  // If this sync found creatives, write them to the shared page-level path so other
-  // page admins (who may not have access to this ad account) can read them.
-  if (pageId && adCreativesWithTitle.length > 0) {
+  // If this sync found anything page-matched, write it to the shared page-level
+  // path so other page admins (who may not have access to this ad account) can
+  // read it. Gate on ALL-status matches, not just ACTIVE creatives — a page
+  // whose only campaign has ended (ARCHIVED) still has trends/demographics/
+  // post-metrics history worth sharing (2026-07-12: Legacy's finished $216
+  // boost never reached the shared doc because adCreativesWithTitle was empty).
+  if (pageId && (pageMatchedCreatives.length > 0 || creativeTrends.length > 0)) {
     await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
       syncedAt: Timestamp.now(),
       adCreatives: adCreativesWithTitle,

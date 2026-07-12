@@ -446,6 +446,43 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
   return { adAccountId: adAccountIdJoined, spend: combined.spend, reach: combined.reach, conversionType: combined.conversionType, linkClicks: combined.linkClicks, videoViews: combined.videoViews, pageAdsCount: pageAdsList.length }
 }
 
+// ── IG follower demographics (organic audience) ──────────────────────────────
+// Account-level follower makeup via IG `follower_demographics` (age / gender /
+// city; needs 100+ followers — errors are swallowed, field simply stays empty).
+// Per-post organic audience does NOT exist in the Graph API; this is the
+// closest Meta offers. Written to the shared page snapshot with merge:true so
+// the ads merge/zero-write never clobbers it.
+async function syncIgFollowerDemographics(accessToken: string, igUserId: string, pageId: string): Promise<void> {
+  try {
+    const fetchBreakdown = async (breakdown: 'age' | 'gender' | 'city') => {
+      const url = new URL(`${BASE}/${igUserId}/insights`)
+      url.searchParams.set('metric', 'follower_demographics')
+      url.searchParams.set('period', 'lifetime')
+      url.searchParams.set('metric_type', 'total_value')
+      url.searchParams.set('breakdown', breakdown)
+      url.searchParams.set('access_token', accessToken)
+      const res = await fetch(url)
+      const data = await res.json()
+      if (!res.ok || data.error) return null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const results: any[] = data.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? []
+      return results
+        .map(r => ({ label: ((r.dimension_values ?? []) as string[]).join('・'), count: (r.value as number) ?? 0 }))
+        .sort((a, b) => b.count - a.count)
+    }
+    const [age, gender, city] = await Promise.all([fetchBreakdown('age'), fetchBreakdown('gender'), fetchBreakdown('city')])
+    if (!age && !gender) return
+    await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
+      igFollowerDemographics: {
+        age: age ?? [],
+        gender: gender ?? [],
+        city: (city ?? []).slice(0, 5),
+        updatedAt: Timestamp.now(),
+      },
+    }, { merge: true })
+  } catch { /* best-effort */ }
+}
+
 // ── Cross-admin Merge ─────────────────────────────────────────────────────────
 
 type SummaryFields = { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }
@@ -529,7 +566,9 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
     // this page's ads (zombie snapshots get deleted in syncAdsForUser). Zero the
     // shared ad fields so stale contaminated data can't survive. Sync FAILURES
     // never delete snapshots, so a broken token can't trigger this wipe.
-    const zeroSummary = { spend: 0, reach: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, frequency: 0, conversions: 0, revenue: 0, roas: 0, cpa: 0 }
+    // Include linkClicks/videoViews: set+merge deep-merges maps, so keys missing
+    // here would keep stale values from the pre-fix contaminated doc.
+    const zeroSummary = { spend: 0, reach: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, frequency: 0, conversions: 0, revenue: 0, roas: 0, cpa: 0, linkClicks: 0, videoViews: 0 }
     const diag = computeDiagnosisFromSnapshot({ summary: zeroSummary, adCreatives: [] })
     await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
       syncedAt: Timestamp.now(),
@@ -634,6 +673,9 @@ export async function POST(req: NextRequest) {
         tokenData.accessToken && tokenData.igUserId && pageId
           ? syncIgStories(uid, tokenData.accessToken, tokenData.igUserId, pageId)
           : Promise.resolve({ synced: 0, error: 'no accessToken or igUserId' }),
+        tokenData.accessToken && tokenData.igUserId && pageId
+          ? syncIgFollowerDemographics(tokenData.accessToken, tokenData.igUserId, pageId)
+          : Promise.resolve(),
       ])
 
       results.push({ uid, pageId, ads: adsResult, ig: igResult, fb: fbResult, stories: storyResult })

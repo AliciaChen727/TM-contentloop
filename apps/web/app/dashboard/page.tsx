@@ -16,6 +16,7 @@ import { CombinedPostsTable } from '@/components/dashboard/CombinedPostsTable'
 import { ThreadsPostsTable } from '@/components/dashboard/ThreadsPostsTable'
 import type { ThreadsPost } from '@/components/dashboard/ThreadsPostsTable'
 import { ContentChart } from '@/components/dashboard/ContentChart'
+import { IgAudienceCard } from '@/components/dashboard/IgAudienceCard'
 import type { DailyPoint } from '@/components/dashboard/ContentChart'
 import { AiSidekick } from '@/components/ads/AiSidekick'
 import type { MetricsContext } from '@/components/ads/AiSidekick'
@@ -521,6 +522,9 @@ export default function DashboardPage() {
                   { key: 'links', icon: '🔗', label: L('報名連結追蹤', 'Link Tracking'), onClick: () => router.push('/dashboard/links'), show: hasCap('analytics.links') || !!activePerms },
                   { key: 'messages', icon: '💬', label: L('私訊分析', 'Messages'), onClick: () => router.push('/dashboard/messages'), show: hasCap('analytics.messages') },
                   { key: 'drafts', icon: '✍️', label: L('AI 草稿發布', 'AI Drafts'), onClick: () => router.push('/dashboard/content-drafts'), show: hasCap('content.draft') },
+                  // Admin-only (members.manage = admin/owner)。compare API 另在
+                  // server 端過濾：只列呼叫者為 admin 的粉專。
+                  { key: 'compare', icon: '📈', label: L('跨粉專總覽', 'Cross-page Overview'), onClick: () => router.push('/dashboard/compare'), show: hasCap('members.manage') },
                 ]} />
                 {(hasCap('sidekick.use') || activePerms?.sidekick) && (
                   <button className={`ads-sk-toggle-btn ${skOpen ? 'active' : ''}`} onClick={() => setSkOpen(v => !v)}>
@@ -605,6 +609,9 @@ export default function DashboardPage() {
               <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ad-text)', marginBottom: 14 }}>{L('成效趨勢', 'Performance trend')}</div>
               <ContentChart data={chartData} />
             </div>
+
+            {/* IG 粉絲樣貌 (organic follower demographics, Slice 17) */}
+            {selectedPageId && <IgAudienceCard pageId={selectedPageId} />}
 
             {/* Table toolbar */}
             <div className="ads-posts-toolbar" style={{ marginBottom: 12 }}>

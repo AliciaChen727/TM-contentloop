@@ -67,15 +67,41 @@ export function buildPageDataTools(ctx: ToolContext) {
       // more complete than the account-level summary when a page's campaigns
       // span multiple accounts (known sync limitation, fix tracked separately).
       const toRows = (m: unknown) => Object.entries((m ?? {}) as Record<string, { spend?: number; ctr?: number; cpa?: number; roas?: number; reach?: number }>)
-        .map(([postId, v]) => ({ postId, spend: v.spend ?? 0, ctr: v.ctr ?? null, cpa: v.cpa ?? null, roas: v.roas ?? null, reach: v.reach ?? null }))
+        .map(([postId, v]) => ({ postId, text: '', url: '', spend: v.spend ?? 0, ctr: v.ctr ?? null, cpa: v.cpa ?? null, roas: v.roas ?? null, reach: v.reach ?? null }))
         .filter((r) => r.spend > 0)
         .sort((a, b) => b.spend - a.spend)
         .slice(0, 10)
+      const promotedPosts = toRows(snap.adPostMetrics)
+      const promotedIgPosts = toRows(snap.igPostMetrics)
+      // Attach the post text so answers can reference posts by content, never by
+      // raw ID (raw IDs are meaningless to users). Best-effort, page-scoped only.
+      try {
+        const ownerUid = await resolvePageOwnerUid(pageId)
+        if (ownerUid) {
+          const pageRef = adminDb.collection('users').doc(ownerUid).collection('pages').doc(pageId)
+          await Promise.all([
+            ...promotedPosts.map(async (r) => {
+              const doc = await pageRef.collection('fbPosts').doc(`${pageId}_${r.postId}`).get()
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const d = doc.data() as any
+              r.text = String(d?.message ?? '').slice(0, 80)
+              r.url = String(d?.permalink ?? '')
+            }),
+            ...promotedIgPosts.map(async (r) => {
+              const doc = await pageRef.collection('igPosts').doc(r.postId).get()
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const d = doc.data() as any
+              r.text = String(d?.caption ?? '').slice(0, 80)
+              r.url = String(d?.permalink ?? '')
+            }),
+          ])
+        }
+      } catch { /* text enrichment is best-effort */ }
       return j({
         syncedAt: toDateStr(snap.syncedAt),
         dateRange: snap.dateRange ?? null,
         summary: snap.summary ?? null,
-        summaryCaveat: '帳戶層 summary/daily 目前只涵蓋單一廣告帳號；若 promotedPosts 的花費總和明顯大於 summary.spend，以 promotedPosts（貼文層，跨帳號、已按粉專過濾）為準。',
+        summaryCaveat: 'summary/daily 是「近 30 天」滾動窗口（每日凌晨更新）。spend=0 代表近 30 天沒有投放，是正常狀態、不是同步異常，不要說資料異常。歷史戰役（含已結束的）看 promotedPosts / promotedIgPosts（90 天、跨帳號、已按粉專過濾）。提及貼文時用 text 內容描述並附 url 的 markdown 連結，不要念 postId。',
         daily,
         adCreatives: creatives,
         promotedPosts: toRows(snap.adPostMetrics),
@@ -113,14 +139,14 @@ export function buildPageDataTools(ctx: ToolContext) {
         const snap = await pageRef.collection('fbPosts').orderBy('createdTime', 'desc').limit(n).get()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return j(snap.docs.map((doc) => { const d = doc.data() as any; const ins = d.insights ?? {}; return {
-          date: toDateStr(d.createdTime), text: String(d.message ?? '').slice(0, 120),
+          date: toDateStr(d.createdTime), text: String(d.message ?? '').slice(0, 120), url: String(d.permalink ?? ''),
           reach: ins.reach ?? null, likes: ins.reactions ?? 0, comments: ins.comments ?? 0, shares: ins.shares ?? 0,
         } }))
       }
       const snap = await pageRef.collection('igPosts').orderBy('timestamp', 'desc').limit(n).get()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return j(snap.docs.map((doc) => { const d = doc.data() as any; const ins = d.insights ?? {}; return {
-        date: toDateStr(d.timestamp), text: String(d.caption ?? '').slice(0, 120), mediaType: d.mediaType ?? '',
+        date: toDateStr(d.timestamp), text: String(d.caption ?? '').slice(0, 120), url: String(d.permalink ?? ''), mediaType: d.mediaType ?? '',
         reach: ins.reach ?? null, likes: ins.likes ?? 0, comments: ins.comments ?? 0, saves: ins.saved ?? 0, shares: ins.shares ?? 0,
       } }))
     },
@@ -164,7 +190,7 @@ export function buildPageDataTools(ctx: ToolContext) {
   const comparePages = betaTool({
     name: 'compare_pages',
     description:
-      '跨粉專比較：一次取回多個「使用者有權限的」粉專的廣告摘要（spend/ctr/cpm/cpa/conversions 等）供並列比較。僅限使用者明示要求跨粉專分析時使用；結果只用於回答，絕不寫回任何單一粉專的資料。',
+      '跨粉專比較：一次取回多個「使用者有權限的」粉專資料供並列比較。summary=近 30 天帳戶層（spend 0 = 近期沒投放，非異常）；promoted90d=近 90 天貼文層廣告（跨帳號、含已結束戰役）——比較歷史投放（如「近90日」「五月」）一律用 promoted90d。僅限使用者明示要求跨粉專分析時使用；結果絕不寫回任何粉專。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -184,15 +210,41 @@ export function buildPageDataTools(ctx: ToolContext) {
       if (denied.length > 0) return DENIED
       const rows = await Promise.all(pageIds.map(async (pid) => {
         const snap = (await adminDb.collection('pages').doc(pid).collection('adInsights').doc('latest').get()).data()
+        // 90d post-level ads (cross-account, page-filtered) — the comparable
+        // signal for historical/finished campaigns; summary is last-30d only.
+        type Pm = { spend?: number; ctr?: number; cpa?: number }
+        const all = [
+          ...Object.entries((snap?.adPostMetrics ?? {}) as Record<string, Pm>).map(([id, v]) => ({ id, fb: true, ...v })),
+          ...Object.entries((snap?.igPostMetrics ?? {}) as Record<string, Pm>).map(([id, v]) => ({ id, fb: false, ...v })),
+        ].filter(p => (p.spend ?? 0) > 0).sort((a, b) => (b.spend ?? 0) - (a.spend ?? 0))
+        const spend90 = all.reduce((s, p) => s + (p.spend ?? 0), 0)
+        const wCtr = spend90 > 0 ? all.reduce((s, p) => s + (p.ctr ?? 0) * (p.spend ?? 0), 0) / spend90 : 0
+        const top = all.slice(0, 3).map(p => ({ text: '', url: '', spend: Math.round(p.spend ?? 0), ctr: p.ctr ?? null, cpa: p.cpa ?? null }))
+        try {
+          const ownerUid = await resolvePageOwnerUid(pid)
+          if (ownerUid) {
+            const pageRef = adminDb.collection('users').doc(ownerUid).collection('pages').doc(pid)
+            await Promise.all(all.slice(0, 3).map(async (p, i) => {
+              const doc = p.fb
+                ? await pageRef.collection('fbPosts').doc(`${pid}_${p.id}`).get()
+                : await pageRef.collection('igPosts').doc(p.id).get()
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const d = doc.data() as any
+              top[i].text = String((p.fb ? d?.message : d?.caption) ?? '').slice(0, 60)
+              top[i].url = String(d?.permalink ?? '')
+            }))
+          }
+        } catch { /* best-effort */ }
         return {
           pageId: pid,
           pageName: ctx.pageNames?.[pid] ?? '',
           syncedAt: snap ? toDateStr(snap.syncedAt) : null,
           dateRange: snap?.dateRange ?? null,
           summary: snap?.summary ?? null,
+          promoted90d: { postCount: all.length, spend: Math.round(spend90), avgCtrSpendWeighted: +wCtr.toFixed(2), topPosts: top },
         }
       }))
-      return j(rows)
+      return j({ note: 'summary=近30天（0=近期沒投放，非異常）；歷史/90日比較用 promoted90d；提及貼文用 text+url，不念 ID。', pages: rows })
     },
   })
 
