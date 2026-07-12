@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
@@ -8,6 +9,8 @@ import { getUserApiKey } from '@/lib/userApiKeys'
 import { resolvePageProfile } from '@/lib/page-profile'
 import { getSidekickFewShot, formatFewShot } from '@/lib/sidekick/feedbackRetrieval'
 import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
+import { buildPageDataTools } from '@/lib/ai/tools/pageDataTools'
+import { resolveAllowedPages } from '@/lib/ai/tools/resolveAllowedPages'
 
 interface MetricsContext {
   // Posts metrics
@@ -613,6 +616,32 @@ export async function POST(req: NextRequest) {
     } catch { /* retrieval is best-effort */ }
   }
 
+  // Tool layer (Phase 3B Slice 16): whitelist resolved from the CALLER's own
+  // entitlements — never from the client-supplied pageId. With 2+ pages the
+  // model also gets compare_pages for explicit cross-page analysis.
+  const allowedPages = await resolveAllowedPages(uid).catch(() => [] as Awaited<ReturnType<typeof resolveAllowedPages>>)
+  const tools = allowedPages.length > 0
+    ? buildPageDataTools({
+        allowedPageIds: allowedPages.map((p) => p.pageId),
+        pageNames: Object.fromEntries(allowedPages.map((p) => [p.pageId, p.pageName])),
+      })
+    : []
+  if (tools.length > 0) {
+    // Current-page focus: pageId names the page the user is LOOKING AT. Other
+    // authorized pages exist only for explicit cross-page requests — the model
+    // must never volunteer their data (user feedback 2026-07-11).
+    const current = pageId ? allowedPages.find((p) => p.pageId === pageId) : undefined
+    const currentLine = current
+      ? `${current.pageId}${current.pageName ? `（${current.pageName}）` : ''}`
+      : null
+    const otherPages = allowedPages.filter((p) => p.pageId !== pageId)
+    const otherList = otherPages.map((p) => `- ${p.pageId}${p.pageName ? `（${p.pageName}）` : ''}`).join('\n')
+
+    systemPrompt += lang === 'en'
+      ? `\n\n## Data Tools\nYou can call tools to fetch real data before answering: get_ad_insights (ad snapshot + 14-day trend), get_posts (recent FB/IG organic posts), get_feedback_memory (past adopted advice)${allowedPages.length >= 2 ? ', compare_pages (side-by-side ad summaries)' : ''}.\n${currentLine ? `CURRENT page (the one the user is viewing): ${currentLine}\n**Scope rule: analyze and query ONLY the current page.** ${otherPages.length > 0 ? `The user also has access to:\n${otherList}\nbut you may query or mention those ONLY when the user explicitly names them or explicitly asks for a cross-page comparison. Never volunteer another page's data in an answer about the current page.` : ''}` : `Authorized pages:\n${otherList || '(none)'}\nOnly query pages the user explicitly asks about.`}\nUse at most a few tool calls, only when the provided context is insufficient. If asked about a page not authorized, say you have no access. Numbers you cite must come from the context or tool results — never invented. Your FINAL reply must still be the pure JSON object described above — no other text.`
+      : `\n\n## 資料工具\n回答前你可以呼叫工具查真實數據：get_ad_insights（廣告快照＋14 天趨勢）、get_posts（近期 FB/IG 自然貼文）、get_feedback_memory（過去被採用的建議）${allowedPages.length >= 2 ? '、compare_pages（跨粉專並列比較）' : ''}。\n${currentLine ? `目前頁面的粉專（使用者正在看的）：${currentLine}\n**範圍鐵則：只分析、只查詢目前這個粉專。**${otherPages.length > 0 ? `使用者另有權限的粉專：\n${otherList}\n但「只有」在使用者明確點名該粉專、或明確要求跨粉專比較時，才能查詢或提及它們。回答目前粉專的問題時，絕不可主動帶入其他粉專的數據。` : ''}` : `你有權限的粉專：\n${otherList || '（無）'}\n只查詢使用者明確問到的粉專。`}\n只在前述 context 不足時才呼叫工具、次數盡量少。若被問到無權限的粉專，回答沒有權限。引用的數字必須來自 context 或工具回傳，不可捏造。「最終回覆」仍必須是上述規格的純 JSON 物件，不得有其他文字。`
+  }
+
   // Build user message content (text + optional files)
   const userContent: Anthropic.MessageParam['content'] = []
   for (const att of fileAttachments ?? []) {
@@ -639,14 +668,27 @@ export async function POST(req: NextRequest) {
   }
   claudeMessages.push({ role: 'user', content: userContent })
 
-  let claudeRes
+  // Tool loop (bounded at 5 iterations for latency). No tools → behaves exactly
+  // like the previous single messages.create call. Usage is accumulated across
+  // iterations so cost tracking stays accurate.
+  let finalMsg: Anthropic.Beta.BetaMessage | null = null
+  let totalInputTokens = 0
+  let totalOutputTokens = 0
   try {
-    claudeRes = await anthropic.messages.create({
+    const runner = anthropic.beta.messages.toolRunner({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
+      max_iterations: 5,
       system: systemPrompt,
-      messages: claudeMessages,
+      messages: claudeMessages as Anthropic.Beta.BetaMessageParam[],
+      tools,
     })
+    for await (const msg of runner) {
+      finalMsg = msg
+      totalInputTokens += msg.usage.input_tokens
+      totalOutputTokens += msg.usage.output_tokens
+    }
+    if (!finalMsg) throw new Error('empty response')
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('overloaded_error') || msg.includes('529')) {
@@ -655,7 +697,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Claude API error: ' + msg }, { status: 500 })
   }
 
-  const rawText = claudeRes.content[0].type === 'text' ? claudeRes.content[0].text : ''
+  // Final answer = LAST text block (earlier blocks may be inter-tool commentary).
+  const textBlocks = finalMsg.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
+  const rawText = textBlocks.length ? textBlocks[textBlocks.length - 1].text : ''
   const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
 
   let parsed: object
@@ -696,8 +740,8 @@ export async function POST(req: NextRequest) {
   } catch { /* non-critical */ }
 
   try {
-    const inputTokens = claudeRes.usage.input_tokens
-    const outputTokens = claudeRes.usage.output_tokens
+    const inputTokens = totalInputTokens
+    const outputTokens = totalOutputTokens
     const claudeCostUsd = (inputTokens * 0.80 + outputTokens * 4) / 1_000_000
     const month = new Date().toISOString().slice(0, 7)
     await adminDb.collection('users').doc(uid).collection('usage').doc(month).set({

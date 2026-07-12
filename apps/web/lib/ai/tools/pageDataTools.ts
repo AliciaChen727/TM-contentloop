@@ -12,6 +12,8 @@ export interface ToolContext {
   // Resolved server-side from the caller's identity (admins/viewerAccess) or
   // fixed to [pageId] for per-page batch jobs. Never taken from the client/model.
   allowedPageIds: string[]
+  // Optional display names (pageId → name) for cross-page comparison output.
+  pageNames?: Record<string, string>
 }
 
 const DENIED = 'ERROR: pageId 不在授權範圍內，無法查詢。請只使用輸入資料中提供的 pageId。'
@@ -61,12 +63,23 @@ export function buildPageDataTools(ctx: ToolContext) {
         impressions: c.impressions ?? null, clicks: c.clicks ?? null,
       }))
       const daily = (Array.isArray(snap.daily) ? snap.daily : []).slice(-14)
+      // Per-post ad metrics are page-prefix-filtered across ALL ad accounts →
+      // more complete than the account-level summary when a page's campaigns
+      // span multiple accounts (known sync limitation, fix tracked separately).
+      const toRows = (m: unknown) => Object.entries((m ?? {}) as Record<string, { spend?: number; ctr?: number; cpa?: number; roas?: number; reach?: number }>)
+        .map(([postId, v]) => ({ postId, spend: v.spend ?? 0, ctr: v.ctr ?? null, cpa: v.cpa ?? null, roas: v.roas ?? null, reach: v.reach ?? null }))
+        .filter((r) => r.spend > 0)
+        .sort((a, b) => b.spend - a.spend)
+        .slice(0, 10)
       return j({
         syncedAt: toDateStr(snap.syncedAt),
         dateRange: snap.dateRange ?? null,
         summary: snap.summary ?? null,
+        summaryCaveat: '帳戶層 summary/daily 目前只涵蓋單一廣告帳號；若 promotedPosts 的花費總和明顯大於 summary.spend，以 promotedPosts（貼文層，跨帳號、已按粉專過濾）為準。',
         daily,
         adCreatives: creatives,
+        promotedPosts: toRows(snap.adPostMetrics),
+        promotedIgPosts: toRows(snap.igPostMetrics),
         diagnosisCounts: snap.diagnosisCounts ?? null,
       })
     },
@@ -148,5 +161,43 @@ export function buildPageDataTools(ctx: ToolContext) {
     },
   })
 
-  return [getAdInsights, getPosts, getFeedbackMemory]
+  const comparePages = betaTool({
+    name: 'compare_pages',
+    description:
+      '跨粉專比較：一次取回多個「使用者有權限的」粉專的廣告摘要（spend/ctr/cpm/cpa/conversions 等）供並列比較。僅限使用者明示要求跨粉專分析時使用；結果只用於回答，絕不寫回任何單一粉專的資料。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pageIds: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+          maxItems: 5,
+          description: '要比較的粉專 ID（必須全部在授權清單內）',
+        },
+      },
+      required: ['pageIds'],
+      additionalProperties: false,
+    } as const,
+    run: async ({ pageIds }) => {
+      const denied = pageIds.filter((p) => !isAllowed(ctx, p))
+      if (denied.length > 0) return DENIED
+      const rows = await Promise.all(pageIds.map(async (pid) => {
+        const snap = (await adminDb.collection('pages').doc(pid).collection('adInsights').doc('latest').get()).data()
+        return {
+          pageId: pid,
+          pageName: ctx.pageNames?.[pid] ?? '',
+          syncedAt: snap ? toDateStr(snap.syncedAt) : null,
+          dateRange: snap?.dateRange ?? null,
+          summary: snap?.summary ?? null,
+        }
+      }))
+      return j(rows)
+    },
+  })
+
+  // compare_pages only makes sense with 2+ authorized pages (schema minItems: 2).
+  return ctx.allowedPageIds.length >= 2
+    ? [getAdInsights, getPosts, getFeedbackMemory, comparePages]
+    : [getAdInsights, getPosts, getFeedbackMemory]
 }
