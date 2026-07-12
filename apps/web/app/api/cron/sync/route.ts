@@ -7,7 +7,6 @@ import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
 import { syncIgStories } from '@/lib/meta/igStories'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
-import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
 import { syncThreadsForPage } from '@/lib/threads/sync'
 
 const BASE = 'https://graph.facebook.com/v19.0'
@@ -222,6 +221,71 @@ async function syncIgForUser(uid: string, accessToken: string, igUserId: string,
 
 // ── Ads Sync ──────────────────────────────────────────────────────────────────
 
+// One ad account's page-filtered slice: only ads whose creative belongs to this
+// page (story-id prefix / IG actor) count. This is THE fix for the cross-page
+// contamination bug (2026-07-12): the old code stored level=account rollups, so
+// a shared ad account leaked other pages' spend into this page's snapshot.
+async function aggregateAccountForPage(
+  accountId: string, userAccessToken: string, pageId: string, igUserId?: string,
+): Promise<{
+  pageAdsList: { id: string; name: string; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_actor_id?: string } }[]
+  dailyRows: Record<string, unknown>[]
+  hourlyRows: Record<string, unknown>[]
+  adLevelItems: Record<string, unknown>[]
+} | { error: string }> {
+  const adsUrl = new URL(`${BASE}/${accountId}/ads`)
+  adsUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id,instagram_actor_id}')
+  adsUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
+  adsUrl.searchParams.set('limit', '100')
+  adsUrl.searchParams.set('access_token', userAccessToken)
+
+  const dailyAdUrl = new URL(`${BASE}/${accountId}/insights`)
+  dailyAdUrl.searchParams.set('fields', 'ad_id,spend,reach,impressions,clicks,actions,action_values')
+  dailyAdUrl.searchParams.set('date_preset', 'last_30d')
+  dailyAdUrl.searchParams.set('time_increment', '1')
+  dailyAdUrl.searchParams.set('level', 'ad')
+  dailyAdUrl.searchParams.set('limit', '1000')
+  dailyAdUrl.searchParams.set('access_token', userAccessToken)
+
+  const adLevelUrl = new URL(`${BASE}/${accountId}/insights`)
+  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,ctr,actions,action_values')
+  adLevelUrl.searchParams.set('date_preset', 'last_30d')
+  adLevelUrl.searchParams.set('level', 'ad')
+  adLevelUrl.searchParams.set('limit', '200')
+  adLevelUrl.searchParams.set('access_token', userAccessToken)
+
+  const hourlyUrl = new URL(`${BASE}/${accountId}/insights`)
+  hourlyUrl.searchParams.set('fields', 'ad_id,spend,actions,action_values')
+  hourlyUrl.searchParams.set('date_preset', 'last_30d')
+  hourlyUrl.searchParams.set('level', 'ad')
+  hourlyUrl.searchParams.set('breakdowns', 'hourly_stats_aggregated_by_advertiser_time_zone')
+  hourlyUrl.searchParams.set('limit', '1000')
+  hourlyUrl.searchParams.set('access_token', userAccessToken)
+
+  const [adsRes, dailyRes, adLevelRes, hourlyRes] = await Promise.all([fetch(adsUrl), fetch(dailyAdUrl), fetch(adLevelUrl), fetch(hourlyUrl)])
+  const [adsData, dailyData, adLevelData, hourlyData] = await Promise.all([adsRes.json(), dailyRes.json(), adLevelRes.json(), hourlyRes.json()])
+  if (!adsRes.ok || adsData.error) return { error: adsData.error?.message ?? 'ads fetch failed' }
+  if (!dailyRes.ok || dailyData.error) return { error: dailyData.error?.message ?? 'daily ad insights failed' }
+  if (!adLevelRes.ok || adLevelData.error) return { error: adLevelData.error?.message ?? 'ad-level insights failed' }
+
+  // Strict page filter: never fall back to all-account ads.
+  const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string; effective_object_story_id?: string; effective_instagram_story_id?: string; instagram_actor_id?: string } }[] = adsData.data ?? []
+  const pageAdsList = rawAdsList.filter(ad => {
+    const sid = ad.creative?.object_story_id ?? ad.creative?.effective_object_story_id
+    if (sid?.startsWith(pageId + '_')) return true
+    if (igUserId && ad.creative?.instagram_actor_id === igUserId) return true
+    return false
+  })
+  const pageAdIds = new Set(pageAdsList.map(a => a.id))
+  const byPage = (rows: Record<string, unknown>[]) => rows.filter(r => pageAdIds.has(r.ad_id as string))
+  return {
+    pageAdsList,
+    dailyRows: byPage(dailyData.data ?? []),
+    hourlyRows: byPage((hourlyData?.data ?? []) as Record<string, unknown>[]),
+    adLevelItems: byPage(adLevelData.data ?? []),
+  }
+}
+
 async function syncAdsForUser(uid: string, userAccessToken: string, pageId: string, igUserId?: string): Promise<{ adAccountId?: string; spend?: number; reach?: number; conversionType?: string; linkClicks?: number; videoViews?: number; pageAdsCount?: number; error?: string }> {
   const accountsUrl = new URL(`${BASE}/me/adaccounts`)
   accountsUrl.searchParams.set('fields', 'id,name')
@@ -232,175 +296,154 @@ async function syncAdsForUser(uid: string, userAccessToken: string, pageId: stri
 
   const accounts: { id: string }[] = accountsData.data ?? []
   if (!accounts.length) return { error: 'no ad accounts' }
-  // Pick the account that actually contains this page's ads (story-id prefix),
-  // not just accounts[0] — a page's campaigns can live in a different account.
-  const adAccountId = (await selectAdAccountForPage(accounts, pageId, userAccessToken)).id
 
-  const insightFields = 'spend,reach,impressions,clicks,ctr,cpm,frequency,actions,action_values'
-  const summaryUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  summaryUrl.searchParams.set('fields', insightFields)
-  summaryUrl.searchParams.set('date_preset', 'last_30d')
-  summaryUrl.searchParams.set('level', 'account')
-  summaryUrl.searchParams.set('access_token', userAccessToken)
-
-  const dailyUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  dailyUrl.searchParams.set('fields', insightFields)
-  dailyUrl.searchParams.set('date_preset', 'last_30d')
-  dailyUrl.searchParams.set('time_increment', '1')
-  dailyUrl.searchParams.set('level', 'account')
-  dailyUrl.searchParams.set('access_token', userAccessToken)
-
-  const adsUrl = new URL(`${BASE}/${adAccountId}/ads`)
-  adsUrl.searchParams.set('fields', 'id,name,effective_status,effective_object_story_id,creative{object_story_id,effective_object_story_id,effective_instagram_story_id}')
-  adsUrl.searchParams.set('effective_status', '["ACTIVE","PAUSED","ARCHIVED"]')
-  adsUrl.searchParams.set('limit', '100')
-  adsUrl.searchParams.set('access_token', userAccessToken)
-
-  const adLevelUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  adLevelUrl.searchParams.set('fields', 'ad_id,ad_name,spend,reach,impressions,ctr,actions,action_values')
-  adLevelUrl.searchParams.set('date_preset', 'last_30d')
-  adLevelUrl.searchParams.set('level', 'ad')
-  adLevelUrl.searchParams.set('limit', '100')
-  adLevelUrl.searchParams.set('access_token', userAccessToken)
-
-  const hourlyUrl = new URL(`${BASE}/${adAccountId}/insights`)
-  hourlyUrl.searchParams.set('fields', 'spend,actions,action_values')
-  hourlyUrl.searchParams.set('date_preset', 'last_30d')
-  hourlyUrl.searchParams.set('level', 'account')
-  hourlyUrl.searchParams.set('breakdowns', 'hourly_stats_aggregated_by_advertiser_time_zone')
-  hourlyUrl.searchParams.set('access_token', userAccessToken)
-
-  const [summaryRes, dailyRes, adsRes, adLevelRes, hourlyRes] = await Promise.all([fetch(summaryUrl), fetch(dailyUrl), fetch(adsUrl), fetch(adLevelUrl), fetch(hourlyUrl)])
-  const [summaryData, dailyData, adsData, adLevelData, hourlyData] = await Promise.all([summaryRes.json(), dailyRes.json(), adsRes.json(), adLevelRes.json(), hourlyRes.json()])
-  if (!summaryRes.ok || summaryData.error) return { error: summaryData.error?.message ?? 'insights failed' }
-  // Fix: also validate ad-level insights — silent failure here causes all creatives to show $0
-  if (!adLevelRes.ok || adLevelData.error) return { error: adLevelData.error?.message ?? 'ad-level insights failed' }
-
-  // Filter ads to only those belonging to this pageId (object_story_id format: {pageId}_{postId})
-  // Strict: never fall back to all-account ads — that would contaminate other pages' dashboards
-  const rawAdsList: { id: string; name: string; creative?: { object_story_id?: string; effective_instagram_story_id?: string; instagram_actor_id?: string } }[] = adsData.data ?? []
-  const pageAdsList = rawAdsList.filter(ad => {
-    if (ad.creative?.object_story_id?.startsWith(pageId + '_')) return true
-    if (igUserId && ad.creative?.instagram_actor_id === igUserId) return true
-    return false
-  })
-  const adPostIds: string[] = pageAdsList.map(ad => ad.creative?.object_story_id || ad.creative?.effective_instagram_story_id).filter(Boolean) as string[]
-
-  const s = summaryData.data?.[0] ?? {}
-  const spend = parseFloat(s.spend ?? '0')
-  const reach = parseInt(s.reach ?? '0')
-  const impressions = parseInt(s.impressions ?? '0')
-  const clicks = parseInt(s.clicks ?? '0')
-  const ctr = parseFloat(s.ctr ?? '0')
-  const cpm = parseFloat(s.cpm ?? '0')
-  const frequency = parseFloat(s.frequency ?? '0')
-  const sActions: MetaAction[] = s.actions ?? []
-  const sActionValues: MetaAction[] = s.action_values ?? []
-  const hasPurchase = hasPurchaseAction(sActions)
-  const linkClicks = parseActions(sActions, 'link_click')
-  const videoViews = parseActions(sActions, 'video_view')
-  // Detect campaign type: purchase > link_click > video_view > fallback
-  const conversionType = hasPurchase ? 'purchase'
-    : linkClicks > 0 ? 'link_click'
-    : videoViews > 0 ? 'video_view'
-    : 'link_click'
-  const primaryMetric = hasPurchase ? parseActions(sActionValues, 'purchase')
-    : linkClicks > 0 ? linkClicks
-    : videoViews
-  const conversions = primaryMetric
-  const revenue = primaryMetric
-  // ROAS = interactions per NT$100 (works for purchase, link_click, video_view)
-  const roas = spend > 0 && primaryMetric > 0
-    ? (hasPurchase ? parseFloat((revenue / spend).toFixed(2)) : parseFloat((primaryMetric / spend * 100).toFixed(2)))
-    : 0
-  const cpa = conversions > 0 ? parseFloat((spend / conversions).toFixed(2)) : 0
-
-  const rawDaily: Record<string, unknown>[] = dailyData.data ?? []
-  const daily = rawDaily.map(d => {
-    const daySpend = parseFloat((d.spend as string) ?? '0')
-    const dayActions: MetaAction[] = (d.actions as MetaAction[]) ?? []
-    const dayActionValues: MetaAction[] = (d.action_values as MetaAction[]) ?? []
-    const dayLinkClicks = parseActions(dayActions, 'link_click')
-    const dayVideoViews = parseActions(dayActions, 'video_view')
-    const dayPrimary = hasPurchase ? parseActions(dayActionValues, 'purchase')
-      : linkClicks > 0 ? dayLinkClicks
-      : dayVideoViews
-    return {
-      date: d.date_start as string,
-      spend: daySpend,
-      reach: parseInt((d.reach as string) ?? '0'),
-      impressions: parseInt((d.impressions as string) ?? '0'),
-      clicks: parseInt((d.clicks as string) ?? '0'),
-      ctr: parseFloat((d.ctr as string) ?? '0'),
-      roas: daySpend > 0 && dayPrimary > 0
-        ? (hasPurchase ? parseFloat((dayPrimary / daySpend).toFixed(2)) : parseFloat((dayPrimary / daySpend * 100).toFixed(2)))
-        : 0,
-      conversions: dayPrimary,
-      revenue: dayPrimary,
-    }
-  })
-
-  const rawHourly: Record<string, unknown>[] = hourlyData.data ?? []
-  const hourly = rawHourly.map(h => {
-    const hourSpend = parseFloat((h.spend as string) ?? '0')
-    const hourActions: MetaAction[] = (h.actions as MetaAction[]) ?? []
-    const hourActionValues: MetaAction[] = (h.action_values as MetaAction[]) ?? []
-    const hourLinkClicks = parseActions(hourActions, 'link_click')
-    const hourVideoViews = parseActions(hourActions, 'video_view')
-    const hourPrimary = hasPurchase ? parseActions(hourActionValues, 'purchase')
-      : linkClicks > 0 ? hourLinkClicks
-      : hourVideoViews
-    const hourLabel = (h.hourly_stats_aggregated_by_advertiser_time_zone as string) ?? '0:00 - 1:00'
-    return {
-      hour: parseInt(hourLabel.split(':')[0]),
-      spend: hourSpend,
-      roas: hourSpend > 0 && hourPrimary > 0
-        ? (hasPurchase ? parseFloat((hourPrimary / hourSpend).toFixed(2)) : parseFloat((hourPrimary / hourSpend * 100).toFixed(2)))
-        : 0,
-    }
-  }).sort((a, b) => a.hour - b.hour)
-
-  // Merge ads list with insights: show all ads even if spend=0
-  const insightsByAdId = new Map<string, Record<string, unknown>>()
-  for (const item of (adLevelData.data ?? []) as Record<string, unknown>[]) {
-    if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item)
+  // Page-filtered slice of EVERY visible account — a page's campaigns can span
+  // multiple accounts, and a shared account must never leak other pages' spend.
+  const slices = await Promise.all(accounts.map(async a => ({ accountId: a.id, result: await aggregateAccountForPage(a.id, userAccessToken, pageId, igUserId) })))
+  const okSlices = slices.filter((s): s is { accountId: string; result: Exclude<Awaited<ReturnType<typeof aggregateAccountForPage>>, { error: string }> } => !('error' in s.result))
+  if (okSlices.length === 0) {
+    const firstErr = slices.find(s => 'error' in s.result)
+    return { error: (firstErr?.result as { error: string } | undefined)?.error ?? 'all accounts failed' }
   }
-  const adCreatives: Record<string, unknown>[] = pageAdsList.map(ad =>
-    insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] }
-  )
 
+  const withAds = okSlices.filter(s => s.result.pageAdsList.length > 0)
+  const pageAdsList = withAds.flatMap(s => s.result.pageAdsList)
+  const allDailyRows = withAds.flatMap(s => s.result.dailyRows)
+  const allHourlyRows = withAds.flatMap(s => s.result.hourlyRows)
+  const adPostIds: string[] = pageAdsList.map(ad => (ad.creative?.object_story_id ?? ad.creative?.effective_object_story_id) || ad.creative?.effective_instagram_story_id).filter(Boolean) as string[]
+
+  // Shared aggregation: page-filtered rows → summary/daily/hourly/creatives, in
+  // the exact shapes the dashboards and mergePageAdInsights already consume.
+  const buildAgg = (
+    dailyRows: Record<string, unknown>[], hourlyRows: Record<string, unknown>[],
+    adLevelItems: Record<string, unknown>[], ads: typeof pageAdsList,
+  ) => {
+    const hasPurchase = dailyRows.some(r => hasPurchaseAction((r.actions as MetaAction[]) ?? []))
+    const sumActs = (key: 'actions' | 'action_values', type: string) =>
+      dailyRows.reduce((s, r) => s + parseActions((r[key] as MetaAction[]) ?? [], type), 0)
+    const linkClicks = sumActs('actions', 'link_click')
+    const videoViews = sumActs('actions', 'video_view')
+    const conversionType = hasPurchase ? 'purchase' : linkClicks > 0 ? 'link_click' : videoViews > 0 ? 'video_view' : 'link_click'
+
+    const byDate = new Map<string, { spend: number; reach: number; impressions: number; clicks: number; conversions: number; revenue: number }>()
+    for (const r of dailyRows) {
+      const date = r.date_start as string
+      if (!date) continue
+      const e = byDate.get(date) ?? { spend: 0, reach: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 }
+      e.spend += parseFloat((r.spend as string) ?? '0')
+      e.reach += parseInt((r.reach as string) ?? '0')
+      e.impressions += parseInt((r.impressions as string) ?? '0')
+      e.clicks += parseInt((r.clicks as string) ?? '0')
+      const acts = (r.actions as MetaAction[]) ?? []
+      const actVals = (r.action_values as MetaAction[]) ?? []
+      const dayPrimary = hasPurchase ? parseActions(actVals, 'purchase')
+        : linkClicks > 0 ? parseActions(acts, 'link_click')
+        : parseActions(acts, 'video_view')
+      e.conversions += dayPrimary
+      e.revenue += dayPrimary
+      byDate.set(date, e)
+    }
+    const daily = Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([date, e]) => ({
+      date, spend: e.spend, reach: e.reach, impressions: e.impressions, clicks: e.clicks,
+      ctr: e.impressions > 0 ? parseFloat((e.clicks / e.impressions * 100).toFixed(4)) : 0,
+      roas: e.spend > 0 && e.conversions > 0
+        ? (hasPurchase ? parseFloat((e.revenue / e.spend).toFixed(2)) : parseFloat((e.conversions / e.spend * 100).toFixed(2)))
+        : 0,
+      conversions: e.conversions, revenue: e.revenue,
+    }))
+
+    const spend = daily.reduce((s, d) => s + d.spend, 0)
+    const reach = daily.reduce((s, d) => s + d.reach, 0)
+    const impressions = daily.reduce((s, d) => s + d.impressions, 0)
+    const clicks = daily.reduce((s, d) => s + d.clicks, 0)
+    const conversions = daily.reduce((s, d) => s + d.conversions, 0)
+    const revenue = daily.reduce((s, d) => s + d.revenue, 0)
+    const summaryDoc = {
+      spend, reach, impressions, clicks,
+      ctr: impressions > 0 ? parseFloat((clicks / impressions * 100).toFixed(4)) : 0,
+      cpm: impressions > 0 ? parseFloat((spend / impressions * 1000).toFixed(2)) : 0,
+      frequency: reach > 0 ? parseFloat((impressions / reach).toFixed(2)) : 0,
+      conversions, revenue,
+      roas: spend > 0 && conversions > 0
+        ? (hasPurchase ? parseFloat((revenue / spend).toFixed(2)) : parseFloat((conversions / spend * 100).toFixed(2)))
+        : 0,
+      cpa: conversions > 0 ? parseFloat((spend / conversions).toFixed(2)) : 0,
+      conversionType, linkClicks, videoViews,
+    }
+
+    const byHour = new Map<number, { spend: number; primary: number }>()
+    for (const r of hourlyRows) {
+      const hourLabel = (r.hourly_stats_aggregated_by_advertiser_time_zone as string) ?? '0:00 - 1:00'
+      const hour = parseInt(hourLabel.split(':')[0])
+      const acts = (r.actions as MetaAction[]) ?? []
+      const actVals = (r.action_values as MetaAction[]) ?? []
+      const primary = hasPurchase ? parseActions(actVals, 'purchase')
+        : linkClicks > 0 ? parseActions(acts, 'link_click')
+        : parseActions(acts, 'video_view')
+      const e = byHour.get(hour) ?? { spend: 0, primary: 0 }
+      e.spend += parseFloat((r.spend as string) ?? '0')
+      e.primary += primary
+      byHour.set(hour, e)
+    }
+    const hourly = Array.from(byHour.entries()).sort(([a], [b]) => a - b).map(([hour, e]) => ({
+      hour, spend: e.spend,
+      roas: e.spend > 0 && e.primary > 0
+        ? (hasPurchase ? parseFloat((e.primary / e.spend).toFixed(2)) : parseFloat((e.primary / e.spend * 100).toFixed(2)))
+        : 0,
+    }))
+
+    // Show all page ads even if spend=0 in the window.
+    const insightsByAdId = new Map<string, Record<string, unknown>>()
+    for (const item of adLevelItems) { if (typeof item.ad_id === 'string') insightsByAdId.set(item.ad_id, item) }
+    const adCreatives: Record<string, unknown>[] = ads.map(ad =>
+      insightsByAdId.get(ad.id) ?? { ad_id: ad.id, ad_name: ad.name, spend: '0', impressions: '0', ctr: '0', actions: [], action_values: [] })
+
+    return { summaryDoc, daily, hourly, adCreatives, conversionType, spend, reach, linkClicks, videoViews }
+  }
+
+  const combined = buildAgg(allDailyRows, allHourlyRows, withAds.flatMap(s => s.result.adLevelItems), pageAdsList)
   const userRef = adminDb.collection('users').doc(uid)
-  const dateRange = { from: daily[0]?.date ?? '', to: daily[daily.length - 1]?.date ?? '' }
-  const summaryDoc = { spend, reach, impressions, clicks, ctr, cpm, frequency, conversions, revenue, roas, cpa, conversionType, linkClicks, videoViews }
+  const dateRange = { from: combined.daily[0]?.date ?? '', to: combined.daily[combined.daily.length - 1]?.date ?? '' }
+  const adAccountIdJoined = withAds.map(s => s.accountId).join(',')
 
-  // Existing UID-scoped write (backward compat + fallback)
+  // UID-scoped write (backward compat + fallback) — now page-filtered.
   await userRef.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
     syncedAt: Timestamp.now(),
     dateRange,
-    adAccountId,
-    conversionType,
-    summary: summaryDoc,
-    daily,
-    hourly,
+    adAccountId: adAccountIdJoined,
+    conversionType: combined.conversionType,
+    summary: combined.summaryDoc,
+    daily: combined.daily,
+    hourly: combined.hourly,
     adPostIds,
-    adCreatives,
-    creativeFingerprint: computeCreativeFingerprint(adCreatives),
+    adCreatives: combined.adCreatives,
+    creativeFingerprint: computeCreativeFingerprint(combined.adCreatives),
   }, { merge: true })
 
-  // NEW: shared page-level snapshot (enables cross-admin merged view)
-  await adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').doc(adAccountId).set({
-    adAccountId,
-    contributorUid: uid,
-    syncedAt: Timestamp.now(),
-    dateRange,
-    conversionType,
-    summary: summaryDoc,
-    daily,
-    hourly,
-    adCreatives,
-  }, { merge: true })
+  // Shared per-account snapshots: one page-filtered slice per account. Visible
+  // accounts with NO ads for this page get their snapshot DELETED — self-heals
+  // the zombie docs behind the 2026-07 cross-page contamination.
+  await Promise.all(okSlices.map(async ({ accountId, result }) => {
+    const ref = adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').doc(accountId)
+    if (result.pageAdsList.length === 0) {
+      await ref.delete().catch(() => {})
+      return
+    }
+    const agg = buildAgg(result.dailyRows, result.hourlyRows, result.adLevelItems, result.pageAdsList)
+    await ref.set({
+      adAccountId: accountId,
+      contributorUid: uid,
+      syncedAt: Timestamp.now(),
+      dateRange: { from: agg.daily[0]?.date ?? '', to: agg.daily[agg.daily.length - 1]?.date ?? '' },
+      conversionType: agg.conversionType,
+      summary: agg.summaryDoc,
+      daily: agg.daily,
+      hourly: agg.hourly,
+      adCreatives: agg.adCreatives,
+    })
+  }))
 
-  return { adAccountId, spend, reach, conversionType, linkClicks, videoViews, pageAdsCount: pageAdsList.length }
+  return { adAccountId: adAccountIdJoined, spend: combined.spend, reach: combined.reach, conversionType: combined.conversionType, linkClicks: combined.linkClicks, videoViews: combined.videoViews, pageAdsCount: pageAdsList.length }
 }
 
 // ── Cross-admin Merge ─────────────────────────────────────────────────────────
@@ -483,14 +526,22 @@ async function mergePageAdInsights(pageId: string): Promise<void> {
   const snapsSnap = await adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').get()
   if (snapsSnap.empty) return
 
-  // Dedup by adAccountId: latest syncedAt wins
+  // Dedup by adAccountId: latest syncedAt wins (compare millis — relational
+  // operators on Timestamp objects fall back to string comparison).
+  const tsMillis = (d: FirebaseFirestore.DocumentData) => (d.syncedAt as Timestamp | undefined)?.toMillis?.() ?? 0
   const byAccount = new Map<string, FirebaseFirestore.DocumentData>()
   for (const doc of snapsSnap.docs) {
     const data = doc.data()
     const existing = byAccount.get(data.adAccountId)
-    if (!existing || data.syncedAt > existing.syncedAt) byAccount.set(data.adAccountId, data)
+    if (!existing || tsMillis(data) > tsMillis(existing)) byAccount.set(data.adAccountId, data)
   }
-  const deduped = Array.from(byAccount.values())
+  // Staleness guard: a snapshot no cron refreshed in 14 days is a zombie (its
+  // account is no longer visible to any contributor, or all their tokens broke).
+  // Zombie snapshots caused the 2026-07 cross-page contamination — never merge
+  // them. If EVERYTHING is stale, keep the existing doc rather than wiping it.
+  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000
+  const deduped = Array.from(byAccount.values()).filter(s => tsMillis(s) >= cutoff)
+  if (deduped.length === 0) return
 
   const mergedSummary = mergeSummaries(deduped)
   const mergedDaily = mergeDailyArrays(deduped as { daily?: DayRow[] }[])
