@@ -37,7 +37,16 @@ async function evaluateAndStore(
 
   if (!result.pass && result.judge !== 'none') {
     const retryHint = `${fewShot}\n上一版評分偏低（${result.evalScore}/10），原因：${result.evalReasons.join('；')}。請針對這些點改進後重出。`
-    const retry = await runDiagnosisAgent(items, summary, apiKey, retryHint)
+    // Retry with the tool loop too (evaluator reasons fed back + agent can
+    // re-check the data), but bounded: fewer iterations + 25s cap so the whole
+    // generate→eval→retry→eval chain stays inside the route's 60s budget.
+    // Timeout / failure falls back to the original single-shot haiku retry.
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000))
+    let retry = await Promise.race([
+      runDiagnosisAgentWithTools(pageId, items, summary, apiKey, retryHint, false, 4),
+      timeout,
+    ])
+    if (!retry) retry = await runDiagnosisAgent(items, summary, apiKey, retryHint)
     if (retry) {
       const retryEval = await evaluateOutput({ output: combine(retry), context, goal, kind: 'diagnosis' }, evalKeys)
       if (retryEval.evalScore > result.evalScore) { finalCards = retry; result = retryEval }
@@ -85,7 +94,7 @@ function toolAddendum(en = false): string {
 // only. Multi-step: inspect trend → verify numbers → emit cards. Falls back to
 // null on any failure (caller then tries the single-shot haiku path).
 export async function runDiagnosisAgentWithTools(
-  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false,
+  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false, maxIterations = 6,
 ): Promise<AiDiagCard[] | null> {
   try {
     const anthropic = new Anthropic({ apiKey })
@@ -93,7 +102,7 @@ export async function runDiagnosisAgentWithTools(
     const final = await anthropic.beta.messages.toolRunner({
       model: 'claude-sonnet-4-6',
       max_tokens: 2400,
-      max_iterations: 6,
+      max_iterations: maxIterations,
       system: [{ type: 'text', text: agentSystemPrompt(en) + '\n' + toolAddendum(en), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: `pageId: ${pageId}\n${agentUserMessage(items, summary, fewShot)}` }],
       tools,

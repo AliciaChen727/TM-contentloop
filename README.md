@@ -159,6 +159,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-12 | 診斷卡低分重試升級 tool loop：evaluator 扣分理由回灌 + agent 重查數據（sonnet，4 輪上限＋25s timeout，超時退回 haiku 單發）；另 AI Bug 回報獨立成頁 `/dashboard/admin/bugs`（頭像選單入口，super-admin）＋ AI 修復 PR 流程定案「分支拉 localhost 驗收 → 人工 merge → Vercel」（見 memory `feedback_deploy_flow`） | (本 commit) |
 | 2026-07-12 | **Phase 3B Slice 19 — AI Bug 修復 agent（Phase 3B 完結）**：`bug-fix-agent.yml`（人工 workflow_dispatch 觸發）＋ `scripts/bug-fix-agent.mjs`（Claude Agent SDK）。agent 只改檔案，branch/commit/PR 由 workflow 執行；保護路徑防護、CI tsc+eslint、Vercel preview 三道驗證；無 merge 權限（雙重 HITL）。需 Actions secret `ANTHROPIC_API_KEY` | (本 commit) |
 | 2026-07-12 | **Phase 3B Slice 18 — Bug 回報 pipeline**：`lib/bugs/bugReporter.ts`（haiku 分類 → `bugReports` 冪等 → 鈴鐺通知 super-admin → GitHub Issue，env `GITHUB_BUG_TOKEN`）；偵測點＝cron 殭屍快照（critical）、Sidekick 工具 guard、publishRunner 發布失敗。只回報不自動修；修復待 Slice 19（雙重 HITL）。E2E 驗證含 Issue 開立 | (本 commit) |
 | 2026-07-12 | **Phase 3B Slices 16–17 + cron 跨頁污染根治**：(1) Sidekick 接 Tool Runner（查 Firestore、`compare_pages` 跨粉專比較、當前粉專範圍鐵則、貼文用內容+連結描述）；(2) `/dashboard/compare` 跨粉專總覽（admin-only：廣告表格＋全域日期篩選＋粉專多選＋素材趨勢圖＋廣告受眾＋IG 粉絲樣貌＋貼文比較），內容儀表板加 IG 粉絲樣貌卡；(3) cron 廣告 snapshot 改頁過濾聚合（修 Legacy/D67 花費互相污染，詳 memory `project_cron_ads_page_filter`）＋ manual sync shared 寫入改任何頁匹配素材即寫（已結束戰役的趨勢/受眾才進得了共享快照）＋ cron 新增 IG `follower_demographics` 每日同步 | (本 commit) |
