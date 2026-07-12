@@ -17,9 +17,31 @@ function snippet(s: string): string {
   return clean.length > SNIPPET ? `${clean.slice(0, SNIPPET)}…` : clean
 }
 
+// Verified AI copy (Slice 20): drafts the human approved + published AND whose
+// post beat the page's 7-day engagement baseline (recommendToFewShot, set by
+// the daily eval-rescore batch). Highest-quality style signal → gets priority
+// over raw engagement ranking below.
+async function fetchVerifiedDraftExamples(pageId: string, limit: number): Promise<string[]> {
+  try {
+    const snap = await adminDb.collection('pages').doc(pageId).collection('sidekickFeedback')
+      .orderBy('createdAt', 'desc').limit(100).get()
+    return snap.docs
+      .map(d => d.data())
+      .filter(d => d.source === 'draft' && d.recommendToFewShot === true && d.adoptedText)
+      .slice(0, limit)
+      .map(d => snippet(String(d.adoptedText)))
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 export async function fetchTopPostExamples(pageId: string, limit = 4): Promise<string[]> {
   const ownerUid = await resolvePageOwnerUid(pageId)
   if (!ownerUid) return []
+  // Quality-weighted few-shot: verified AI copy first, engagement-ranked page
+  // history fills the remaining slots (deduped by snippet).
+  const verified = await fetchVerifiedDraftExamples(pageId, limit)
   const pageRef = adminDb.collection('users').doc(ownerUid).collection('pages').doc(pageId)
 
   const [fbSnap, igSnap] = await Promise.all([
@@ -43,9 +65,10 @@ export async function fetchTopPostExamples(pageId: string, limit = 4): Promise<s
     examples.push({ text, platform: 'IG', score: (i.likes ?? 0) + (i.comments ?? 0) + (i.shares ?? 0) + (i.saved ?? 0) })
   }
 
-  return examples
+  const bySeen = new Set(verified)
+  const history = examples
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
     .map(e => snippet(e.text))
-    .filter(Boolean)
+    .filter(t => t && !bySeen.has(t))
+  return [...verified, ...history].slice(0, limit)
 }

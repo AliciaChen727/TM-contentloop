@@ -14,6 +14,7 @@ import { recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
 import type { ContentDraft, DraftTarget } from '@/lib/content/draftTypes'
 import { resolvePublishTagging } from '@/lib/tagging/server'
 import { reportBug } from '@/lib/bugs/bugReporter'
+import { writeFeedback } from '@/lib/sidekick/feedbackStore'
 
 async function getMetaCreds(pageId: string): Promise<{ accessToken?: string; igUserId?: string }> {
   const owner = await resolvePageOwnerUid(pageId)
@@ -148,6 +149,26 @@ export async function runPublish(
     if (storyId !== undefined) auditData.storyId = storyId
     Object.assign(auditData, storyAudit)
     await writeAudit(pageId, draft.id, `publish:${platform}`, byUid, auditData)
+    // Draft copy learning loop (Slice 20): a human-approved publish is the
+    // strongest adoption signal. Record the final copy + postId so the daily
+    // batch can score its 7-day performance vs the page baseline and feed
+    // proven copy back into caption few-shot. Per-draft/platform idempotent.
+    {
+      const publishedText = platform === 'th' ? (g.perPlatform.th?.body ?? '') : composeText(g.perPlatform[platform])
+      if (publishedText.trim()) {
+        writeFeedback(pageId, {
+          source: 'draft',
+          alertType: `draft_${platform}`,
+          platform,
+          postId: result.postId,
+          output: publishedText,
+          adoptedText: publishedText,
+          context: `AI 草稿發布（${platform}）draft=${draft.id}`,
+          humanAction: 'adopted',
+          byUid,
+        }, `draft__${draft.id}__${platform}`).catch(() => {})
+      }
+    }
     return { ok: true, postId: result.postId, storyId, storyNote }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unexpected publish error'

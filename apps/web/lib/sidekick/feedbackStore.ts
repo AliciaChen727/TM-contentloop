@@ -9,7 +9,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 export type HumanAction = 'adopted' | 'edited' | 'rejected'
 
 export interface FeedbackInput {
-  source: 'sidekick' | 'diagnosis' | 'creative'
+  source: 'sidekick' | 'diagnosis' | 'creative' | 'draft'  // draft = AI 草稿發布（Slice 20）
   goal?: string | null          // optimizationGoal
   // Creative (image-gen) intent signal: 'canva_import' (took into Canva) /
   // 'download'. Weaker than adopted — weighted by signalWeight in retrieval.
@@ -38,6 +38,9 @@ export interface FeedbackInput {
   cardWhy0?: string | null
   byUid?: string | null
   embedding?: number[] | null   // semantic vector (sidekick) for similarity retrieval
+  // Draft copy loop (Slice 20): the published post to track for 7-day effect.
+  postId?: string | null
+  platform?: string | null      // 'fb' | 'ig' | 'th'
 }
 
 // Write/merge a feedback record. When `docId` is given it upserts (preserves
@@ -73,6 +76,8 @@ export async function writeFeedback(pageId: string, input: FeedbackInput, docId?
   if (input.cardWhy0 !== undefined) payload.cardWhy0 = input.cardWhy0 ?? null
   if (input.adoptedText !== undefined) payload.adoptedText = input.adoptedText ? input.adoptedText.slice(0, 2000) : null
   if (input.byUid !== undefined) payload.byUid = input.byUid ?? null
+  if (input.postId !== undefined) payload.postId = input.postId ?? null
+  if (input.platform !== undefined) payload.platform = input.platform ?? null
   if (input.embedding !== undefined) payload.embedding = input.embedding ?? null
   if (docId) {
     const ref = col.doc(docId)

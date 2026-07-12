@@ -27,6 +27,46 @@ import { patchFeedbackEval } from '@/lib/sidekick/feedbackStore'
 const SEVEN_DAYS = 7 * 864e5
 const norm10 = (v: unknown) => (typeof v === 'number' ? (v <= 5 ? v * 2 : v) : 0)
 
+// Draft copy loop (Slice 20): the published post's 7-day organic performance vs
+// the page's recent-post baseline (same platform). ratio >= 1.2 → the copy is
+// verified effective and becomes caption few-shot. Returns null when the post
+// can't be found (deleted / unsupported platform) → marked inconclusive.
+async function computeDraftPostEffect(
+  ownerUid: string, pageId: string, platform: string, postId: string,
+): Promise<{ engagement: number; reach: number; baselineEngagement: number; baselineReach: number; engagementRatio: number; reachRatio: number } | null> {
+  const pageRef = adminDb.collection('users').doc(ownerUid).collection('pages').doc(pageId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eng = (i: any, fb: boolean) => fb
+    ? (i?.reactions ?? 0) + (i?.comments ?? 0) + (i?.shares ?? 0)
+    : (i?.likes ?? 0) + (i?.comments ?? 0) + (i?.saved ?? 0) + (i?.shares ?? 0)
+  if (platform !== 'fb' && platform !== 'ig') return null
+  const col = platform === 'fb' ? 'fbPosts' : 'igPosts'
+  const orderField = platform === 'fb' ? 'createdTime' : 'timestamp'
+  // FB publish may return short or full ({pageId}_{postId}) ids — try both.
+  const ids = platform === 'fb' ? [postId, `${pageId}_${postId}`] : [postId]
+  let post: FirebaseFirestore.DocumentData | null = null
+  for (const id of ids) {
+    const doc = await pageRef.collection(col).doc(id).get()
+    if (doc.exists) { post = doc.data() ?? null; break }
+  }
+  if (!post) return null
+  const snap = await pageRef.collection(col).orderBy(orderField, 'desc').limit(21).get()
+  const others = snap.docs.filter(d => !ids.includes(d.id))
+  const avg = (f: (i: FirebaseFirestore.DocumentData) => number) =>
+    others.length ? others.reduce((s, d) => s + f(d.data().insights ?? {}), 0) / others.length : 0
+  const baselineEngagement = avg(i => eng(i, platform === 'fb'))
+  const baselineReach = avg(i => Number(i?.reach) || 0)
+  const engagement = eng(post.insights, platform === 'fb')
+  const reach = Number(post.insights?.reach) || 0
+  return {
+    engagement, reach,
+    baselineEngagement: Number(baselineEngagement.toFixed(1)),
+    baselineReach: Number(baselineReach.toFixed(1)),
+    engagementRatio: Number(((engagement + 1) / (baselineEngagement + 1)).toFixed(2)),
+    reachRatio: Number(((reach + 1) / (baselineReach + 1)).toFixed(2)),
+  }
+}
+
 interface Metrics { ctr: number; cpc: number; roas: number }
 const toMetrics = (s: Record<string, unknown> = {}): Metrics => ({
   ctr: Number(s.ctr) || 0, cpc: Number(s.cpa ?? s.cpc) || 0, roas: Number(s.roas) || 0,
@@ -44,7 +84,7 @@ export async function POST(req: NextRequest) {
   }
 
   const now = Date.now()
-  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0, specificDetected = 0, inconclusive = 0
+  let pagesProcessed = 0, scored = 0, effectComputed = 0, executedDetected = 0, specificDetected = 0, inconclusive = 0, draftEffects = 0
 
   const pages = await adminDb.collection('pages').get()
   for (const page of pages.docs) {
@@ -68,6 +108,31 @@ export async function POST(req: NextRequest) {
       // Process docs with a humanAction, plus reverted ones (reopened → null action)
       // so the regret rate still counts them.
       if (!humanAction && d.reverted !== true) continue
+
+      // Draft copy records (Slice 20) learn from human + data signals only —
+      // no LLM judge, no qualityStats. Compute the 7-day post effect once,
+      // set recommendToFewShot when clearly above the page baseline, done.
+      if (d.source === 'draft') {
+        const draftAdoptedMs = d.adoptedAt?.toMillis?.() ?? null
+        if (d.postId && draftAdoptedMs && (now - draftAdoptedMs) >= SEVEN_DAYS && !d.effectScored) {
+          const ownerUid = await import('@/lib/auth/superadmin').then(m => m.resolvePageOwnerUid(pageId)).catch(() => null)
+          const eff = ownerUid
+            ? await computeDraftPostEffect(ownerUid, pageId, String(d.platform ?? ''), String(d.postId)).catch(() => null)
+            : null
+          await fbCol.doc(doc.id).set({
+            effectScored: true,
+            effectCheckedAt: FieldValue.serverTimestamp(),
+            ...(eff
+              // Verified effective = beats the page's own baseline by 20% on
+              // EITHER engagement or reach. (Note: boosted posts inflate reach —
+              // acceptable for now since boosting is itself an adoption signal.)
+              ? { postEffect: eff, recommendToFewShot: eff.engagementRatio >= 1.2 || eff.reachRatio >= 1.2 }
+              : { effectInconclusive: true, effectInconclusiveReason: 'post_not_found_or_unsupported' }),
+          }, { merge: true })
+          draftEffects++
+        }
+        continue
+      }
 
       // 0) Execution detection (Slice E): an adopted card counts as EXECUTED only
       // when the creative set actually changed since adoption (fingerprint diff) —
@@ -193,5 +258,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected, specificDetected, inconclusive })
+  return NextResponse.json({ ok: true, pagesProcessed, scored, effectComputed, executedDetected, specificDetected, inconclusive, draftEffects })
 }

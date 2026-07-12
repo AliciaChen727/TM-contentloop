@@ -159,6 +159,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-12 | **Slice 20 — 發文文案學習迴圈**：AI 文案發布=採納訊號（publishRunner→sidekickFeedback）；每日 cron 7 天後比對貼文互動＋觸及 vs 同粉專近 20 篇基準（任一 ≥1.2× 即驗證有效）；草稿文案 few-shot 升級品質加權（驗證有效的 AI 文案優先）。純人類＋數據訊號、不經 LLM 評審 | (本 commit) |
 | 2026-07-12 | 診斷卡低分重試升級 tool loop：evaluator 扣分理由回灌 + agent 重查數據（sonnet，4 輪上限＋25s timeout，超時退回 haiku 單發）；另 AI Bug 回報獨立成頁 `/dashboard/admin/bugs`（頭像選單入口，super-admin）＋ AI 修復 PR 流程定案「分支拉 localhost 驗收 → 人工 merge → Vercel」（見 memory `feedback_deploy_flow`） | (本 commit) |
 | 2026-07-12 | **Phase 3B Slice 19 — AI Bug 修復 agent（Phase 3B 完結）**：`bug-fix-agent.yml`（人工 workflow_dispatch 觸發）＋ `scripts/bug-fix-agent.mjs`（Claude Agent SDK）。agent 只改檔案，branch/commit/PR 由 workflow 執行；保護路徑防護、CI tsc+eslint、Vercel preview 三道驗證；無 merge 權限（雙重 HITL）。需 Actions secret `ANTHROPIC_API_KEY` | (本 commit) |
 | 2026-07-12 | **Phase 3B Slice 18 — Bug 回報 pipeline**：`lib/bugs/bugReporter.ts`（haiku 分類 → `bugReports` 冪等 → 鈴鐺通知 super-admin → GitHub Issue，env `GITHUB_BUG_TOKEN`）；偵測點＝cron 殭屍快照（critical）、Sidekick 工具 guard、publishRunner 發布失敗。只回報不自動修；修復待 Slice 19（雙重 HITL）。E2E 驗證含 Issue 開立 | (本 commit) |
