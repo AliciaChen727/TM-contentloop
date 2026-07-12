@@ -1,0 +1,145 @@
+// Phase 3B Slice 18 — bug 回報 pipeline core.
+// Agents/crons call reportBug() when they detect something broken (tool
+// execution error, data inconsistency, publish anomaly). Flow:
+//   bugReports/{id} (per-day idempotent) → bell notification to super-admins
+//   → GitHub Issue (for the Slice 19 fix agent; needs GITHUB_BUG_TOKEN).
+// REPORT ONLY — nothing here ever attempts a fix (human gate first, per plan).
+
+import { createHash } from 'crypto'
+import Anthropic from '@anthropic-ai/sdk'
+import { adminDb } from '@/lib/firebase/admin'
+import { FieldValue } from 'firebase-admin/firestore'
+import { writeInAppNotification } from '@/lib/notifications/store'
+
+export type BugSeverity = 'critical' | 'warning' | 'info'
+
+export interface BugReportInput {
+  source: string                          // e.g. 'cron_sync' | 'sidekick_tool' | 'publish'
+  title: string                           // short, stable (used in dedupe fingerprint)
+  detail: string                          // what happened / raw error
+  context?: Record<string, unknown>       // pageId, ids, numbers — JSON-serializable
+  severity?: BugSeverity                  // omit → haiku classifies (fallback 'warning')
+}
+
+const REPO = process.env.GITHUB_BUG_REPO ?? 'AliciaChen727/TM-contentloop'
+
+// One cheap haiku call: severity + one-line zh summary. Best-effort — any
+// failure falls back to heuristics so reporting never blocks the caller.
+async function classify(input: BugReportInput): Promise<{ severity: BugSeverity; summary: string }> {
+  const fallback = { severity: 'warning' as BugSeverity, summary: input.title }
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) return fallback
+  try {
+    const res = await new Anthropic({ apiKey: key }).messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: '你是工程告警分類器。依據 bug 描述回傳嚴格 JSON：{"severity":"critical|warning|info","summary":"一句繁中摘要（<40字，寫給非工程師的產品負責人看）"}。critical=資料錯誤/洩漏/發布失敗；warning=功能退化但有 fallback；info=可觀察即可。只輸出 JSON。',
+      messages: [{ role: 'user', content: `來源：${input.source}\n標題：${input.title}\n細節：${input.detail.slice(0, 800)}\ncontext：${JSON.stringify(input.context ?? {}).slice(0, 500)}` }],
+    })
+    const raw = res.content[0]?.type === 'text' ? res.content[0].text : ''
+    const m = raw.match(/\{[\s\S]*\}/)
+    if (!m) return fallback
+    const parsed = JSON.parse(m[0]) as { severity?: string; summary?: string }
+    const severity: BugSeverity = parsed.severity === 'critical' || parsed.severity === 'info' ? parsed.severity : 'warning'
+    return { severity, summary: parsed.summary?.slice(0, 120) || input.title }
+  } catch {
+    return fallback
+  }
+}
+
+async function createGithubIssue(input: BugReportInput, severity: BugSeverity, summary: string): Promise<string | null> {
+  const token = process.env.GITHUB_BUG_TOKEN
+  if (!token) return null
+  try {
+    const body = [
+      `> 🤖 由 ContentLoop bug 回報 pipeline 自動建立（Slice 18）。`,
+      `> **修復需經人工核准**：Slice 19 的修復 agent 只會在人工觸發後開 PR，絕不直接改動。`,
+      '',
+      `**嚴重度**：${severity}`,
+      `**來源**：\`${input.source}\``,
+      `**摘要**：${summary}`,
+      '',
+      '## 細節',
+      '```',
+      input.detail.slice(0, 3000),
+      '```',
+      '',
+      '## Context',
+      '```json',
+      JSON.stringify(input.context ?? {}, null, 2).slice(0, 2000),
+      '```',
+    ].join('\n')
+    const res = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title: `[AI] ${input.title}`, body, labels: ['bug', 'ai-reported'] }),
+    })
+    if (!res.ok) return null
+    const j = await res.json()
+    return typeof j.html_url === 'string' ? j.html_url : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Report a bug. Per-day idempotent on (source + title): repeats the same day
+ * just bump `count` — no duplicate notifications / issues. Never throws.
+ */
+export async function reportBug(input: BugReportInput): Promise<{ id: string; deduped: boolean }> {
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const fp = createHash('sha1').update(`${input.source}|${input.title}`).digest('hex').slice(0, 12)
+  const id = `bug__${fp}__${dateStr}`
+  try {
+    const ref = adminDb.collection('bugReports').doc(id)
+    const existing = await ref.get()
+    if (existing.exists) {
+      await ref.set({ count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp(), lastDetail: input.detail.slice(0, 2000) }, { merge: true })
+      return { id, deduped: true }
+    }
+
+    const { severity, summary } = input.severity
+      ? { severity: input.severity, summary: input.title }
+      : await classify(input)
+    const issueUrl = await createGithubIssue(input, severity, summary)
+
+    await ref.set({
+      source: input.source,
+      title: input.title,
+      summary,
+      detail: input.detail.slice(0, 4000),
+      context: JSON.parse(JSON.stringify(input.context ?? {})),
+      severity,
+      status: 'open',                    // open → acknowledged → fixing → closed
+      githubIssueUrl: issueUrl,
+      count: 1,
+      dateStr,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    // Bell notification to super-admins (product owner). Reuses the Phase 2
+    // notification center; per-day idempotent via the same doc-id scheme.
+    const superAdmins = (process.env.SUPER_ADMIN_UIDS ?? '').split(',').map(s => s.trim()).filter(Boolean)
+    const sevEmoji = severity === 'critical' ? '🚨' : severity === 'warning' ? '⚠️' : 'ℹ️'
+    await writeInAppNotification(superAdmins, {
+      type: 'system',
+      pageId: `bug-${fp}`,
+      pageName: 'AI Bug 回報',
+      title: `${sevEmoji} ${summary}`,
+      body: `${input.source}：${input.detail.slice(0, 300)}`,
+      advice: issueUrl ? `GitHub Issue 已建立，確認後可觸發 AI 修復（開 PR，需你 review）` : '（未設定 GITHUB_BUG_TOKEN，未開 Issue）',
+      alertKeys: [id],
+      deepLink: issueUrl ?? '/dashboard',
+      dateStr,
+    }).catch(() => {})
+
+    return { id, deduped: false }
+  } catch {
+    return { id, deduped: false }
+  }
+}

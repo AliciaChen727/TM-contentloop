@@ -8,6 +8,7 @@ import { syncIgStories } from '@/lib/meta/igStories'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 import { computeCreativeFingerprint } from '@/lib/ads/creativeFingerprint'
 import { syncThreadsForPage } from '@/lib/threads/sync'
+import { reportBug } from '@/lib/bugs/bugReporter'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -692,6 +693,28 @@ export async function POST(req: NextRequest) {
     }
 
     await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
+
+    // Bug detector (Slice 18): zombie shared snapshots. A freshly-merged doc
+    // whose daily range starts >45 days ago means stale per-account snapshots
+    // are being re-merged — the exact failure mode of the 2026-07 cross-page
+    // contamination. Report only; never auto-fix.
+    await Promise.all(Array.from(pageIdsToMerge).map(async (pid) => {
+      try {
+        const d = (await adminDb.collection('pages').doc(pid).collection('adInsights').doc('latest').get()).data()
+        const fromStr = d?.dateRange?.from as string | undefined
+        if (!fromStr) return
+        const ageDays = (Date.now() - new Date(fromStr).getTime()) / 864e5
+        if (ageDays > 45) {
+          await reportBug({
+            source: 'cron_sync',
+            title: `粉專 ${pid} 快照日期區間異常（殭屍資料）`,
+            detail: `每日 cron 剛重建的共享快照，daily 起始日卻是 ${fromStr}（${Math.round(ageDays)} 天前）。last_30d 視窗不可能產生這個日期 → 有過期的 adAccountSnapshots 又被合併進來，可能再次發生跨頁污染。`,
+            context: { pageId: pid, dateRange: d?.dateRange ?? null, spend: d?.summary?.spend ?? null },
+            severity: 'critical',
+          })
+        }
+      } catch { /* detector is best-effort */ }
+    }))
 
     // Threads (separate OAuth/token) — sync every connected page's Threads too.
     let threadsSynced = 0

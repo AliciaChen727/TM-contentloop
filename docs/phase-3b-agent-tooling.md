@@ -72,7 +72,7 @@ Agent SDK：讀 issue → 改 code → tsc/eslint/build 三關 → 開 PR（無 
 - [x] **Slice 17** — 「跨粉專總覽」`/dashboard/compare`（admin-only，功能選單入口）：廣告表格＋全域日期篩選（30/90/自訂，套用表格與趨勢與貼文）＋粉專多選 chips＋素材趨勢圖（圖例：柱=花費/線=CTR）＋廣告受眾＋**IG 粉絲樣貌**（`follower_demographics`，cron 每日寫 `igFollowerDemographics`）＋貼文比較；內容儀表板加 `IgAudienceCard`（成效趨勢下方，`/api/pages/ig-audience` 逐頁驗權）。
   - 附帶修復：cron 跨頁污染（見 memory `project_cron_ads_page_filter`）；manual sync shared 寫入原以「有 ACTIVE 素材」為條件 → 已結束戰役的趨勢/受眾永遠進不了共享快照，改為任何頁匹配素材即寫。
   - 已知限制：Meta 無「貼文層」受眾 API；FB 粉專年齡性別分佈已被 Meta 移除 → 自然受眾以 IG 帳號層為準。
-- [ ] **Slice 18** — Bug 回報 pipeline（捕捉 → `bugReports` → 通知 → GitHub Issue）。首個範例案例＝本次 cron 跨頁污染（三層快照不一致即可自動偵測的訊號）。
+- [x] **Slice 18** — Bug 回報 pipeline：`lib/bugs/bugReporter.ts`（`reportBug()`：haiku 分類嚴重度＋繁中摘要 → `bugReports/{id}` 同日冪等 → 鈴鐺通知 super-admin → GitHub Issue，需 env `GITHUB_BUG_TOKEN`／repo 由 `GITHUB_BUG_REPO` 覆寫）。偵測點：① cron 殭屍快照（合併後 dateRange 起點 >45 天 = 跨頁污染訊號，critical）② Sidekick 四工具 guard（未預期錯誤→回報＋優雅 tool error）③ publishRunner 發布失敗/例外。**只回報、絕不自動修**。E2E 已驗證（含 Issue #28 開立/關閉）。
 - [ ] **Slice 19** — Bug 修復 agent（GitHub Actions + Agent SDK + PR flow，雙重 HITL）。
 
 ## 6. 開放問題

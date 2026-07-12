@@ -13,6 +13,7 @@ import { publishToInstagram, publishIgStory } from '@/lib/meta/publishIg'
 import { recordPublishOutcome, writeAudit } from '@/lib/content/draftStore'
 import type { ContentDraft, DraftTarget } from '@/lib/content/draftTypes'
 import { resolvePublishTagging } from '@/lib/tagging/server'
+import { reportBug } from '@/lib/bugs/bugReporter'
 
 async function getMetaCreds(pageId: string): Promise<{ accessToken?: string; igUserId?: string }> {
   const owner = await resolvePageOwnerUid(pageId)
@@ -128,6 +129,14 @@ export async function runPublish(
     if (!result.ok) {
       await recordPublishOutcome(pageId, draft.id, platform, { error: result.error })
       await writeAudit(pageId, draft.id, `publish:${platform}:failed`, byUid, { error: result.error })
+      // Slice 18: publish failures are bug reports (per-day deduped) — the
+      // operator gets a bell notification without watching audit logs.
+      reportBug({
+        source: 'publish',
+        title: `${platform} 發布失敗`,
+        detail: String(result.error ?? 'unknown'),
+        context: { pageId, draftId: draft.id, platform },
+      }).catch(() => {})
       return { ok: false, error: result.error }
     }
     // Firestore rejects `undefined` values — only include fields that are defined.
@@ -144,6 +153,12 @@ export async function runPublish(
     const msg = e instanceof Error ? e.message : 'unexpected publish error'
     await recordPublishOutcome(pageId, draft.id, platform, { error: msg }).catch(() => {})
     await writeAudit(pageId, draft.id, `publish:${platform}:error`, byUid, { error: msg }).catch(() => {})
+    reportBug({
+      source: 'publish',
+      title: `${platform} 發布例外`,
+      detail: msg,
+      context: { pageId, draftId: draft.id, platform },
+    }).catch(() => {})
     return { ok: false, error: msg }
   }
 }

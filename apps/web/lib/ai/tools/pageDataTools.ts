@@ -7,6 +7,25 @@
 import { betaTool } from '@anthropic-ai/sdk/helpers/beta/json-schema'
 import { adminDb } from '@/lib/firebase/admin'
 import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
+import { reportBug } from '@/lib/bugs/bugReporter'
+
+// Slice 18: unexpected tool failures become bug reports (fire-and-forget) and
+// a graceful tool error to the model — never an unhandled throw into the loop.
+function guard<A>(name: string, fn: (args: A) => Promise<string>): (args: A) => Promise<string> {
+  return async (args: A) => {
+    try {
+      return await fn(args)
+    } catch (e) {
+      reportBug({
+        source: 'sidekick_tool',
+        title: `Sidekick 工具 ${name} 執行失敗`,
+        detail: e instanceof Error ? `${e.message}\n${e.stack?.slice(0, 600) ?? ''}` : String(e),
+        context: { tool: name, args: args as unknown as Record<string, unknown> },
+      }).catch(() => {})
+      return 'ERROR: 查詢失敗，請稍後再試或改用其他工具。'
+    }
+  }
+}
 
 export interface ToolContext {
   // Resolved server-side from the caller's identity (admins/viewerAccess) or
@@ -52,7 +71,7 @@ export function buildPageDataTools(ctx: ToolContext) {
       required: ['pageId'],
       additionalProperties: false,
     } as const,
-    run: async ({ pageId }) => {
+    run: guard('get_ad_insights', async ({ pageId }) => {
       if (!isAllowed(ctx, pageId)) return DENIED
       const snap = (await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').get()).data()
       if (!snap) return 'ERROR: 此粉專沒有廣告快照資料。'
@@ -108,7 +127,7 @@ export function buildPageDataTools(ctx: ToolContext) {
         promotedIgPosts: toRows(snap.igPostMetrics),
         diagnosisCounts: snap.diagnosisCounts ?? null,
       })
-    },
+    }),
   })
 
   const getPosts = betaTool({
@@ -125,7 +144,7 @@ export function buildPageDataTools(ctx: ToolContext) {
       required: ['pageId', 'platform'],
       additionalProperties: false,
     } as const,
-    run: async ({ pageId, platform, limit }) => {
+    run: guard('get_posts', async ({ pageId, platform, limit }) => {
       if (!isAllowed(ctx, pageId)) return DENIED
       const ownerUid = await resolvePageOwnerUid(pageId)
       if (!ownerUid) return 'ERROR: 找不到此粉專的資料擁有者。'
@@ -149,7 +168,7 @@ export function buildPageDataTools(ctx: ToolContext) {
         date: toDateStr(d.timestamp), text: String(d.caption ?? '').slice(0, 120), url: String(d.permalink ?? ''), mediaType: d.mediaType ?? '',
         reach: ins.reach ?? null, likes: ins.likes ?? 0, comments: ins.comments ?? 0, saves: ins.saved ?? 0, shares: ins.shares ?? 0,
       } }))
-    },
+    }),
   })
 
   const getFeedbackMemory = betaTool({
@@ -166,7 +185,7 @@ export function buildPageDataTools(ctx: ToolContext) {
       required: ['pageId'],
       additionalProperties: false,
     } as const,
-    run: async ({ pageId, source, limit }) => {
+    run: guard('get_feedback_memory', async ({ pageId, source, limit }) => {
       if (!isAllowed(ctx, pageId)) return DENIED
       const n = Math.min(Math.max(Math.round(limit ?? 8), 1), 15)
       // Recent-first fetch + in-memory source filter — same pattern as
@@ -184,7 +203,7 @@ export function buildPageDataTools(ctx: ToolContext) {
         .filter((r) => r.text)
         .slice(0, n)
       return j(rows)
-    },
+    }),
   })
 
   const comparePages = betaTool({
@@ -205,7 +224,7 @@ export function buildPageDataTools(ctx: ToolContext) {
       required: ['pageIds'],
       additionalProperties: false,
     } as const,
-    run: async ({ pageIds }) => {
+    run: guard('compare_pages', async ({ pageIds }) => {
       const denied = pageIds.filter((p) => !isAllowed(ctx, p))
       if (denied.length > 0) return DENIED
       const rows = await Promise.all(pageIds.map(async (pid) => {
@@ -245,7 +264,7 @@ export function buildPageDataTools(ctx: ToolContext) {
         }
       }))
       return j({ note: 'summary=近30天（0=近期沒投放，非異常）；歷史/90日比較用 promoted90d；提及貼文用 text+url，不念 ID。', pages: rows })
-    },
+    }),
   })
 
   // compare_pages only makes sense with 2+ authorized pages (schema minItems: 2).
