@@ -643,7 +643,10 @@ export async function POST(req: NextRequest) {
     const pageIdsToMerge = new Set<string>()
     for (const r of results) {
       const ads = r.ads as { adAccountId?: string; error?: string }
-      if (r.pageId && ads.adAccountId) pageIdsToMerge.add(r.pageId as string)
+      // Merge on every SUCCESSFUL ads sync — including pageAdsCount 0 runs
+      // (adAccountId ''), which must reach the empty-collection zero-write so
+      // stale contaminated shared docs get cleared. Failed syncs stay excluded.
+      if (r.pageId && !ads.error) pageIdsToMerge.add(r.pageId as string)
     }
 
     await Promise.all(Array.from(pageIdsToMerge).map(pid => mergePageAdInsights(pid)))
