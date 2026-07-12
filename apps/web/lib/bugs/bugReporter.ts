@@ -53,7 +53,7 @@ async function createGithubIssue(input: BugReportInput, severity: BugSeverity, s
   try {
     const body = [
       `> 🤖 由 ContentLoop bug 回報 pipeline 自動建立（Slice 18）。`,
-      `> **修復需經人工核准**：Slice 19 的修復 agent 只會在人工觸發後開 PR，絕不直接改動。`,
+      `> **修復需經人工核准**：確認要修的話，到 [Actions → AI Bug Fix Agent](https://github.com/${REPO}/actions/workflows/bug-fix-agent.yml) 按 Run workflow、輸入本 Issue 編號 — agent 只會開 PR（無 merge 權限），review 後才 merge。`,
       '',
       `**嚴重度**：${severity}`,
       `**來源**：\`${input.source}\``,
@@ -132,7 +132,9 @@ export async function reportBug(input: BugReportInput): Promise<{ id: string; de
       pageName: 'AI Bug 回報',
       title: `${sevEmoji} ${summary}`,
       body: `${input.source}：${input.detail.slice(0, 300)}`,
-      advice: issueUrl ? `GitHub Issue 已建立，確認後可觸發 AI 修復（開 PR，需你 review）` : '（未設定 GITHUB_BUG_TOKEN，未開 Issue）',
+      advice: issueUrl
+        ? 'GitHub Issue 已建立。要修的話：GitHub → Actions → AI Bug Fix Agent → Run workflow（輸入 Issue 編號）→ agent 開 PR → 你 review 後 merge。'
+        : '（未設定 GITHUB_BUG_TOKEN，未開 Issue）',
       alertKeys: [id],
       deepLink: issueUrl ?? '/dashboard',
       dateStr,

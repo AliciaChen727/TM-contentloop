@@ -73,7 +73,7 @@ Agent SDK：讀 issue → 改 code → tsc/eslint/build 三關 → 開 PR（無 
   - 附帶修復：cron 跨頁污染（見 memory `project_cron_ads_page_filter`）；manual sync shared 寫入原以「有 ACTIVE 素材」為條件 → 已結束戰役的趨勢/受眾永遠進不了共享快照，改為任何頁匹配素材即寫。
   - 已知限制：Meta 無「貼文層」受眾 API；FB 粉專年齡性別分佈已被 Meta 移除 → 自然受眾以 IG 帳號層為準。
 - [x] **Slice 18** — Bug 回報 pipeline：`lib/bugs/bugReporter.ts`（`reportBug()`：haiku 分類嚴重度＋繁中摘要 → `bugReports/{id}` 同日冪等 → 鈴鐺通知 super-admin → GitHub Issue，需 env `GITHUB_BUG_TOKEN`／repo 由 `GITHUB_BUG_REPO` 覆寫）。偵測點：① cron 殭屍快照（合併後 dateRange 起點 >45 天 = 跨頁污染訊號，critical）② Sidekick 四工具 guard（未預期錯誤→回報＋優雅 tool error）③ publishRunner 發布失敗/例外。**只回報、絕不自動修**。E2E 已驗證（含 Issue #28 開立/關閉）。
-- [ ] **Slice 19** — Bug 修復 agent（GitHub Actions + Agent SDK + PR flow，雙重 HITL）。
+- [x] **Slice 19** — Bug 修復 agent：`.github/workflows/bug-fix-agent.yml`（`workflow_dispatch` 輸入 Issue 編號）＋ `scripts/bug-fix-agent.mjs`（Claude Agent SDK `query()`，sonnet，載入 CLAUDE.md）。安全設計：**agent 只改檔案**，git branch/commit/PR 由 workflow 決定性執行；保護路徑（workflows/agent 腳本）被動到即拒開 PR；無修改（agent 判斷不能安全修）= fail；CI 跑 tsc + eslint、Vercel preview build 為第三道驗證；agent **無 merge 權限**。雙重 HITL：關卡1=人工觸發 workflow、關卡2=人工 review PR。需 repo Actions secret `ANTHROPIC_API_KEY` + Settings→Actions 勾「Allow GitHub Actions to create and approve pull requests」。Issue/鈴鐺通知內含觸發指引。
 
 ## 6. 開放問題
 - 跨粉專總覽頁的路由名（暫定 `/dashboard/compare`）與比較維度（CTR/CPC/觸及/互動率？）。

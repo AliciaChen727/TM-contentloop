@@ -1,0 +1,85 @@
+# Phase 3B Slice 19 — AI bug 修復 agent（雙重人工關卡）
+# 關卡1：人工在 Actions 頁面觸發（輸入 Issue 編號）
+# 關卡2：agent 只會開 PR（無 merge 權限），人工 review 後才 merge
+# 第三道驗證：Vercel 對 PR 自動跑 preview build
+name: AI Bug Fix Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: '要修復的 GitHub Issue 編號（bug 回報 pipeline 開的）'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+concurrency: bug-fix-agent   # 一次只跑一個修復
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        working-directory: apps/web
+        run: npm install --no-audit --no-fund
+
+      - name: Fetch issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue view ${{ inputs.issue_number }} --json number,title,body,url > /tmp/issue.json
+
+      - name: Run fix agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ISSUE_FILE: /tmp/issue.json
+          SUMMARY_FILE: /tmp/agent-summary.md
+        run: node scripts/bug-fix-agent.mjs
+
+      - name: Guard — changes exist, protected paths untouched
+        run: |
+          # npm install artifacts must never enter the diff
+          echo 'apps/web/package-lock.json' >> .git/info/exclude
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo '::error::agent 沒有做任何修改（可能判斷無法安全修復，見上方 log）'
+            exit 1
+          fi
+          if git status --porcelain | awk '{print $2}' | grep -E '^\.github/workflows/|^scripts/bug-fix-agent\.mjs$'; then
+            echo '::error::agent 動了保護路徑，拒絕開 PR'
+            exit 1
+          fi
+
+      - name: Gates — tsc + eslint on changed files
+        working-directory: apps/web
+        run: |
+          npx tsc --noEmit
+          changed=$(git -C ../.. status --porcelain | awk '{print $2}' | grep -E '^apps/web/.*\.(ts|tsx)$' | sed 's|^apps/web/||' || true)
+          if [ -n "$changed" ]; then npx eslint $changed; fi
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="ai-fix/issue-${{ inputs.issue_number }}-${{ github.run_id }}"
+          git config user.name 'contentloop-fix-agent'
+          git config user.email 'noreply@anthropic.com'
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "🤖 fix: AI 修復 Issue #${{ inputs.issue_number }}"
+          git push origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "🤖 AI fix: Issue #${{ inputs.issue_number }}" \
+            --body-file /tmp/agent-summary.md
