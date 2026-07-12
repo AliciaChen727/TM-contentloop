@@ -524,7 +524,28 @@ function mergeDailyArrays(snapshots: { daily?: DayRow[] }[]): DayRow[] {
 
 async function mergePageAdInsights(pageId: string): Promise<void> {
   const snapsSnap = await adminDb.collection('pages').doc(pageId).collection('adAccountSnapshots').get()
-  if (snapsSnap.empty) return
+  if (snapsSnap.empty) {
+    // Empty is affirmative: every visible account was scanned and none carries
+    // this page's ads (zombie snapshots get deleted in syncAdsForUser). Zero the
+    // shared ad fields so stale contaminated data can't survive. Sync FAILURES
+    // never delete snapshots, so a broken token can't trigger this wipe.
+    const zeroSummary = { spend: 0, reach: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, frequency: 0, conversions: 0, revenue: 0, roas: 0, cpa: 0 }
+    const diag = computeDiagnosisFromSnapshot({ summary: zeroSummary, adCreatives: [] })
+    await adminDb.collection('pages').doc(pageId).collection('adInsights').doc('latest').set({
+      syncedAt: Timestamp.now(),
+      dateRange: { from: '', to: '' },
+      contributorAccounts: [],
+      summary: zeroSummary,
+      daily: [],
+      hourly: [],
+      adPostIds: [],
+      adCreatives: [],
+      diagnosis: diag.items,
+      diagnosisCounts: { critical: diag.criticalCount, warning: diag.warningCount },
+      diagnosisUpdatedAt: Timestamp.now(),
+    }, { merge: true })
+    return
+  }
 
   // Dedup by adAccountId: latest syncedAt wins (compare millis — relational
   // operators on Timestamp objects fall back to string comparison).
