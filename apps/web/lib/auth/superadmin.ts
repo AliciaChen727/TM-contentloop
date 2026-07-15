@@ -11,12 +11,15 @@ import { adminDb } from '@/lib/firebase/admin'
  * and never expose it to the client. Every super-admin code path must be gated by
  * isSuperAdmin(uid) AFTER the Firebase ID token has been verified.
  */
-export function isSuperAdmin(uid: string): boolean {
+export function superAdminUids(): string[] {
   return (process.env.SUPER_ADMIN_UIDS ?? '')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
-    .includes(uid)
+}
+
+export function isSuperAdmin(uid: string): boolean {
+  return superAdminUids().includes(uid)
 }
 
 /**

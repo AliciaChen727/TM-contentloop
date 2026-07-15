@@ -159,6 +159,7 @@ npm run build        # production build
 
 | 日期 | 變更 | Commit |
 |------|------|--------|
+| 2026-07-15 | **每日 Meta Token 健康檢查 cron**：`app/api/cron/token-health`（掃 `collectionGroup('metaTokens')` 所有 token→探測 `/{pageId}?fields=name`→失效者標 `tokenValid:false`＋發紅點（owner+super-admin，每日冪等）＋餵 `reportBug`＋email digest；健康 token 自癒標回 valid；只認 OAuthException、暫時性錯誤 skip；≥3 個同時失效→升級 critical「疑似 App 層級」）＋ `.github/workflows/token-health.yml`（每日台灣 06:30，用既有 `CRON_SECRET`）＋ `superAdminUids()`。實測 11 token 抓出 2 失效 | (本 commit) |
 | 2026-07-15 | **Token 失效顯性化 + 連接頁隔離**：新增 `lib/meta/tokenError.ts`（偵測需重授權的 OAuthException→把 `tokenValid` 寫回 `metaTokens/{pageId}`，成功則自癒）；`fb/sync`、`ig/sync` 偵測失效→回 `tokenInvalid`；儀表板顯示紅色 banner，依 `canReconnect`（是否為 token 擁有者）決定顯示「重新授權」按鈕或「請通知該粉專 FB 管理員」提示；`/api/pages` 新增 `tokensOnly` 模式→連接頁只列使用者自己 OAuth 連接的粉專（修 super-admin 授權頁洩漏其他粉專名稱）。根因＝Chill Hi High token 失效（OAuthException code 200）致同步靜默停擺（見 memory `project_token_invalid_silent_sync`）。待做：每日 token 健康檢查 cron | (本 commit) |
 | 2026-07-12 | **Slice 20 — 發文文案學習迴圈**：AI 文案發布=採納訊號（publishRunner→sidekickFeedback）；每日 cron 7 天後比對貼文互動＋觸及 vs 同粉專近 20 篇基準（任一 ≥1.2× 即驗證有效）；草稿文案 few-shot 升級品質加權（驗證有效的 AI 文案優先）。純人類＋數據訊號、不經 LLM 評審 | (本 commit) |
 | 2026-07-12 | 診斷卡低分重試升級 tool loop：evaluator 扣分理由回灌 + agent 重查數據（sonnet，4 輪上限＋25s timeout，超時退回 haiku 單發）；另 AI Bug 回報獨立成頁 `/dashboard/admin/bugs`（頭像選單入口，super-admin）＋ AI 修復 PR 流程定案「分支拉 localhost 驗收 → 人工 merge → Vercel」（見 memory `feedback_deploy_flow`） | (本 commit) |

@@ -1,0 +1,27 @@
+name: Meta Token Health Check
+
+on:
+  schedule:
+    # 每日 22:30 UTC（台灣早上 6:30）。探測所有粉專 Meta token，失效就發紅點/email/bug。
+    - cron: '30 22 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  token-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Meta token health check
+        run: |
+          body=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST https://tm-contentloop.vercel.app/api/cron/token-health \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          status=$(echo "$body" | grep "HTTP_STATUS:" | cut -d: -f2)
+          response=$(echo "$body" | grep -v "HTTP_STATUS:")
+          echo "Response status: $status"
+          echo "Response body: $response"
+          if [ "$status" != "200" ]; then
+            echo "Token health check failed with status $status"
+            exit 1
+          fi
+          echo "Token health check completed successfully"
