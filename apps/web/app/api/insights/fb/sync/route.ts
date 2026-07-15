@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { fetchPageFollowerStats } from '@/lib/meta/fetchPageFollowerStats'
+import { isReauthRequired, markTokenStatus } from '@/lib/meta/tokenError'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -81,6 +82,12 @@ export async function POST(req: NextRequest) {
       if (!basic.ok) return NextResponse.json({ error: basic.error?.message ?? 'FB posts fetch failed' }, { status: 500 })
       posts = basic.posts
       engagementAvailable = false
+    } else if (isReauthRequired(full.error)) {
+      // Token is dead (expired / authorization revoked). Retrying is futile — flag
+      // the page so the dashboard shows a "reconnect" banner instead of silently
+      // serving stale data.
+      await markTokenStatus(uid, pageId, false, full.error?.message)
+      return NextResponse.json({ error: full.error?.message ?? 'FB token invalid', tokenInvalid: true }, { status: 401 })
     } else {
       return NextResponse.json({ error: full.error?.message ?? 'FB posts fetch failed' }, { status: 500 })
     }
@@ -170,6 +177,9 @@ export async function POST(req: NextRequest) {
         followerDays = stats.length
       }
     } catch { /* follower stats are best-effort */ }
+
+    // Posts fetched successfully → token is valid; clear any stale invalid flag.
+    await markTokenStatus(uid, pageId, true)
 
     return NextResponse.json({ success: true, synced: posts.length, followerDays })
   } catch (err) {

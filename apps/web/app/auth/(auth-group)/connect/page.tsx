@@ -52,7 +52,9 @@ function ConnectContent() {
       // to show the correct page name in instructions.
       try {
         const token = await user.getIdToken()
-        const res = await fetch('/api/pages?ownOnly=true', { headers: { Authorization: `Bearer ${token}` } })
+        // tokensOnly → only the pages THIS user personally FB-authorized. Never
+        // god-mode's full list / other clubs' names (privacy on the auth screen).
+        const res = await fetch('/api/pages?tokensOnly=true', { headers: { Authorization: `Bearer ${token}` } })
         const pages: { pageName?: string }[] = res.ok ? ((await res.json()).pages ?? []) : []
         const names = Array.from(new Set(
           pages.map(p => p.pageName).filter((n): n is string => !!n)

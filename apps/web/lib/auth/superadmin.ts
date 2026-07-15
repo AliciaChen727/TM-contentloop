@@ -42,7 +42,7 @@ export async function resolvePageOwnerUid(pageId: string): Promise<string | null
   return tokSnap.empty ? null : (tokSnap.docs[0].ref.parent.parent?.id ?? null)
 }
 
-export interface SuperAdminPage { pageId: string; pageName: string; igUserId: string | null }
+export interface SuperAdminPage { pageId: string; pageName: string; igUserId: string | null; tokenValid?: boolean }
 
 /**
  * List every page registered in the system, with name/igUserId pulled from the
@@ -56,14 +56,16 @@ export async function listAllPages(): Promise<SuperAdminPage[]> {
     const ownerUid = await resolvePageOwnerUid(pageId)
     let pageName = pageId
     let igUserId: string | null = null
+    let tokenValid = true
     if (ownerUid) {
       const tok = await adminDb.collection('users').doc(ownerUid).collection('metaTokens').doc(pageId).get()
       if (tok.exists) {
         pageName = tok.data()?.pageName ?? pageId
         igUserId = tok.data()?.igUserId ?? null
+        tokenValid = tok.data()?.tokenValid !== false
       }
     }
-    return { pageId, pageName, igUserId }
+    return { pageId, pageName, igUserId, tokenValid }
   }))
   return results
 }

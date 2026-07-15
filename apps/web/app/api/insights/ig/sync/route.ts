@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { syncIgStories } from '@/lib/meta/igStories'
+import { isReauthRequired, markTokenStatus } from '@/lib/meta/tokenError'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -35,6 +36,12 @@ export async function POST(req: NextRequest) {
     // This ensures we pick up new connections when the user re-links IG via Meta Business.
     const pageRes = await fetch(`${BASE}/${pageId}?fields=instagram_business_account&access_token=${accessToken}`)
     const pageData = await pageRes.json()
+    // Distinguish "token dead" from "no IG linked": an OAuthException here means the
+    // page token itself is invalid → flag for reconnect rather than mislabeling it.
+    if (isReauthRequired(pageData.error)) {
+      await markTokenStatus(uid, pageId, false, pageData.error?.message)
+      return NextResponse.json({ error: pageData.error?.message ?? 'IG token invalid', tokenInvalid: true }, { status: 401 })
+    }
     const fetchedIgId: string | undefined = pageData.instagram_business_account?.id
     if (!fetchedIgId) return NextResponse.json({ error: 'No IG account linked to this page' }, { status: 400 })
     if (fetchedIgId !== igUserId) {
@@ -70,7 +77,13 @@ export async function POST(req: NextRequest) {
         const d: any = await r.json()
         if (!r.ok || d.error) {
           // First page error → surface; later-page error → keep what we paginated.
-          if (posts.length === 0) return NextResponse.json({ error: d.error?.message ?? 'IG media fetch failed' }, { status: 500 })
+          if (posts.length === 0) {
+            if (isReauthRequired(d.error)) {
+              await markTokenStatus(uid, pageId, false, d.error?.message)
+              return NextResponse.json({ error: d.error?.message ?? 'IG token invalid', tokenInvalid: true }, { status: 401 })
+            }
+            return NextResponse.json({ error: d.error?.message ?? 'IG media fetch failed' }, { status: 500 })
+          }
           break
         }
         posts.push(...((d.data ?? []) as IgPost[]))
@@ -145,6 +158,9 @@ export async function POST(req: NextRequest) {
       if (ops >= 450) { await batch.commit(); batch = adminDb.batch(); ops = 0 }
     }
     if (ops > 0) await batch.commit()
+
+    // Media fetched successfully → token is valid; clear any stale invalid flag.
+    await markTokenStatus(uid, pageId, true)
 
     // Also capture currently-live Stories (only available for 24h via the API)
     const storyResult = await syncIgStories(uid, accessToken, igUserId, pageId)

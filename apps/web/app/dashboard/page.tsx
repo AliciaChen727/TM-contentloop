@@ -29,7 +29,7 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import type { Capability, Role } from '@/lib/auth/roles'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
-interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null; role?: Role }
+interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null; role?: Role; tokenValid?: boolean; canReconnect?: boolean }
 interface PageTokenData { pageName: string; pageId: string; igUserId: string | null }
 
 interface FbPost {
@@ -95,6 +95,15 @@ export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [autoSyncing, setAutoSyncing] = useState(false)   // throttled background refresh
+  // null → use the persisted /api/pages flag; true/false → live override after a sync
+  const [tokenInvalidOverride, setTokenInvalidOverride] = useState<boolean | null>(null)
+  // Interpret the fb/ig sync responses: a `tokenInvalid` reply → show reconnect
+  // banner immediately; a successful sync → clear it (token was just re-authorized).
+  const applyTokenStatus = useCallback((...results: (unknown)[]) => {
+    const rs = results as ({ tokenInvalid?: boolean; success?: boolean } | null)[]
+    if (rs.some(r => r?.tokenInvalid === true)) setTokenInvalidOverride(true)
+    else if (rs.some(r => r?.success === true)) setTokenInvalidOverride(false)
+  }, [])
   const rangeRef = useRef<{ since?: string; until?: string }>({})
 
   const fetchPosts = useCallback(async (idToken: string, pageId: string, since?: string, until?: string) => {
@@ -225,17 +234,18 @@ export default function DashboardPage() {
       if (!claim.claim || cancelled) return
       setAutoSyncing(true)
       try {
-        await Promise.all([
-          fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).catch(() => null),
-          fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).catch(() => null),
+        const [fbRes, igRes] = await Promise.all([
+          fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).then(r => r.json()).catch(() => null),
+          fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).then(r => r.json()).catch(() => null),
           fetch('/api/threads/sync', { method: 'POST', headers, body }).catch(() => null),
         ])
+        if (!cancelled) applyTokenStatus(fbRes, igRes)
         await fetch('/api/insights/auto-sync', { method: 'POST', headers, body: JSON.stringify({ pageId: selectedPageId, phase: 'done' }) }).catch(() => null)
         if (!cancelled) await fetchPosts(idToken, selectedPageId, rangeRef.current.since, rangeRef.current.until)
       } finally { if (!cancelled) setAutoSyncing(false) }
     })()
     return () => { cancelled = true }
-  }, [idToken, selectedPageId, activeCapabilities, fetchPosts])
+  }, [idToken, selectedPageId, activeCapabilities, fetchPosts, applyTokenStatus])
 
   // Posts in date range (for summary cards)
   const rangedFb = useMemo(() => fbPosts.filter(p => {
@@ -379,6 +389,7 @@ export default function DashboardPage() {
 
   function handlePageChange(newPageId: string) {
     setSelectedPageId(newPageId)
+    setTokenInvalidOverride(null)   // fall back to the new page's persisted flag
     localStorage.setItem('selectedPageId', newPageId)
     const found = pages.find(p => p.pageId === newPageId)
     if (found) localStorage.setItem('selectedPageName', found.pageName)
@@ -445,13 +456,14 @@ export default function DashboardPage() {
       const token = await u.getIdToken()
       const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       const body = JSON.stringify({ pageId: selectedPageId })
-      await Promise.all([
-        fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).catch(() => null),
-        fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).catch(() => null),
+      const [fbRes, igRes] = await Promise.all([
+        fetch('/api/insights/fb/sync', { method: 'POST', headers, body }).then(r => r.json()).catch(() => null),
+        fetch('/api/insights/ig/sync', { method: 'POST', headers, body }).then(r => r.json()).catch(() => null),
         // Threads has a separate OAuth/token; include it so 一鍵同步 covers Threads
         // too (was only synced by the daily cron before). No-op if not connected.
         fetch('/api/threads/sync', { method: 'POST', headers, body }).catch(() => null),
       ])
+      applyTokenStatus(fbRes, igRes)
       // Record freshness so the throttled auto-sync won't immediately re-run.
       await fetch('/api/insights/auto-sync', { method: 'POST', headers, body: JSON.stringify({ pageId: selectedPageId, phase: 'done' }) }).catch(() => null)
       const since = days === 0 && dateMode === 'preset' ? undefined : dateBounds.start
@@ -461,6 +473,15 @@ export default function DashboardPage() {
       setSyncing(false)
     }
   }
+
+  // Token-invalid banner: only fires for a page the user owns (its /api/pages
+  // entry carries tokenValid). Viewers/super-admins can't reconnect someone
+  // else's token, so their entries have no tokenValid flag → no banner.
+  const selectedPage = pages.find(p => p.pageId === selectedPageId)
+  const tokenInvalid = tokenInvalidOverride ?? (selectedPage?.tokenValid === false)
+  // Only the FB admin who owns the token can fix it. Others (invited CL admins,
+  // super-admins viewing someone else's page) see an informational note instead.
+  const canReconnect = selectedPage?.canReconnect === true
 
   if (loading) {
     return (
@@ -547,6 +568,30 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
+            {/* Meta token expired → data can't refresh until the admin re-authorizes. */}
+            {tokenInvalid && (
+              <div style={{ marginBottom: 16, borderRadius: 12, border: '1px solid #FCA5A5', background: '#FEF2F2', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#B91C1C', margin: 0 }}>
+                    ⚠️ {L('此粉專的 Facebook 授權已失效，最新資料無法同步。', 'This Page’s Facebook authorization has expired — new data can’t sync.')}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#DC2626', margin: '4px 0 0' }}>
+                    {canReconnect
+                      ? L('請重新授權以取得新的存取權杖，之後的貼文成效才會繼續更新。', 'Please re-authorize to mint a fresh access token so post metrics keep updating.')
+                      : L('只有該粉專的 Facebook 管理員本人能重新授權，請通知對方重新連接後才會恢復更新。', 'Only this Page’s own Facebook admin can re-authorize — please ask them to reconnect to resume updates.')}
+                  </p>
+                </div>
+                {canReconnect && (
+                  <button
+                    onClick={() => router.push('/auth/connect')}
+                    style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1877F2', color: '#fff', cursor: 'pointer' }}
+                  >
+                    {L('重新授權 Facebook', 'Re-authorize Facebook')}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Date range selector — controls summary + chart */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ad-text2)' }}>{L('資料區間', 'Date range')}</span>
