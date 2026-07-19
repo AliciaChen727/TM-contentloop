@@ -6,9 +6,9 @@
 >
 > ❌ **狀態：第一輪 8 權限已於 2026-07-20 前後整批退件**（Developer Policy 1.6「使用
 > 案例無效」通用模板）。**退件分析與重送計畫見第 8 節**（單一事實來源，取代第 7.0 節
-> 的舊狀態）。重送組合已拍板（2026-07-20 二修）：**原 8 唯讀全保留（含
-> `business_management`，使用者決策：無法預知連接者粉專是否 BM-only）+ `pages_manage_posts`
-> 共 9 個**，`instagram_content_publish` 留下一輪；Threads 平行走獨立送審（見第 9 節）。
+> 的舊狀態）。重送組合已拍板（2026-07-20 三修）：**現有 SCOPES 12 個一次全送**（8 核心
+> 讀取 + `business_management` + 私訊 2 + 發布 2；使用者決策：不動 code，同意畫面與清單一致），
+> Threads 平行走獨立送審（見第 9 節）。
 >
 > 🆕 第二輪（發文權限）原規劃見第 7 節——2026-07-12 外部帳號驗證確認 dev mode
 > 期間 API 發到 FB 的所有內容僅 App role 可見，發文功能上線的唯一解法就是這輪審查。
@@ -256,29 +256,42 @@ Threads 時會找該 page 下已連過 Threads 的 admin token；至少要有一
    放慢錄影、登入→OAuth 同意→功能全流程、**每個權限用到的當下加英文註解標明權限名**、
    只送實際在用的權限。
 
-### 8.3 重送組合（2026-07-20 使用者拍板；同日二修：保留 business_management）
+### 8.3 重送組合（2026-07-20 使用者拍板；同日三修：一次全送 12 個）
 
-**App `832755139382467` 重送一批 9 個**：
+**App `832755139382467` 重送一批 12 個**（＝現有 `SCOPES` 全部，不修剪 code、
+同意畫面與送審清單一致）：
 
-| 動作 | 權限 |
-|---|---|
-| ✅ 保留重送（8） | `pages_show_list`、`pages_read_engagement`、`pages_read_user_content`、`read_insights`、`instagram_basic`、`instagram_manage_insights`、`ads_read`、`business_management` |
-| ➕ 本輪新增（1） | `pages_manage_posts`（發布功能已完成可演示；HITL 核准是賣點） |
-| ➖ 留下一輪 | `instagram_content_publish` |
+| 動作 | 權限 | 風險 |
+|---|---|---|
+| ✅ 核心讀取（8） | `pages_show_list`、`pages_read_engagement`、`pages_read_user_content`、`read_insights`、`instagram_basic`、`instagram_manage_insights`、`ads_read` | 低 |
+| ⚠️ 粉專探索 | `business_management` | 中（無 BM-only 佐證＋需企業驗證） |
+| 🔴 私訊分析（2） | `instagram_manage_messages`、`pages_messaging` | 高（唯讀統計是非典型用途＋需企業驗證） |
+| ➕ 發布（2） | `pages_manage_posts`、`instagram_content_publish` | 中（HITL 核准是賣點） |
 
-**保留 `business_management` 的理由（使用者決策）**：ContentLoop 是給多個粉專 Admin 用的
+**一次全送的理由（使用者決策）**：不想動現有功能/code；SCOPES 現有 12 個若不送審，
+同意畫面會出現「未送審的權限」反而扣分。全送 → 同意畫面與清單一致。
+
+**逐權限判定**：Meta 一次審一個權限，高風險的（私訊×2、business_management）就算被退，
+核心 8 個讀取 + 2 個發布仍可各自過。最壞情況＝私訊/BM 退件、其餘照過。
+
+**保留 `business_management` 的理由**：ContentLoop 是給多個粉專 Admin 用的
 （user-centric 架構），無法預知未來連接者的粉專是否只掛在 Business Manager 底下；沒有此
 權限，BM-only 粉專在 OAuth 時抓不到（`/me/businesses` 不可用）→ 該使用者完全連不進來。
 
-**保留的代價與配套（必做，否則此權限大概率再退）**：
+**私訊兩權限的最大風險**：`instagram_manage_messages` / `pages_messaging` 官方允許用途是
+「管理/回覆對話」（客服、chatbot），ContentLoop 只拿來做**唯讀則數統計**，Meta 可能判
+「非該權限允許用途」。用途說明與 screencast 疊字**務必**強調：唯讀、只彙總則數、
+絕不傳訊/回覆/管理對話（見 8.4 補充）。這兩個 + business_management **幾乎必須先完成
+企業驗證**。
 
-1. **企業驗證（Business Verification）是硬前置**——此權限實務上幾乎必查。在
-   Meta Business Suite 安全中心完成商家驗證（需商家/組織證明文件）。若短期無法完成，
-   要有心理準備：此權限單獨再退、其餘 8 個仍可逐權限過（Meta 是逐權限判定），屆時再拔。
-2. **用途說明升級**（見 8.4）：明確對應退件通知要求的三件事，並強調它是「粉專探索
-   （page discovery）」的必要條件而非管理商家資產。
-3. **screencast 加一幕**（見 8.5 第 3b 幕）：展示一個「只掛在 Business Manager 底下」
-   的粉專出現在選擇清單——建議先建一個免費 BM、把測試粉專移進去，才有畫面可拍。
+**business_management 的配套**：
+
+1. **企業驗證（Business Verification）是硬前置**——在 Meta Business Suite 安全中心完成
+   商家驗證（需商家/組織證明文件）。若短期無法完成，此權限可能單獨再退、其餘照過。
+2. **用途說明升級**（見 8.4）：強調它是「粉專探索（page discovery）」的必要條件而非
+   管理商家資產。
+3. **BM-only 演示幕暫緩**（2026-07-20 使用者決定不建免費 BM/移入測試粉專）→ 影片無專屬
+   佐證畫面，靠幕 2/3 疊字 + 用途說明補強。日後若此權限被退且仍要，再補建 BM-only 粉專重錄一幕。
 
 ### 8.4 各權限英文用途說明（重送表單直接貼）
 
@@ -311,39 +324,32 @@ Threads 時會找該 page 下已連過 Threads 的 admin token；至少要有一
 **pages_manage_posts**
 > Feature: the "Content Drafts" publishing flow. The admin composes or AI-generates a draft in ContentLoop, then must manually approve it; only after explicit human approval does ContentLoop publish the post to the admin's own Facebook Page via POST /{page-id}/feed (or /photos), optionally at a scheduled time. This improves the app by completing the loop from analytics to content creation to publishing, and improves the admin's experience by letting them prepare, approve, and schedule Page posts in one place. Safeguards: every publish requires a manual human approval step — the app never posts autonomously; drafts are locked after publishing. Posts go only to Pages the authenticated admin manages.
 
-### 8.5 Screencast 重錄分鏡（一鏡到底，逐幕英文註解）
+**instagram_content_publish**
+> Feature: the same "Content Drafts" flow, publishing to Instagram. When the admin selects Instagram for a draft and approves it, ContentLoop publishes the same approved content to the Instagram Business account connected to their Page (feed post, Reel, or Story) via the Instagram Content Publishing API. This improves the app by letting admins publish to Facebook and Instagram from one approval step instead of two separate tools, and improves their experience through a single cross-platform draft-and-approve workflow. Same safeguard: publishing only ever happens after an explicit human approval; the app never posts autonomously. Content goes only to the Instagram account linked to a Page the authenticated admin manages.
 
-錄影規格：**英文 UI**（錄前切 English）、1080p 以上、游標可見、不加音訊、放慢操作、
-每一幕疊上英文文字註解（下表 Caption 欄），從**登出狀態**開始。
+**instagram_manage_messages** and **pages_messaging** (read-only analytics use)
+> Feature: the "Messages" dashboard (/dashboard/messages). ContentLoop uses these permissions in a strictly READ-ONLY way to compute aggregate messaging analytics for the admin's own accounts — for example, how many direct messages were received per day and how many distinct people asked questions. We display only counts and trends. We do NOT show individual message content to any third party, and we NEVER send, reply to, delete, or otherwise manage any conversation — ContentLoop has no messaging/reply UI at all. This improves the app by adding an inbox-volume view alongside the content and ad analytics, and improves the admin's experience by letting them see messaging demand over time in the same dashboard. Data is shown only to the authenticated admin who owns the Page/IG account. (We request these read-only because the aggregate counts are derived from the conversations endpoint; no send/manage capability is used or exposed.)
 
-| 幕 | 畫面 | 疊字註解（英文） |
-|---|---|---|
-| 1 | ContentLoop 首頁（未登入）→ 點 Login | "ContentLoop — analytics & content dashboard for Page admins. Logging in…" |
-| 2 | Facebook 登入 → OAuth 同意畫面**停留 3 秒**，9 權限清楚入鏡 → 允許 | "Meta OAuth consent — the app requests only the 9 scopes in this submission. User grants access." |
-| 3 | 回 App 出現「選擇粉專」清單 | "pages_show_list — listing only the Pages this user manages, for selection & access control" |
-| 3b | 清單中指出一個**只掛在 Business Manager 底下**的粉專（先建免費 BM＋移入測試粉專） | "business_management — this Page is owned by a Business Manager (no direct personal role); it is discoverable only via /me/businesses" |
-| 4 | 內容儀表板：FB 貼文表格與互動數 | "pages_read_engagement + pages_read_user_content — the admin's own posts with reactions/comments/shares counts" |
-| 5 | 觸及數字＋追蹤者折線圖 | "read_insights — post reach and follower growth for the admin's own Page" |
-| 6 | IG 貼文區塊 | "instagram_basic — media from the connected Instagram Business account" |
-| 7 | 限動分頁：觀看/觸及/略過率 | "instagram_manage_insights — Story views/reach; preserved after the 24h expiry" |
-| 8 | `/dashboard/ads`：成效表格＋AI 診斷卡 | "ads_read — the admin's own ad account insights power this dashboard and the automated diagnosis" |
-| 9 | 內容草稿：建立草稿 → 按「核准」 | "Content draft — requires explicit HUMAN APPROVAL before anything can be published" |
-| 10 | 按「發布」→ 顯示發布成功 | "pages_manage_posts — publishing the approved draft to the admin's own Page" |
-| 11 | 開新分頁：FB 粉專上出現該貼文 | "The approved post is now live on the admin's own Facebook Page" |
-| 12 | （加分）排程發布設定畫面 | "Scheduled publishing uses the same API, still only for human-approved drafts" |
+### 8.5 Screencast 分鏡
+
+> **完整拍攝腳本已獨立成檔：`docs/meta-app-review-screencast-script.md`**（13 幕、逐幕
+> 操作 + 英文疊字 + 停留秒數、錄影前置、風險註記、錄影後 checklist）。這裡不再維護第二份，
+> 以該檔為單一事實來源。涵蓋 12 個權限，其中新增：幕 9 私訊分析（`instagram_manage_messages`
+> + `pages_messaging`，唯讀）、幕 11 同時發布 IG（`instagram_content_publish`）。
 
 ### 8.6 重送前 checklist
 
-- [ ] 表單 9 則用途說明換成 8.4 版本（特別確認 `ads_read` 不再是 read_insights 內容）
-- [ ] console 確認清單＝9 個（含 `business_management`；`instagram_content_publish` 不在）
+- [ ] 表單 12 則用途說明換成 8.4 版本（特別確認 `ads_read` 不再是 read_insights 內容）
+- [ ] console 確認清單＝12 個（＝現有 SCOPES 全部）
 - [ ] **企業驗證（Business Verification）**：Business Suite 安全中心完成商家驗證
-      （`business_management` 的硬前置，見 8.3）
-- [ ] 建免費 Business Manager＋移入測試粉專（8.5 第 3b 幕的演示素材）
-- [ ] Screencast 依 8.5 重錄，**每個權限都有自己的一幕**，一個都不能漏
-- [ ] 隱私政策 `/privacy`、資料刪除 `/data-deletion`：秒開、含聯絡方式、涵蓋這 9 權限的資料使用
+      （`business_management` + 私訊兩權限的硬前置，見 8.3）
+- [ ] 測試粉專/IG 要有**真實私訊對話**，私訊統計才有數字可拍（幕 9）
+- [ ] Screencast 依拍攝腳本重錄（`meta-app-review-screencast-script.md`），
+      **12 個權限每個都有自己的一幕**，一個都不能漏
+- [ ] 隱私政策 `/privacy`、資料刪除 `/data-deletion`：秒開、含聯絡方式、涵蓋這 12 權限的資料使用
 - [ ] Reviewer 說明（platform settings）：保留 Google 測試帳號＋步驟，但明講
       "Reviewers may also test with their own test account via Facebook Login"
-- [ ] `SCOPES`（`connect/page.tsx`）與送審清單一致（`business_management` 保留，**不拔**）
+- [ ] `SCOPES`（`connect/page.tsx`）不動＝12 個，同意畫面與送審清單一致
 - [ ] 送出後記錄日期；2026 年審查週期最長約 20 天
 
 ---
@@ -375,5 +381,5 @@ Threads 走獨立 OAuth（`threads.net/oauth/authorize` + `graph.threads.net`）
 
 ## 附錄：本輪不送審的項目
 
-- `instagram_content_publish` — IG 發文，**下一輪**（`pages_manage_posts` 過審後補送，見 8.3）
 - Google/GA4 串接 — 屬 Google OAuth 審查，與 Meta 無關
+- （Meta 權限本輪 12 個全送，見 8.3；Threads 另走獨立軌道，見第 9 節）
