@@ -7,7 +7,7 @@ export default function PrivacyPage() {
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>1. About ContentLoop</h2>
         <p style={{ fontSize: 14 }}>
-          ContentLoop is a social media analytics tool that helps page administrators view performance insights for their Facebook Pages and Instagram Business accounts. We do not sell, rent, or share your personal data with third parties.
+          ContentLoop is a social media analytics and content tool that helps page administrators view performance insights for their Facebook Pages and Instagram Business accounts, and — after explicit manual approval — draft and publish posts to their own Pages. We do not sell, rent, or share your personal data with third parties.
         </p>
         <p style={{ fontSize: 14, marginTop: 8 }}>
           ContentLoop is operated by <strong>Pei-Wen Chen</strong> as an individual, who is the data controller responsible for the personal data processed through this service.
@@ -18,8 +18,10 @@ export default function PrivacyPage() {
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>2. Data We Collect</h2>
         <ul style={{ fontSize: 14, paddingLeft: 20 }}>
           <li style={{ marginBottom: 6 }}><strong>Account information:</strong> Your name and email address obtained through Google or Facebook login.</li>
-          <li style={{ marginBottom: 6 }}><strong>Facebook Page data:</strong> Page access tokens, post performance metrics (reach, impressions, engagement, clicks), and ad insights — only for Pages you explicitly authorize.</li>
-          <li style={{ marginBottom: 6 }}><strong>Instagram data:</strong> Basic profile information and post insights for Instagram Business accounts linked to your authorized Facebook Page.</li>
+          <li style={{ marginBottom: 6 }}><strong>Page list:</strong> The list of Facebook Pages you manage, so you can select which of your own Pages to view. If your Pages are managed through Meta Business Manager, we also read the list of Pages under that Business Manager for the same purpose — solely to let you find and connect your own Pages, and to verify you manage a Page before showing any of its data. We never modify or claim any business asset or ad account.</li>
+          <li style={{ marginBottom: 6 }}><strong>Facebook Page data:</strong> Page access tokens, post content and performance metrics (reach, impressions, views, reactions, comments, shares, clicks), follower counts, and ad-account insights (impressions, clicks, spend, CTR, CPA) — only for Pages you explicitly authorize.</li>
+          <li style={{ marginBottom: 6 }}><strong>Instagram data:</strong> Basic profile information, media (posts), post insights, and Story metrics (views, reach, exits) for Instagram Business accounts linked to your authorized Facebook Page.</li>
+          <li style={{ marginBottom: 6 }}><strong>Content you create:</strong> Drafts you compose or approve in ContentLoop, and a record of posts published to your own Pages on your behalf after your explicit approval.</li>
           <li style={{ marginBottom: 6 }}><strong>Usage data:</strong> Feature usage logs for improving the service (e.g., number of AI-generated images or videos). We use Google Analytics 4, which sets cookies to measure aggregate product usage such as page views, returning visits, and which features are clicked. This is limited to product-improvement analytics — we do not send your message content, tokens, or the personal data of your Page&apos;s followers to Google Analytics.</li>
         </ul>
       </section>
@@ -29,6 +31,7 @@ export default function PrivacyPage() {
         <ul style={{ fontSize: 14, paddingLeft: 20 }}>
           <li style={{ marginBottom: 6 }}>Display performance analytics on your dashboard</li>
           <li style={{ marginBottom: 6 }}>Provide AI-powered content suggestions and insights</li>
+          <li style={{ marginBottom: 6 }}>Publish or schedule posts to your own Facebook Page and linked Instagram Business account — only after you explicitly approve each draft. ContentLoop never publishes automatically.</li>
           <li style={{ marginBottom: 6 }}>Maintain your account and preferences</li>
         </ul>
         <p style={{ fontSize: 14 }}>We do not use your data for advertising or share it with any third parties beyond what is necessary to operate the service.</p>

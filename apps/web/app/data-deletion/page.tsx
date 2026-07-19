@@ -35,7 +35,9 @@ export default function DataDeletionPage() {
         <ul style={{ fontSize: 14, paddingLeft: 20 }}>
           <li style={{ marginBottom: 6 }}>Your account information (name, email)</li>
           <li style={{ marginBottom: 6 }}>Facebook Page access tokens stored by ContentLoop</li>
+          <li style={{ marginBottom: 6 }}>The list of Pages connected to your account (including any read from Meta Business Manager)</li>
           <li style={{ marginBottom: 6 }}>Your post performance data and analytics history</li>
+          <li style={{ marginBottom: 6 }}>Content drafts you created and the records of posts published through ContentLoop</li>
           <li style={{ marginBottom: 6 }}>Your preferences and settings</li>
         </ul>
       </section>
