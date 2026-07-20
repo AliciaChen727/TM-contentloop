@@ -164,6 +164,8 @@ export async function reportBug(input: BugReportInput): Promise<{ id: string; de
       dateStr,
     }).catch(() => {})
 
+    await notifyTelegram(severity, summary, input, issueUrl)
+
     return { id, deduped: false }
   } catch {
     return { id, deduped: false }
