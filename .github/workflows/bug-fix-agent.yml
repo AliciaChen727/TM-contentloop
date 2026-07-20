@@ -1,5 +1,5 @@
-# Phase 3B Slice 19 — AI bug 修復 agent（雙重人工關卡）
-# 關卡1：人工在 Actions 頁面觸發（輸入 Issue 編號）
+# Phase 3B Slice 19 + Phase 3C — AI 任務 agent（修 bug / 開發新功能，雙重人工關卡）
+# 關卡1：人工觸發（Actions 頁 or Telegram ops-bot，輸入 Issue 編號）
 # 關卡2：agent 只會開 PR（無 merge 權限），人工 review 後才 merge
 # 第三道驗證：Vercel 對 PR 自動跑 preview build
 name: AI Bug Fix Agent
@@ -8,8 +8,16 @@ on:
   workflow_dispatch:
     inputs:
       issue_number:
-        description: '要修復的 GitHub Issue 編號（bug 回報 pipeline 開的）'
+        description: '要處理的 GitHub Issue 編號'
         required: true
+      task_type:
+        description: 'bug（最小 diff 修復）或 feature（開發新功能）'
+        required: false
+        default: 'bug'
+      telegram_chat_id:
+        description: '（選填）完成後回報結果的 Telegram chat id'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -45,6 +53,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ISSUE_FILE: /tmp/issue.json
           SUMMARY_FILE: /tmp/agent-summary.md
+          TASK_TYPE: ${{ inputs.task_type }}
         run: node scripts/bug-fix-agent.mjs
 
       - name: Guard — changes exist, protected paths untouched
@@ -68,18 +77,43 @@ jobs:
           if [ -n "$changed" ]; then npx eslint $changed; fi
 
       - name: Create PR
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          TASK_TYPE: ${{ inputs.task_type }}
         run: |
-          branch="ai-fix/issue-${{ inputs.issue_number }}-${{ github.run_id }}"
+          if [ "$TASK_TYPE" = "feature" ]; then kind='feat'; label='開發'; else kind='fix'; label='修復'; fi
+          branch="ai-${kind}/issue-${{ inputs.issue_number }}-${{ github.run_id }}"
           git config user.name 'contentloop-fix-agent'
           git config user.email 'noreply@anthropic.com'
           git checkout -b "$branch"
           git add -A
-          git commit -m "🤖 fix: AI 修復 Issue #${{ inputs.issue_number }}"
+          git commit -m "🤖 ${kind}: AI ${label} Issue #${{ inputs.issue_number }}"
           git push origin "$branch"
-          gh pr create \
+          pr_url=$(gh pr create \
             --base main \
             --head "$branch" \
-            --title "🤖 AI fix: Issue #${{ inputs.issue_number }}" \
-            --body-file /tmp/agent-summary.md
+            --title "🤖 AI ${kind}: Issue #${{ inputs.issue_number }}" \
+            --body-file /tmp/agent-summary.md)
+          echo "url=$pr_url" >> "$GITHUB_OUTPUT"
+
+      # Phase 3C — report the outcome back to Telegram (only if a chat id was passed)
+      - name: Notify Telegram (success)
+        if: success() && inputs.telegram_chat_id != ''
+        env:
+          TG: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          curl -s "https://api.telegram.org/bot$TG/sendMessage" \
+            --data-urlencode "chat_id=${{ inputs.telegram_chat_id }}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=✅ Issue #${{ inputs.issue_number }} 完成，PR 已開，請到 GitHub review 後再 merge：${{ steps.pr.outputs.url }}" > /dev/null
+
+      - name: Notify Telegram (failure)
+        if: failure() && inputs.telegram_chat_id != ''
+        env:
+          TG: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          curl -s "https://api.telegram.org/bot$TG/sendMessage" \
+            --data-urlencode "chat_id=${{ inputs.telegram_chat_id }}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=❌ Issue #${{ inputs.issue_number }} 未完成（agent 可能判斷不能安全處理，或三關未過）。詳見 log：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" > /dev/null

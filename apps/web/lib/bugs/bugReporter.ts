@@ -1,8 +1,9 @@
-// Phase 3B Slice 18 — bug 回報 pipeline core.
+// Phase 3B Slice 18 (+ Phase 3C Telegram) — bug 回報 pipeline core.
 // Agents/crons call reportBug() when they detect something broken (tool
 // execution error, data inconsistency, publish anomaly). Flow:
 //   bugReports/{id} (per-day idempotent) → bell notification to super-admins
-//   → GitHub Issue (for the Slice 19 fix agent; needs GITHUB_BUG_TOKEN).
+//   → GitHub Issue (for the Slice 19 fix agent; needs GITHUB_BUG_TOKEN)
+//   → Telegram push (needs TELEGRAM_BOT_TOKEN + BUG_ALERT_TELEGRAM_CHAT_ID).
 // REPORT ONLY — nothing here ever attempts a fix (human gate first, per plan).
 
 import { createHash } from 'crypto'
@@ -83,6 +84,29 @@ async function createGithubIssue(input: BugReportInput, severity: BugSeverity, s
     return typeof j.html_url === 'string' ? j.html_url : null
   } catch {
     return null
+  }
+}
+
+// Push straight to the owner's phone via the same bot used by the ops-bot
+// (Phase 3C). Best-effort — never throws, silently no-ops if unconfigured.
+async function notifyTelegram(severity: BugSeverity, summary: string, input: BugReportInput, issueUrl: string | null): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.BUG_ALERT_TELEGRAM_CHAT_ID
+  if (!token || !chatId) return
+  try {
+    const sevEmoji = severity === 'critical' ? '🚨' : severity === 'warning' ? '⚠️' : 'ℹ️'
+    const lines = [
+      `${sevEmoji} <b>${summary}</b>`,
+      `來源：${input.source}`,
+      issueUrl ? `Issue：${issueUrl}` : '（未開 GitHub Issue）',
+    ]
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: true }),
+    })
+  } catch {
+    // best-effort — bell + GitHub Issue already carry the report
   }
 }
 
