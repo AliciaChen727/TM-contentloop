@@ -3,6 +3,7 @@
 # 關卡2：agent 只會開 PR（無 merge 權限），人工 review 後才 merge
 # 第三道驗證：Vercel 對 PR 自動跑 preview build
 name: AI Bug Fix Agent
+run-name: "🤖 ${{ inputs.task_type == 'feature' && '開發' || '修復' }} Issue #${{ inputs.issue_number }}"
 
 on:
   workflow_dispatch:
