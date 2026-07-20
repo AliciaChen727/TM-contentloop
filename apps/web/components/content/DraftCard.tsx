@@ -59,7 +59,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onRepubli
   unavailableTargets?: DraftTarget[]
   taggableEntities?: TaggableEntity[]
 }) {
-  const { L } = useLang()
+  const { L, lang } = useLang()
   const fmtTime = (ms?: number) => ms ? new Date(ms).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
   const [editing, setEditing] = useState(false)
   // Schedule: split into date / hour / minute for a custom 5-min-step picker
@@ -87,7 +87,7 @@ export function DraftCard({ draft, onTransition, onEdit, onPublishAll, onRepubli
   const cardViolations = validateItems(draft.target.map(t => ({
     platform: t, text: draft.generated.perPlatform[t]?.body ?? '', hashtags: draft.generated.perPlatform[t]?.hashtags ?? [],
     hasMedia: !!(draft.generated.mediaUrl || draft.generated.mediaUrls?.length), mediaType: draft.mediaType, mediaUrls: draft.generated.mediaUrls,
-  }))).filter(v => v.code === 'fb_mixed_carousel' || v.code === 'fb_video_carousel')
+  })), { lang }).filter(v => v.code === 'fb_mixed_carousel' || v.code === 'fb_video_carousel')
   const anyPublished = draft.target.some(t => draft.publishResults?.[t]?.postId)
   const allPublished = draft.target.length > 0 && draft.target.every(t => draft.publishResults?.[t]?.postId)
   const publishError = firstPublishError(draft)

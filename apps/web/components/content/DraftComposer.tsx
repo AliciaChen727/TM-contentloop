@@ -35,7 +35,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   onSyncTaggableEntities?: () => void
   onTaggableEntityCreated?: (entity: TaggableEntity) => void
 }) {
-  const { L } = useLang()
+  const { L, lang } = useLang()
   const [targets, setTargets] = useState<DraftTarget[]>(['fb'])
   const [mediaType, setMediaType] = useState<MediaType>('text')
   const [body, setBody] = useState('')                       // shared caption
@@ -101,7 +101,7 @@ export function DraftComposer({ pageId, pageName, idToken, onCreate, onClose, bu
   // Platform hard-limit validation (字數/hashtag/媒體) — blocks save on errors.
   const violations = validateItems(targets.map(t => ({
     platform: t, text: eff(t), hashtags: tags, hasMedia: media.length > 0, mediaType, mediaUrls,
-  })))
+  })), { lang })
   const blocked = hasBlockingErrors(violations)
   const canSubmit = targets.length > 0 && bodiesReady && !uploading && !blocked && mediaReady
   const notHash = (e: TaggableEntity) => !e.displayName.trim().startsWith('#') && !e.fbUserId?.startsWith('#') && !e.fbPageId?.startsWith('#')

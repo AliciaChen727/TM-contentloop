@@ -43,5 +43,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## 變更紀錄
 
+- 2026-07-20：AI Draft validation 訊息支援英文 UI，避免 App Review 錄影中出現中文警示。commit: pending
 - 2026-07-20：Meta OAuth 授權連接 URL 加上 `locale=en_US`，讓 App Review 錄影優先顯示英文授權流程。commit: included in this commit
 - 2026-07-17：新增 Meta Ads MCP 下一階段優化參考，定位為內部研究 / Phase 4 原型工具，不取代正式資料同步與自動化後端。commit: included in this commit
