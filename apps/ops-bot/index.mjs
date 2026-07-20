@@ -131,11 +131,23 @@ async function handle(msg) {
   }
 }
 
+let shuttingDown = false
+
+// Exit promptly on redeploy so we never leave a zombie long-poll holding the
+// Telegram slot (that causes a permanent 409 ping-pong with the new instance).
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    console.log(`[ops-bot] received ${sig}, shutting down`)
+    shuttingDown = true
+    process.exit(0)
+  })
+}
+
 async function main() {
   const me = await getMe()
   console.log(`[ops-bot] up as @${me.username}; whitelist=${[...config.allowedUserIds].join(',')}; repo=${config.repo}`)
   let offset = 0
-  for (;;) {
+  while (!shuttingDown) {
     try {
       const updates = await getUpdates(offset, 30)
       for (const u of updates) {
@@ -143,8 +155,12 @@ async function main() {
         if (u.message) await handle(u.message)
       }
     } catch (e) {
+      // 409 = another instance is polling the same bot (usually an old deploy
+      // still draining). Back off longer so the two converge quickly once the
+      // stale one exits, instead of hammering every 3s.
+      const is409 = String(e.message).includes('409')
       console.error('[loop] error:', e.message)
-      await new Promise((r) => setTimeout(r, 3000)) // back off, then retry
+      await new Promise((r) => setTimeout(r, is409 ? 8000 : 3000))
     }
   }
 }
