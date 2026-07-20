@@ -75,6 +75,7 @@ function ConnectContent() {
       scope: SCOPES,
       response_type: 'code',
       auth_type: 'rerequest',
+      locale: 'en_US',
     })
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?${params}`
   }
