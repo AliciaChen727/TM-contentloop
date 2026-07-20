@@ -59,8 +59,18 @@ jobs:
 
       - name: Guard — changes exist, protected paths untouched
         run: |
-          # npm install artifacts must never enter the diff
-          echo 'apps/web/package-lock.json' >> .git/info/exclude
+          # Lockfile drift (npm/yarn/pnpm, anywhere in the repo) must never enter
+          # a PR — .git/info/exclude only hides untracked files, it does NOT stop
+          # already-tracked lockfiles (e.g. root yarn.lock) from being diffed and
+          # committed. Discard any lockfile drift outright before checking "did
+          # the agent change anything real".
+          # Each pattern runs alone: `git checkout --` aborts the WHOLE command
+          # (reverting nothing) if any one pathspec matches no tracked file, so
+          # a single missing lockfile type must not block reverting the others.
+          for pattern in 'package-lock.json' 'yarn.lock' 'pnpm-lock.yaml'; do
+            git checkout -- ":(glob)**/$pattern" 2>/dev/null || true
+            git clean -fd -- ":(glob)**/$pattern" 2>/dev/null || true
+          done
           if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
             echo '::error::agent 沒有做任何修改（可能判斷無法安全修復，見上方 log）'
             exit 1
