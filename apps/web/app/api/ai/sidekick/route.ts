@@ -142,6 +142,20 @@ interface ABTestResult {
   cpaDelta?: number
 }
 
+const CJK_RE = /[\u3400-\u9fff]/
+
+function needsEnglishRepair(value: unknown): boolean {
+  if (typeof value === 'string') return CJK_RE.test(value)
+  if (Array.isArray(value)) return value.some(needsEnglishRepair)
+  if (value && typeof value === 'object') return Object.values(value).some(needsEnglishRepair)
+  return false
+}
+
+function actionsNeedRepair(value: unknown): boolean {
+  const p = value as { actions?: unknown }
+  return Array.isArray(p.actions) && p.actions.some(a => typeof a === 'string' && (a.length > 170 || /\n/.test(a)))
+}
+
 function extractPatterns(cases: ABTestResult[], lang: 'zh-TW' | 'en'): string {
   const n = cases.length
   const avgCtr = cases.reduce((s, t) => s + (t.ctrDelta ?? 0), 0) / n
@@ -258,6 +272,8 @@ If video generation requested but context is insufficient:
 [Clarify proactively]: When the question is ambiguous, offer 2 options in bullets. Exception: (1) if user requests image/video generation, generate immediately; (2) if message mentions "this image" but no attachment, generate directly for the mentioned topic.
 [Clear positive/negative signals]: Distinguish good metrics (high engagement rate, ROAS on target) from bad (high CPA, frequency fatigue).
 [Specific actions]: Each action must have a specific target, e.g. "Increase audience A daily budget from $X to $Y", not "consider adjusting budget."
+[English-only]: The final JSON visible to the user MUST be English only. If source data, post titles, memories, or report action items contain Chinese, translate or paraphrase them into natural English. Do not copy Chinese text into summary, bullets, stats labels, or actions.
+[Next-week planning]: When the user asks to plan next week from an insight report's action items, return type "actions". Use summary for the strategy, bullets for evidence, stats for the 3 key metrics, and actions for 3-4 short checkbox tasks. Each action must be one sentence under 24 words and must start with an English day label such as "Day 1:", "Days 2-3:", or "Days 5-7:". Do not put full draft copy, long examples, or URLs inside actions; put supporting detail in bullets instead.
 ${memoryBlock}${helpfulBlock}${improveBlock}${enAbTestBlock}
 ## Audience Analysis Safeguard
 **Meta Graph API does not provide audience age/gender/interest breakdowns** (restricted by Meta privacy policy).
@@ -304,6 +320,7 @@ Rules:
 - bullets max 4, each under 50 words, data-backed preferred
 - stats max 3, only the most critical metrics
 - actions max 4, each must specify who/what/target number
+- actions are rendered as checkbox labels: each action must be short, English-only, single-line intent, and under 24 words
 - if all data is 0 or missing, use type "warning" and explain incomplete data in summary
 - For image generation: imagePrompt format: "Professional Facebook/Instagram ad for [topic], [style], vibrant colors, clean modern design, high quality. No text, no typography, no letters, clean background space for layout."
 - For video generation: videoPrompt format: "Vertical 9:16 short video for [topic], [visual description], cinematic lighting, smooth motion, professional quality"
@@ -726,6 +743,37 @@ export async function POST(req: NextRequest) {
       p.bullets = []
       p.actions = []
       p.stats = []
+    }
+  }
+
+  if (lang === 'en' && (needsEnglishRepair(parsed) || actionsNeedRepair(parsed))) {
+    try {
+      const repair = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1200,
+        system: `Repair this AI Sidekick JSON for an English UI. Return pure JSON only.
+- Translate or paraphrase all Chinese into natural English.
+- Preserve the same business meaning and metric numbers.
+- Keep this schema: type, summary, bullets, stats, actions.
+- summary: one English sentence.
+- bullets: max 4 English bullets, each under 50 words.
+- stats: max 3 objects with English label/value.
+- actions: max 4 checkbox-ready English tasks, each under 24 words, no newline, no long examples, no URLs.
+- For next-week plans, actions should start with day labels like "Day 1:" or "Days 2-3:".`,
+        messages: [{ role: 'user', content: JSON.stringify(parsed) }],
+      })
+      totalInputTokens += repair.usage.input_tokens
+      totalOutputTokens += repair.usage.output_tokens
+      const repairText = repair.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map(b => b.text)
+        .join('\n')
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim()
+      parsed = JSON.parse(repairText) as object
+    } catch {
+      /* Keep the original response if repair fails; prompt rules still reduce the chance. */
     }
   }
 

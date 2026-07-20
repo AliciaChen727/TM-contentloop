@@ -187,9 +187,9 @@ body {
 .ads-sk-msg-avatar { width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
 .ads-sk-msg.ai .ads-sk-msg-avatar { background: linear-gradient(135deg, var(--ad-blue), var(--ad-purple)); }
 .ads-sk-msg.user .ads-sk-msg-avatar { background: var(--ad-surface2); color: var(--ad-text2); border: 1px solid var(--ad-border); font-size: 11px; font-weight: 700; }
-.ads-sk-msg-bubble { max-width: 88%; }
+.ads-sk-msg-bubble { max-width: 88%; min-width: 0; }
 .ads-sk-msg.user .ads-sk-msg-bubble { display: flex; flex-direction: column; align-items: flex-end; }
-.ads-sk-msg-text { padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.55; }
+.ads-sk-msg-text { padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
 .ads-sk-msg.ai .ads-sk-msg-text { background: var(--ad-surface2); color: var(--ad-text); border-radius: 4px 12px 12px 12px; }
 .ads-sk-msg.user .ads-sk-msg-text { background: var(--ad-blue); color: white; border-radius: 12px 4px 12px 12px; }
 .ads-sk-msg-time { font-size: 10px; color: var(--ad-text3); margin-top: 3px; padding: 0 2px; }
@@ -210,13 +210,13 @@ body {
 .ads-sk-send-btn:hover { opacity: 0.85; }
 .ads-sk-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ads-sk-action-list { margin: 8px 0; display: flex; flex-direction: column; gap: 5px; }
-.ads-sk-action-item { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; background: var(--ad-surface); border: 1px solid var(--ad-border); border-radius: 8px; cursor: pointer; transition: all 0.15s; }
+.ads-sk-action-item { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; background: var(--ad-surface); border: 1px solid var(--ad-border); border-radius: 8px; cursor: pointer; transition: all 0.15s; min-width: 0; }
 .ads-sk-action-item:hover { border-color: var(--ad-blue); background: var(--ad-blue-light); }
 .ads-sk-action-item.done { opacity: 0.55; }
 .ads-sk-action-item.done .ads-sk-action-text { text-decoration: line-through; }
 .ads-sk-action-cb { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--ad-border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; transition: all 0.15s; }
 .ads-sk-action-item.done .ads-sk-action-cb { background: var(--ad-green); border-color: var(--ad-green); color: white; }
-.ads-sk-action-text { font-size: 12.5px; line-height: 1.45; }
+.ads-sk-action-text { font-size: 12.5px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .ads-sk-stat-row { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
 .ads-sk-stat { background: var(--ad-surface); border: 1px solid var(--ad-border); border-radius: 8px; padding: 8px 12px; flex: 1; min-width: 80px; }
 .ads-sk-stat-label { font-size: 10px; color: var(--ad-text3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 2px; }
