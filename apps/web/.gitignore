@@ -35,6 +35,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .omx/
+# Codex assistant config — kept local only. AGENTS.md carries an autonomy
+# directive that conflicts with CLAUDE.md's "ask before major decisions"; never
+# let it into the repo where a product agent (e.g. bug-fix-agent) could load it.
+AGENTS.md
 .codex/*
 !.codex/agents/
 !.codex/agents/**

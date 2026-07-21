@@ -182,6 +182,14 @@ pages/{pageId}/publishAuditLog/{entryId}      # 稽核：每次核准/發布/失
 - scope 加在 `app/api/auth/threads/authorize/route.ts` 的 `SCOPES`（現為 `threads_basic,threads_manage_insights`），連接者需重新授權一次。
 
 ## 9. 驗收標準（S1–S3 先行版）
+
+> **狀態（2026-07-21）**：S1–S5 的**實作已交付**（草稿→核准 HITL→驗證→發布/排程到
+> Threads/FB/IG；`lib/publish/publishFb.ts`、`publishIg.ts` 含輪播、Reels resumable、
+> 限動；排程由 Firebase Function `publishScheduled` 每 5 分打 `/api/cron/publish-scheduled`）。
+> 下列驗收框**尚未逐項正式 QA 打勾**——FB 發布在 dev mode 下僅 App role 可見（見
+> `.claude/skills/config-and-flags`、memory `project_publish_platform_gotchas`），完整
+> 驗收與 go-live 卡 **Meta App Review + `NEXT_PUBLIC_META_APP_LIVE`**。逐項驗收時再勾。
+
 - [ ] Agent 產出可一鍵存成 `contentDraft`，狀態 `draft`。
 - [ ] 草稿頁顯示完整預覽（圖+文）、來源、生成 prompt；可編輯/核准/拒絕。
 - [ ] 只有該粉專 admin/owner 能核准；非本頁 admin 看不到草稿（雙粉專交叉測試）。

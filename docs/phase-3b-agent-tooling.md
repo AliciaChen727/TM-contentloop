@@ -50,7 +50,7 @@ interface ToolContext { allowedPageIds: string[] }  // server 端解析，模型
 - 儀表板頁走 BFF：新 API route 解析白名單 → agent loop → 回比較結果卡片；頁面掛 `<AiSidekick pageId={...} contextPage="compare">`。
 
 ### 4.3 多步推理 + 多輪自我檢查
-- **診斷批次**（無人等待）：tool loop 上限 ~15 次工具呼叫；system prompt 要求最終輸出前用工具**核對引用數字**；Gemini evaluator 保留為第二道防線。模型升 **claude-sonnet-4-6**（haiku 對多步工具推理較弱；與 Sidekick 同款、專案慣例）。
+- **診斷批次**（無人等待）：tool loop 上限 **6 次**工具呼叫（`runDiagnosisAgentWithTools` 預設 `maxIterations=6`，fallback retry 4）；system prompt 要求最終輸出前用工具**核對引用數字**；Gemini evaluator 保留為第二道防線。模型升 **claude-sonnet-4-6**（haiku 對多步工具推理較弱；與 Sidekick 同款、專案慣例）。
 - **Sidekick**（互動）：開放工具、上限 ~5 次呼叫；不做多輪自我批判（延遲考量）。
 
 ### 4.4 Bug 偵測 + 回報
