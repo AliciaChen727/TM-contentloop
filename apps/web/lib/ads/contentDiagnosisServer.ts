@@ -10,6 +10,7 @@
 import { adminDb } from '@/lib/firebase/admin'
 import type { DiagItem, Post } from '@/components/ads/types'
 import { buildContentDiagnosis } from '@/lib/ads/contentDiagnosis'
+import { belongsToAnyPrefix } from '@/lib/meta/pageIsolation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toDateStr(v: any): string {
@@ -66,7 +67,7 @@ export async function loadContentDiagnosis(
     const fbById = new Map<string, Post>()
     for (const doc of fbNew.docs) fbById.set(doc.id, mapFbDoc(doc.id, doc.data(), adIds))
     for (const doc of fbLegacy.docs) {
-      if (!doc.id.startsWith(`${pageId}_`)) continue   // ISOLATION: never another page
+      if (!belongsToAnyPrefix(doc.id, [pageId])) continue   // ISOLATION: never another page
       if (!fbById.has(doc.id)) fbById.set(doc.id, mapFbDoc(doc.id, doc.data(), adIds))
     }
 

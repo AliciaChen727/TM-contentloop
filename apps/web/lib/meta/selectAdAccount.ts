@@ -4,6 +4,8 @@
 // accounts[0] silently returns the wrong (or empty) account for some pages.
 // Returns the account with the MOST page-matched ads; falls back to accounts[0].
 
+import { belongsToAnyPrefix } from './pageIsolation'
+
 const BASE = 'https://graph.facebook.com/v19.0'
 const AD_STATUSES = '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED","ADSET_PAUSED","WITH_ISSUES","IN_PROCESS"]'
 
@@ -23,7 +25,7 @@ async function countPageAds(acctId: string, pagePrefix: string, token: string): 
     if (!r || r.error) return 0
     return ((r.data ?? []) as AdStoryRef[]).filter(ad => {
       const sid = ad.effective_object_story_id || ad.creative?.effective_object_story_id || ad.creative?.object_story_id || ''
-      return typeof sid === 'string' && sid.startsWith(`${pagePrefix}_`)
+      return belongsToAnyPrefix(sid, [pagePrefix])
     }).length
   } catch {
     return 0
