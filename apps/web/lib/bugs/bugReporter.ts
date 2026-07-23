@@ -43,7 +43,8 @@ async function classify(input: BugReportInput): Promise<{ severity: BugSeverity;
     const parsed = JSON.parse(m[0]) as { severity?: string; summary?: string }
     const severity: BugSeverity = parsed.severity === 'critical' || parsed.severity === 'info' ? parsed.severity : 'warning'
     return { severity, summary: parsed.summary?.slice(0, 120) || input.title }
-  } catch {
+  } catch (e) {
+    console.warn('[reportBug] classify failed, using heuristic severity:', e instanceof Error ? e.message : e)
     return fallback
   }
 }
@@ -82,7 +83,10 @@ async function createGithubIssue(input: BugReportInput, severity: BugSeverity, s
     if (!res.ok) return null
     const j = await res.json()
     return typeof j.html_url === 'string' ? j.html_url : null
-  } catch {
+  } catch (e) {
+    // Invisible before → if Issue creation breaks, the whole fix pipeline stalls
+    // silently (bell still fires, but there's no Issue to dispatch the fix agent on).
+    console.error('[reportBug] createGithubIssue failed:', e instanceof Error ? e.message : e)
     return null
   }
 }
@@ -105,8 +109,10 @@ async function notifyTelegram(severity: BugSeverity, summary: string, input: Bug
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text: lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: true }),
     })
-  } catch {
-    // best-effort — bell + GitHub Issue already carry the report
+  } catch (e) {
+    // best-effort — bell + GitHub Issue already carry the report, but log so a
+    // broken Telegram push isn't completely invisible.
+    console.warn('[reportBug] notifyTelegram failed:', e instanceof Error ? e.message : e)
   }
 }
 
@@ -167,7 +173,10 @@ export async function reportBug(input: BugReportInput): Promise<{ id: string; de
     await notifyTelegram(severity, summary, input, issueUrl)
 
     return { id, deduped: false }
-  } catch {
+  } catch (e) {
+    // The whole report failing (e.g. Firestore write) was silent → you'd never
+    // know bugs stopped being recorded. Log, but still never throw on the caller.
+    console.error('[reportBug] failed to record bug', id, '-', e instanceof Error ? e.message : e)
     return { id, deduped: false }
   }
 }

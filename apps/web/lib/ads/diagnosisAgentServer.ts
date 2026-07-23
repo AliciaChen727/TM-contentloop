@@ -111,7 +111,10 @@ export async function runDiagnosisAgentWithTools(
     const texts = final.content.filter((b) => b.type === 'text')
     const raw = texts.length ? texts[texts.length - 1].text : ''
     return parseAndEnforceCards(raw, items)
-  } catch {
+  } catch (err) {
+    // Was silently swallowed → the sonnet path could fail every day (falling back
+    // to haiku) with no signal. Log it; the orchestrator also counts it.
+    console.error('[diagnosisAgent] sonnet tool loop threw for page', pageId, '-', err instanceof Error ? err.message : err)
     return null
   }
 }
@@ -130,9 +133,20 @@ export async function runDiagnosisAgent(
     })
     const raw = res.content[0]?.type === 'text' ? res.content[0].text : ''
     return parseAndEnforceCards(raw, items)
-  } catch {
+  } catch (err) {
+    console.error('[diagnosisAgent] haiku single-shot threw -', err instanceof Error ? err.message : err)
     return null
   }
+}
+
+// Lightweight health counter so a silently-degrading primary path (sonnet tool
+// loop failing → daily haiku fallback) is quantifiable, not invisible. Best-effort,
+// fire-and-forget — never blocks or fails diagnosis. Inspect: agentHealth/diagnosis.
+function recordAgentHealth(field: 'sonnetOk' | 'sonnetFail' | 'bothFailed'): void {
+  adminDb.collection('agentHealth').doc('diagnosis').set(
+    { [field]: FieldValue.increment(1), [`${field}At`]: FieldValue.serverTimestamp() },
+    { merge: true },
+  ).catch(e => console.error('[diagnosisAgent] health counter write failed:', e))
 }
 
 // Read the fingerprint cache; regenerate + store on miss. Returns null when there
@@ -157,8 +171,16 @@ export async function getOrGenerateDiagnosisCards(
   // fallback: the original single-shot haiku call. Retry-on-low-score inside
   // evaluateAndStore stays single-shot to bound latency/cost.
   let cards = await runDiagnosisAgentWithTools(pageId, items, summary, apiKey, fewShot, en)
-  if (!cards) cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en)
-  if (!cards) return null
+  if (cards) {
+    recordAgentHealth('sonnetOk')
+  } else {
+    // Sonnet path produced nothing (threw, or bad/unparseable output). Make the
+    // degradation visible instead of silently serving the haiku fallback every time.
+    recordAgentHealth('sonnetFail')
+    console.warn('[diagnosisAgent] sonnet tool loop returned null for page', pageId, '→ falling back to haiku')
+    cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en)
+  }
+  if (!cards) { recordAgentHealth('bothFailed'); return null }
 
   // Quality evaluator (Slice 11): score → retry-once-if-low → store evalScore.
   if (evalKeys && (evalKeys.geminiKey || evalKeys.anthropicKey)) {
