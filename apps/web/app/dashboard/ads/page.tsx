@@ -621,6 +621,15 @@ export default function AdsPage() {
     localStorage.setItem('selectedPageName', pname)
     setDataLoaded(false)
     setRealPosts(null)
+    // Clear the previous page's data IMMEDIATELY (selectedPageId already flipped above)
+    // so its diagnosis cards can't render under the new page's header during the load
+    // window — the cross-page flash caught in the two-page isolation cross-test. Use an
+    // empty `diagnosis` so the AI-card effect early-returns (0 items) instead of firing
+    // with MOCK items under the new pageId. aiDiagCards + sig reset so the new page
+    // re-generates cleanly.
+    setAdData({ ...MOCK_DATA, diagnosis: [] })
+    setAiDiagCards(null)
+    aiDiagSig.current = ''
     const u = auth.currentUser
     if (!u) return
     const idToken = await u.getIdToken()
