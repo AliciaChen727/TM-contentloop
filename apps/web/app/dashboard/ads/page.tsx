@@ -963,6 +963,10 @@ export default function AdsPage() {
               />}
               {active === 'creative' && <CreativeSection
                 data={adData}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                pageId={selectedPageId}
+                idToken={idTokenRef}
                 onAskAI={canSidekick ? openSidekick : undefined}
                 creativeLabels={creativeLabels}
                 experiments={experiments}

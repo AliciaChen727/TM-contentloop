@@ -704,7 +704,7 @@ function ExperimentResultCard({ creatives, labels, experiment, onDelete }: {
   )
 }
 
-export function CreativeSection({ data, onAskAI, creativeLabels, experiments, onLabelChange, onCreateExperiment, onExperimentUpdate, onDeleteExperiment }: {
+export function CreativeSection({ data, onAskAI, creativeLabels, experiments, onLabelChange, onCreateExperiment, onExperimentUpdate, onDeleteExperiment, dateFrom, dateTo, pageId, idToken }: {
   data: AdData
   onAskAI?: (q: string, autoSend?: boolean) => void
   creativeLabels?: Record<string, LabelEntry>
@@ -713,6 +713,10 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
   onCreateExperiment?: (name: string) => Promise<string>
   onExperimentUpdate?: (experimentId: string, update: ExperimentUpdate) => void
   onDeleteExperiment?: (experimentId: string) => void
+  dateFrom?: string
+  dateTo?: string
+  pageId?: string
+  idToken?: string
 }) {
   const { L, lang } = useLang()
   const en = lang === 'en'
@@ -722,16 +726,47 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
   const labels = creativeLabels ?? {}
   const exps = experiments ?? []
 
+  // The canonical snapshot (data.creatives) is a rolling ~30-day window. When the
+  // selected range starts earlier than that, the snapshot can't hold those creatives,
+  // so fetch the range's creatives on-demand from Meta (read-only — see
+  // /api/ads/creatives). Recent ranges keep using the fast snapshot.
+  const exceedsWindow = useMemo(() => {
+    if (!dateFrom) return false
+    const start = new Date(dateFrom + 'T00:00:00Z').getTime()
+    return start < Date.now() - 30 * 24 * 60 * 60 * 1000
+  }, [dateFrom])
+
+  const [histCreatives, setHistCreatives] = useState<AdData['creatives'] | null>(null)
+  const [histLoading, setHistLoading] = useState(false)
+
+  useEffect(() => {
+    if (!exceedsWindow || !pageId || !idToken || !dateFrom || !dateTo) { setHistCreatives(null); return }
+    let cancelled = false
+    setHistLoading(true)
+    fetch(`/api/ads/creatives?pageId=${encodeURIComponent(pageId)}&since=${dateFrom}&until=${dateTo}`, { headers: { Authorization: `Bearer ${idToken}` } })
+      .then(r => (r.ok ? r.json() : Promise.reject(r)))
+      .then(j => { if (!cancelled) setHistCreatives((j.creatives ?? []) as AdData['creatives']) })
+      .catch(() => { if (!cancelled) setHistCreatives([]) })
+      .finally(() => { if (!cancelled) setHistLoading(false) })
+    return () => { cancelled = true }
+  }, [exceedsWindow, pageId, idToken, dateFrom, dateTo])
+
+  // Historical ranges show the Meta-fetched creatives; recent ranges show the snapshot.
+  const sourceCreatives = useMemo(
+    () => (exceedsWindow ? (histCreatives ?? []) : data.creatives),
+    [exceedsWindow, histCreatives, data.creatives],
+  )
+
   const sorted = useMemo(() => {
-    let arr = [...data.creatives]
+    let arr = [...sourceCreatives]
     if (filter !== '全部') arr = arr.filter(c => c.type === filter)
     if (sortBy === 'roas') arr.sort((a, b) => b.roas - a.roas)
     else if (sortBy === 'spend') arr.sort((a, b) => b.spend - a.spend)
     else arr.sort((a, b) => a.cpa - b.cpa)
     return arr
-  }, [data.creatives, sortBy, filter])
+  }, [sourceCreatives, sortBy, filter])
 
-  const membersOf = (expId: string) => data.creatives.filter(c => labels[c.id]?.experimentId === expId)
+  const membersOf = (expId: string) => sourceCreatives.filter(c => labels[c.id]?.experimentId === expId)
 
   return (
     <div>
@@ -764,12 +799,24 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
         />
       ))}
 
-      {sorted.length === 0 && (
-        <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
-          {L('尚無廣告素材資料，請先同步廣告數據', 'No ad creative data yet — sync ad data first')}
+      {exceedsWindow && !histLoading && sorted.length > 0 && (
+        <p style={{ fontSize: 11, color: 'var(--ad-text3)', margin: '0 0 8px' }}>
+          {L('歷史區間素材（即時取自 Meta，不含已刪除的廣告）', 'Historical range — fetched live from Meta (deleted ads not included)')}
         </p>
       )}
-      <div className="ads-creative-grid">
+      {histLoading && (
+        <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
+          {L('載入歷史素材中…', 'Loading historical creatives…')}
+        </p>
+      )}
+      {!histLoading && sorted.length === 0 && (
+        <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
+          {exceedsWindow
+            ? L('此日期區間沒有投放過的廣告素材（已刪除的廣告 Meta 不提供）', 'No ad creatives were delivered in this date range (deleted ads are not returned by Meta).')
+            : L('尚無廣告素材資料，請先同步廣告數據', 'No ad creative data yet — sync ad data first')}
+        </p>
+      )}
+      <div className="ads-creative-grid" style={histLoading ? { display: 'none' } : undefined}>
         {sorted.map((c, i) => {
           const label = labels[c.id]
           const exp = label ? exps.find(e => e.id === label.experimentId) : undefined
