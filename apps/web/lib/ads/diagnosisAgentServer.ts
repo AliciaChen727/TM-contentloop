@@ -15,7 +15,7 @@ import { evaluateOutput } from '@/lib/sidekick/evaluator'
 import { writeFeedback } from '@/lib/sidekick/feedbackStore'
 import { diagnosisCardKey } from '@/lib/ads/diagnosisCardKey'
 import { buildPageDataTools } from '@/lib/ai/tools/pageDataTools'
-import { recordClaudeUsage } from '@/lib/usage'
+import { recordClaudeUsage, isOverMonthlyClaudeCap } from '@/lib/usage'
 import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 export interface EvalKeys { geminiKey?: string | null; anthropicKey?: string | null }
@@ -154,7 +154,7 @@ export async function runDiagnosisAgent(
 // Lightweight health counter so a silently-degrading primary path (sonnet tool
 // loop failing → daily haiku fallback) is quantifiable, not invisible. Best-effort,
 // fire-and-forget — never blocks or fails diagnosis. Inspect: agentHealth/diagnosis.
-function recordAgentHealth(field: 'sonnetOk' | 'sonnetFail' | 'bothFailed'): void {
+function recordAgentHealth(field: 'sonnetOk' | 'sonnetFail' | 'bothFailed' | 'cappedToHaiku'): void {
   adminDb.collection('agentHealth').doc('diagnosis').set(
     { [field]: FieldValue.increment(1), [`${field}At`]: FieldValue.serverTimestamp() },
     { merge: true },
@@ -186,14 +186,27 @@ export async function getOrGenerateDiagnosisCards(
   // aggregate key on users/{uid}). Null owner (page without admins) → skip recording.
   const ownerUid = (await resolvePageOwnerUid(pageId).catch(() => null)) ?? undefined
 
-  let cards = await runDiagnosisAgentWithTools(pageId, items, summary, apiKey, fewShot, en, 6, ownerUid)
-  if (cards) {
-    recordAgentHealth('sonnetOk')
+  // C1 — monthly Anthropic spend cap: over budget → skip the (pricier) sonnet tool
+  // loop and serve a single haiku call. Keeps the autonomous daily diagnosis running
+  // without letting cost run away. Env ANTHROPIC_MONTHLY_CAP_USD (default 30).
+  const capped = await isOverMonthlyClaudeCap()
+
+  let cards: AiDiagCard[] | null = null
+  if (capped) {
+    recordAgentHealth('cappedToHaiku')
+    console.warn('[diagnosisAgent] over monthly Anthropic cap → haiku single-shot only for page', pageId)
   } else {
-    // Sonnet path produced nothing (threw, or bad/unparseable output). Make the
-    // degradation visible instead of silently serving the haiku fallback every time.
-    recordAgentHealth('sonnetFail')
-    console.warn('[diagnosisAgent] sonnet tool loop returned null for page', pageId, '→ falling back to haiku')
+    cards = await runDiagnosisAgentWithTools(pageId, items, summary, apiKey, fewShot, en, 6, ownerUid)
+    if (cards) {
+      recordAgentHealth('sonnetOk')
+    } else {
+      // Sonnet path produced nothing (threw, or bad/unparseable output). Make the
+      // degradation visible instead of silently serving the haiku fallback every time.
+      recordAgentHealth('sonnetFail')
+      console.warn('[diagnosisAgent] sonnet tool loop returned null for page', pageId, '→ falling back to haiku')
+    }
+  }
+  if (!cards) {
     cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en, ownerUid)
   }
   if (!cards) { recordAgentHealth('bothFailed'); return null }

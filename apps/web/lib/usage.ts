@@ -13,6 +13,29 @@ export function currentMonth(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 
+// Global monthly Anthropic spend cap (USD). Protects the owner's total bill from a
+// runaway autonomous agent. Tunable via env; 0/unset disables the cap.
+const MONTHLY_CLAUDE_CAP_USD = Number(process.env.ANTHROPIC_MONTHLY_CAP_USD ?? 30)
+
+// True when this month's TOTAL claudeCostUsd (summed across all users, same口徑 as
+// /api/admin/usage) has hit the cap. Callers use this to downgrade the cron
+// diagnosis agent from the sonnet tool loop to a single haiku call. Best-effort —
+// any read failure returns false (never blocks diagnosis just because the check broke).
+export async function isOverMonthlyClaudeCap(): Promise<boolean> {
+  if (!(MONTHLY_CLAUDE_CAP_USD > 0)) return false
+  try {
+    const month = currentMonth()
+    const snap = await adminDb.collectionGroup('usage').get()
+    let total = 0
+    for (const d of snap.docs) {
+      if (d.id === month) total += (d.data()?.claudeCostUsd as number | undefined) ?? 0
+    }
+    return total >= MONTHLY_CLAUDE_CAP_USD
+  } catch {
+    return false
+  }
+}
+
 // Shared Claude usage accounting. Writes to the SAME users/{uid}/usage/{month} doc
 // the cost page + admin aggregate already read, so agent calls (diagnosis tool loop,
 // sidekick, …) all land in one place instead of some paths being invisible. For a
