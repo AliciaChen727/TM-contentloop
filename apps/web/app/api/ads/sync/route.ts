@@ -7,6 +7,7 @@ import { isSuperAdmin, resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } from '@/lib/meta/purchaseActions'
 import { computeCreativeFingerprint, computeAdFieldFingerprints } from '@/lib/ads/creativeFingerprint'
 import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
+import { isReauthRequired, markTokenStatus } from '@/lib/meta/tokenError'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -84,6 +85,14 @@ export async function POST(req: NextRequest) {
   const accountsRes = await fetch(accountsUrl)
   const accountsData = await accountsRes.json()
   if (!accountsRes.ok || accountsData.error) {
+    // A dead userAccessToken (expired / password change / dev-mode tester removal)
+    // fails HERE first. Previously this returned a bare 500 and never flagged the
+    // token → the ads dashboard silently showed $0 with no reconnect prompt. Mark
+    // the token invalid (same field the FB/IG paths set) so the reauth banner fires.
+    if (isReauthRequired(accountsData.error)) {
+      if (pageId) await markTokenStatus(dataUid, pageId, false, accountsData.error?.message)
+      return NextResponse.json({ error: accountsData.error?.message ?? 'Meta ads token invalid — please reconnect.', tokenInvalid: true }, { status: 401 })
+    }
     return NextResponse.json({ error: accountsData.error?.message ?? 'Failed to get ad accounts' }, { status: 500 })
   }
   const accounts: { id: string; name: string; currency?: string }[] = accountsData.data ?? []
