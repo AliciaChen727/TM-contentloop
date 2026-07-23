@@ -11,6 +11,7 @@ import { getSidekickFewShot, formatFewShot } from '@/lib/sidekick/feedbackRetrie
 import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 import { buildPageDataTools } from '@/lib/ai/tools/pageDataTools'
 import { resolveAllowedPages } from '@/lib/ai/tools/resolveAllowedPages'
+import { recordClaudeUsage } from '@/lib/usage'
 
 interface MetricsContext {
   // Posts metrics
@@ -787,17 +788,7 @@ export async function POST(req: NextRequest) {
     })
   } catch { /* non-critical */ }
 
-  try {
-    const inputTokens = totalInputTokens
-    const outputTokens = totalOutputTokens
-    const claudeCostUsd = (inputTokens * 0.80 + outputTokens * 4) / 1_000_000
-    const month = new Date().toISOString().slice(0, 7)
-    await adminDb.collection('users').doc(uid).collection('usage').doc(month).set({
-      claudeInputTokens: FieldValue.increment(inputTokens),
-      claudeOutputTokens: FieldValue.increment(outputTokens),
-      claudeCostUsd: FieldValue.increment(claudeCostUsd),
-    }, { merge: true })
-  } catch { /* non-critical */ }
+  await recordClaudeUsage(uid, { model: 'claude-sonnet-4-6', inputTokens: totalInputTokens, outputTokens: totalOutputTokens })
 
   return NextResponse.json({ response: parsed })
 }

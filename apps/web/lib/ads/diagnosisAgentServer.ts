@@ -15,6 +15,8 @@ import { evaluateOutput } from '@/lib/sidekick/evaluator'
 import { writeFeedback } from '@/lib/sidekick/feedbackStore'
 import { diagnosisCardKey } from '@/lib/ads/diagnosisCardKey'
 import { buildPageDataTools } from '@/lib/ai/tools/pageDataTools'
+import { recordClaudeUsage } from '@/lib/usage'
+import { resolvePageOwnerUid } from '@/lib/auth/superadmin'
 
 export interface EvalKeys { geminiKey?: string | null; anthropicKey?: string | null }
 
@@ -23,7 +25,7 @@ export interface EvalKeys { geminiKey?: string | null; anthropicKey?: string | n
 // memory (docId diag__cardKey — same doc the human action later merges into).
 async function evaluateAndStore(
   pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string,
-  fewShot: string, cards: AiDiagCard[], evalKeys: EvalKeys,
+  fewShot: string, cards: AiDiagCard[], evalKeys: EvalKeys, recordUid?: string,
 ): Promise<AiDiagCard[]> {
   const combine = (cs: AiDiagCard[]) => cs.map(c => `【${c.title}】${c.why.join(' ')} ${c.impact}`.trim()).join('\n')
   const context = items.map(d => `${d.title}：${d.metric}（門檻 ${d.threshold}）`).join('；').slice(0, 1500)
@@ -43,10 +45,10 @@ async function evaluateAndStore(
     // Timeout / failure falls back to the original single-shot haiku retry.
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000))
     let retry = await Promise.race([
-      runDiagnosisAgentWithTools(pageId, items, summary, apiKey, retryHint, false, 4),
+      runDiagnosisAgentWithTools(pageId, items, summary, apiKey, retryHint, false, 4, recordUid),
       timeout,
     ])
-    if (!retry) retry = await runDiagnosisAgent(items, summary, apiKey, retryHint)
+    if (!retry) retry = await runDiagnosisAgent(items, summary, apiKey, retryHint, false, recordUid)
     if (retry) {
       const retryEval = await evaluateOutput({ output: combine(retry), context, goal, kind: 'diagnosis' }, evalKeys)
       if (retryEval.evalScore > result.evalScore) { finalCards = retry; result = retryEval }
@@ -94,12 +96,12 @@ function toolAddendum(en = false): string {
 // only. Multi-step: inspect trend → verify numbers → emit cards. Falls back to
 // null on any failure (caller then tries the single-shot haiku path).
 export async function runDiagnosisAgentWithTools(
-  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false, maxIterations = 6,
+  pageId: string, items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false, maxIterations = 6, recordUid?: string,
 ): Promise<AiDiagCard[] | null> {
   try {
     const anthropic = new Anthropic({ apiKey })
     const tools = buildPageDataTools({ allowedPageIds: [pageId] })
-    const final = await anthropic.beta.messages.toolRunner({
+    const runner = anthropic.beta.messages.toolRunner({
       model: 'claude-sonnet-4-6',
       max_tokens: 2400,
       max_iterations: maxIterations,
@@ -107,10 +109,19 @@ export async function runDiagnosisAgentWithTools(
       messages: [{ role: 'user', content: `pageId: ${pageId}\n${agentUserMessage(items, summary, fewShot)}` }],
       tools,
     })
+    // Iterate so token usage accumulates across ALL tool turns (awaiting the runner
+    // only exposes the final turn's tokens → undercount). rounds = tool-loop
+    // observability (how many turns this diagnosis actually took).
+    let final: Anthropic.Beta.BetaMessage | null = null
+    let inTok = 0, outTok = 0, rounds = 0
+    for await (const msg of runner) { final = msg; inTok += msg.usage.input_tokens; outTok += msg.usage.output_tokens; rounds++ }
+    if (recordUid) await recordClaudeUsage(recordUid, { model: 'claude-sonnet-4-6', inputTokens: inTok, outputTokens: outTok })
     // Final answer = the LAST text block (earlier blocks may be inter-tool notes).
-    const texts = final.content.filter((b) => b.type === 'text')
+    const texts = (final?.content ?? []).filter((b) => b.type === 'text')
     const raw = texts.length ? texts[texts.length - 1].text : ''
-    return parseAndEnforceCards(raw, items)
+    const cards = parseAndEnforceCards(raw, items)
+    console.info('[diagnosisAgent] sonnet tool loop', JSON.stringify({ pageId, rounds, tokens: inTok + outTok, parsedOk: !!cards }))
+    return cards
   } catch (err) {
     // Was silently swallowed → the sonnet path could fail every day (falling back
     // to haiku) with no signal. Log it; the orchestrator also counts it.
@@ -121,7 +132,7 @@ export async function runDiagnosisAgentWithTools(
 
 // One Haiku call → enforced cards (or null on failure / bad output).
 export async function runDiagnosisAgent(
-  items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false,
+  items: DiagItem[], summary: Record<string, number>, apiKey: string, fewShot?: string, en = false, recordUid?: string,
 ): Promise<AiDiagCard[] | null> {
   try {
     const anthropic = new Anthropic({ apiKey })
@@ -131,6 +142,7 @@ export async function runDiagnosisAgent(
       system: [{ type: 'text', text: agentSystemPrompt(en), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: agentUserMessage(items, summary, fewShot) }],
     })
+    if (recordUid) await recordClaudeUsage(recordUid, { model: 'claude-haiku-4-5-20251001', inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens })
     const raw = res.content[0]?.type === 'text' ? res.content[0].text : ''
     return parseAndEnforceCards(raw, items)
   } catch (err) {
@@ -170,7 +182,11 @@ export async function getOrGenerateDiagnosisCards(
   // Primary: sonnet tool-loop (trend inspection + number verification, Slice 15);
   // fallback: the original single-shot haiku call. Retry-on-low-score inside
   // evaluateAndStore stays single-shot to bound latency/cost.
-  let cards = await runDiagnosisAgentWithTools(pageId, items, summary, apiKey, fewShot, en)
+  // Attribute Claude cost to the page OWNER's usage doc (the cost page + admin
+  // aggregate key on users/{uid}). Null owner (page without admins) → skip recording.
+  const ownerUid = (await resolvePageOwnerUid(pageId).catch(() => null)) ?? undefined
+
+  let cards = await runDiagnosisAgentWithTools(pageId, items, summary, apiKey, fewShot, en, 6, ownerUid)
   if (cards) {
     recordAgentHealth('sonnetOk')
   } else {
@@ -178,13 +194,13 @@ export async function getOrGenerateDiagnosisCards(
     // degradation visible instead of silently serving the haiku fallback every time.
     recordAgentHealth('sonnetFail')
     console.warn('[diagnosisAgent] sonnet tool loop returned null for page', pageId, '→ falling back to haiku')
-    cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en)
+    cards = await runDiagnosisAgent(items, summary, apiKey, fewShot, en, ownerUid)
   }
   if (!cards) { recordAgentHealth('bothFailed'); return null }
 
   // Quality evaluator (Slice 11): score → retry-once-if-low → store evalScore.
   if (evalKeys && (evalKeys.geminiKey || evalKeys.anthropicKey)) {
-    cards = await evaluateAndStore(pageId, items, summary, apiKey, fewShot, cards, evalKeys)
+    cards = await evaluateAndStore(pageId, items, summary, apiKey, fewShot, cards, evalKeys, ownerUid)
   }
 
   await latestRef.set({

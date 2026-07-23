@@ -4,8 +4,37 @@ import { FieldValue } from 'firebase-admin/firestore'
 const IMAGE_UNIT_COST_USD = 0.02   // Imagen 3 Fast
 const VIDEO_PER_SECOND_USD = 0.50  // Veo 2
 
+// Rough shared $/1M-token estimate — kept equal to the sidekick's original cost
+// basis so claudeCostUsd stays consistent across every Claude call site. Per-model
+// rates can be split out here later; `byModel` keeps the token breakdown regardless.
+const CLAUDE_RATE = { inputPerM: 0.80, outputPerM: 4 }
+
 export function currentMonth(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
+}
+
+// Shared Claude usage accounting. Writes to the SAME users/{uid}/usage/{month} doc
+// the cost page + admin aggregate already read, so agent calls (diagnosis tool loop,
+// sidekick, …) all land in one place instead of some paths being invisible. For a
+// page-scoped agent, pass the page OWNER's uid (not pageId — the admin aggregate keys
+// on users/{uid}). Best-effort — never throws, never blocks the caller.
+export async function recordClaudeUsage(
+  uid: string,
+  usage: { model: string; inputTokens: number; outputTokens: number },
+): Promise<void> {
+  if (!uid || (usage.inputTokens <= 0 && usage.outputTokens <= 0)) return
+  try {
+    const costUsd = (usage.inputTokens * CLAUDE_RATE.inputPerM + usage.outputTokens * CLAUDE_RATE.outputPerM) / 1_000_000
+    await adminDb.collection('users').doc(uid).collection('usage').doc(currentMonth()).set({
+      claudeInputTokens: FieldValue.increment(usage.inputTokens),
+      claudeOutputTokens: FieldValue.increment(usage.outputTokens),
+      claudeCostUsd: FieldValue.increment(costUsd),
+      byModel: { [usage.model]: { inputTokens: FieldValue.increment(usage.inputTokens), outputTokens: FieldValue.increment(usage.outputTokens) } },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  } catch (e) {
+    console.error('[recordClaudeUsage] failed:', e instanceof Error ? e.message : e)
+  }
 }
 
 export async function recordImageGeneration(uid: string): Promise<void> {
