@@ -19,9 +19,18 @@ if (allowed.length === 0) {
   process.exit(1)
 }
 
+// /build creates feature Issues → the agent writes NEW code (broader blast radius
+// than /fix on an existing Issue). Restrict it to owners; if unset, fall back to the
+// full allowlist so existing single-user setups keep working unchanged.
+const buildOwners = (process.env.TELEGRAM_BUILD_OWNER_IDS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 export const config = {
   telegramToken: required('TELEGRAM_BOT_TOKEN'),
   allowedUserIds: new Set(allowed),
+  buildOwnerIds: new Set(buildOwners.length ? buildOwners : allowed),
   githubToken: required('GITHUB_DISPATCH_TOKEN'),
   repo: process.env.GITHUB_REPO?.trim() || 'AliciaChen727/TM-contentloop',
   workflowFile: process.env.WORKFLOW_FILE?.trim() || 'bug-fix-agent.yml',

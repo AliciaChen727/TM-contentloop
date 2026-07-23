@@ -27,6 +27,12 @@ function allowed(userId) {
   return config.allowedUserIds.has(String(userId))
 }
 
+// /build is owner-only (feature dev = the agent writes new code). /fix stays open
+// to the whole allowlist. See config.buildOwnerIds.
+function isBuildOwner(userId) {
+  return config.buildOwnerIds.has(String(userId))
+}
+
 // Rate-limit only the expensive commands (agent runs cost money + open PRs).
 function overLimit(userId) {
   const day = new Date().toISOString().slice(0, 10)
@@ -55,6 +61,9 @@ async function handleFix(chatId, userId, arg) {
 }
 
 async function handleBuild(chatId, userId, desc) {
+  if (!isBuildOwner(userId)) {
+    return sendMessage(chatId, '⛔ <b>/build</b> 僅限擁有者使用（開發新功能權限較高）。你可以用 <b>/fix &lt;issue編號&gt;</b> 修既有 Issue。')
+  }
   const text = String(desc).trim()
   if (text.length < 5) {
     return sendMessage(chatId, '用法：<code>/build 幫貼文卡片加分享按鈕</code>（描述清楚一點）')
