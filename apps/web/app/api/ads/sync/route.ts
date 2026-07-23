@@ -8,6 +8,7 @@ import { parseActionValue as parseActions, hasPurchaseAction, type MetaAction } 
 import { computeCreativeFingerprint, computeAdFieldFingerprints } from '@/lib/ads/creativeFingerprint'
 import { selectAdAccountForPage } from '@/lib/meta/selectAdAccount'
 import { isReauthRequired, markTokenStatus } from '@/lib/meta/tokenError'
+import { matchesPageStory, creativeBelongsToPage, type PageMatchContext } from '@/lib/meta/pageIsolation'
 
 const BASE = 'https://graph.facebook.com/v19.0'
 
@@ -334,32 +335,26 @@ export async function POST(req: NextRequest) {
   }
 
   // Filter creatives to only those belonging to the current page or IG account.
+  // Logic lives in lib/meta/pageIsolation (tested, incl. the igUserId branch); the
+  // local matchesPage/matchesIg stay as thin delegates for the other call sites below.
   const pageIdPrefixes = new Set([pageId, effectivePagePrefix].filter(Boolean) as string[])
-  const matchesPage = (storyId: string | undefined) => {
-    if (typeof storyId !== 'string') return false
-    if (Array.from(pageIdPrefixes).some(p => storyId.startsWith(`${p}_`))) return true
-    // Fallback for pages whose effective_object_story_id still uses old page ID (New Page Experience)
-    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
-    return fbMediaIdSet.has(postId) || fbMediaIdSet.has(storyId)
+  const pageMatchCtx: PageMatchContext = {
+    pagePrefixes: Array.from(pageIdPrefixes),
+    fbMediaIds: fbMediaIdSet,
+    igUserId,
+    igMediaIds: igMediaIdSet,
   }
-
-  const matchesIg = (storyId: string | undefined) => {
-    if (typeof storyId !== 'string') return false
-    if (igUserId && storyId.startsWith(`${igUserId}_`)) return true
-    const postId = storyId.includes('_') ? storyId.split('_').slice(1).join('_') : storyId
-    return igMediaIdSet.has(postId)
-  }
+  const matchesPage = (storyId: string | undefined) => matchesPageStory(storyId, pageMatchCtx)
 
   // Page-matched creatives across ALL statuses. Spend already incurred on a now-paused
   // or finished ad still belongs to this page, so the daily/summary aggregation must
   // count it — otherwise a page whose only ad has ended would show $0 in the overview.
   const pageMatchedCreatives = (pageIdPrefixes.size > 0 || igUserId || igMediaIdSet.size > 0
-    ? allAdCreatives.filter(c => {
-        const sid = c.effective_object_story_id as string | undefined
-        const igId = adIdToIgStoryId.get(c.ad_id as string)
-        if (!sid && !igId) return false
-        return matchesPage(sid) || matchesIg(sid) || (igId ? matchesIg(igId) : false)
-      })
+    ? allAdCreatives.filter(c => creativeBelongsToPage(
+        c.effective_object_story_id as string | undefined,
+        adIdToIgStoryId.get(c.ad_id as string),
+        pageMatchCtx,
+      ))
     : allAdCreatives)
 
   // Creative-library display keeps only currently-active creatives.
