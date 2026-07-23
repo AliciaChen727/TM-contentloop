@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Icon } from '../Icon'
 import type { AdData, Adset, LabelEntry, Experiment } from '../types'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { useHistoricalCreatives } from '@/lib/ads/useHistoricalCreatives'
 
 const fmt = (n: number) => n.toLocaleString('zh-TW')
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${fmt(n)}`
@@ -50,16 +51,40 @@ function renderAdName(name: string) {
 type MergedAdset = Adset & { members?: Adset[] }
 type AdsetRow = MergedAdset & { newBudget: number }
 
-export function BudgetSection({ data, creativeLabels, experiments }: {
+export function BudgetSection({ data, creativeLabels, experiments, dateFrom, dateTo, pageId, idToken }: {
   data: AdData
   creativeLabels?: Record<string, LabelEntry>
   experiments?: Experiment[]
+  dateFrom?: string
+  dateTo?: string
+  pageId?: string
+  idToken?: string
 }) {
   const { L } = useLang()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const convType = (data as any).conversionType as string | undefined
   const isClickBased = convType === 'link_click'
   const isVideoBased = convType === 'video_view'
+
+  // The ad sets are derived from the same creatives as Creative Ranking, so for ranges
+  // older than the ~30-day snapshot window we rebuild them from the on-demand Meta
+  // fetch (budget falls back to a spend-based estimate — the creatives endpoint doesn't
+  // return per-adset budget). Recent ranges use the snapshot's data.budget.adsets.
+  const { creatives: histCreatives, loading: histLoading, exceedsWindow } = useHistoricalCreatives(dateFrom, dateTo, pageId, idToken)
+  const sourceAdsets = useMemo<Adset[]>(() => {
+    if (!exceedsWindow) return data.budget.adsets
+    return (histCreatives ?? []).map(c => {
+      const cBudget = c.budget ?? 0
+      return {
+        id: c.id,
+        name: c.name,
+        budget: cBudget > 0 ? Math.round(cBudget) : (c.spend > 0 ? Math.round(c.spend / 0.8) : 1000),
+        spent: Math.round(c.spend),
+        roas: c.roas,
+        cpa: Math.round(c.cpa),
+      }
+    })
+  }, [exceedsWindow, histCreatives, data.budget.adsets])
 
   // Merge ads tagged in the same A/B experiment into one combined row (budget/spent
   // summed, ROAS/CPA spend-weighted). Untagged ads stay individual.
@@ -68,7 +93,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
     const expName = new Map((experiments ?? []).map(e => [e.id, e.name]))
     const groups = new Map<string, Adset[]>()
     const singles: Adset[] = []
-    for (const a of data.budget.adsets) {
+    for (const a of sourceAdsets) {
       const expId = a.id ? labels[a.id]?.experimentId : undefined
       if (expId) {
         const arr = groups.get(expId) ?? []
@@ -95,7 +120,7 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
       })
     }
     return [...merged, ...singles]
-  }, [data.budget.adsets, creativeLabels, experiments])
+  }, [sourceAdsets, creativeLabels, experiments])
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (id: string) => setExpanded(p => {
@@ -145,7 +170,18 @@ export function BudgetSection({ data, creativeLabels, experiments }: {
         <span className="ads-section-title">{L('預算分配模擬器', 'Budget Allocation Simulator')}</span>
       </div>
 
-      <div className="ads-card ads-card-pad">
+      {exceedsWindow && !histLoading && baseAdsets.length > 0 && (
+        <p style={{ fontSize: 11, color: 'var(--ad-text3)', margin: '0 0 8px' }}>
+          {L('歷史區間（即時取自 Meta；原始預算為花費估算）', 'Historical range — fetched live from Meta (original budget is spend-estimated)')}
+        </p>
+      )}
+      {histLoading && (
+        <p style={{ textAlign: 'center', color: 'var(--ad-text3)', padding: 40 }}>
+          {L('載入歷史廣告組合中…', 'Loading historical ad sets…')}
+        </p>
+      )}
+
+      <div className="ads-card ads-card-pad" style={histLoading ? { display: 'none' } : undefined}>
         <div className="ads-sim-controls">
           <div style={{ fontSize: 13 }}>
             {L('模擬總預算：', 'Simulated total budget: ')}<strong style={{ fontFamily: 'var(--font-dm-mono)', fontSize: 15 }}>{fmtK(totalNew)}</strong>

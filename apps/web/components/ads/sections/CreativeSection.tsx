@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../Icon'
 import type { AdData, Variant, LabelEntry, Experiment } from '../types'
 import { useLang } from '@/lib/i18n/LanguageProvider'
+import { useHistoricalCreatives } from '@/lib/ads/useHistoricalCreatives'
 
 const fmtK = (n: number) => n >= 10000 ? `$${Math.round(n / 1000)}K` : `$${n.toLocaleString()}`
 const statusLabel = (s: string, en: boolean): string => en
@@ -726,32 +727,9 @@ export function CreativeSection({ data, onAskAI, creativeLabels, experiments, on
   const labels = creativeLabels ?? {}
   const exps = experiments ?? []
 
-  // The canonical snapshot (data.creatives) is a rolling ~30-day window. When the
-  // selected range starts earlier than that, the snapshot can't hold those creatives,
-  // so fetch the range's creatives on-demand from Meta (read-only — see
-  // /api/ads/creatives). Recent ranges keep using the fast snapshot.
-  const exceedsWindow = useMemo(() => {
-    if (!dateFrom) return false
-    const start = new Date(dateFrom + 'T00:00:00Z').getTime()
-    return start < Date.now() - 30 * 24 * 60 * 60 * 1000
-  }, [dateFrom])
-
-  const [histCreatives, setHistCreatives] = useState<AdData['creatives'] | null>(null)
-  const [histLoading, setHistLoading] = useState(false)
-
-  useEffect(() => {
-    if (!exceedsWindow || !pageId || !idToken || !dateFrom || !dateTo) { setHistCreatives(null); return }
-    let cancelled = false
-    setHistLoading(true)
-    fetch(`/api/ads/creatives?pageId=${encodeURIComponent(pageId)}&since=${dateFrom}&until=${dateTo}`, { headers: { Authorization: `Bearer ${idToken}` } })
-      .then(r => (r.ok ? r.json() : Promise.reject(r)))
-      .then(j => { if (!cancelled) setHistCreatives((j.creatives ?? []) as AdData['creatives']) })
-      .catch(() => { if (!cancelled) setHistCreatives([]) })
-      .finally(() => { if (!cancelled) setHistLoading(false) })
-    return () => { cancelled = true }
-  }, [exceedsWindow, pageId, idToken, dateFrom, dateTo])
-
-  // Historical ranges show the Meta-fetched creatives; recent ranges show the snapshot.
+  // Historical ranges (start before the ~30-day snapshot window) fetch on-demand from
+  // Meta; recent ranges use the fast snapshot. Shared with Budget via the same hook.
+  const { creatives: histCreatives, loading: histLoading, exceedsWindow } = useHistoricalCreatives(dateFrom, dateTo, pageId, idToken)
   const sourceCreatives = useMemo(
     () => (exceedsWindow ? (histCreatives ?? []) : data.creatives),
     [exceedsWindow, histCreatives, data.creatives],

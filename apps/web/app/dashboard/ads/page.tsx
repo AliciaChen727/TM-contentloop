@@ -1014,7 +1014,7 @@ export default function AdsPage() {
               {active === 'audience' && <AudienceSection demographics={adData.demographics ?? []} funnelStages={adData.funnelStages ?? []} deviceBreakdown={adData.deviceBreakdown ?? []} conversionType={adData.conversionType} />}
               {active === 'posts' && <PostsSection onAskAI={canSidekick ? openSidekick : undefined} posts={realPosts ? realPosts.filter(p => p.date >= dateFrom && p.date <= dateTo) : null} />}
               {active === 'time' && <BestTimeSection data={adData} />}
-              {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} />}
+              {active === 'budget' && <BudgetSection data={adData} creativeLabels={creativeLabels} experiments={experiments} dateFrom={dateFrom} dateTo={dateTo} pageId={selectedPageId} idToken={idTokenRef} />}
             </>
           )}
         </main>
