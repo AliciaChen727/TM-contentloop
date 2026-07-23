@@ -1,6 +1,6 @@
 'use client'
 
-import { signInWithPopup, signOut, linkWithCredential, FacebookAuthProvider, type AuthError } from 'firebase/auth'
+import { signInWithPopup, signOut, linkWithCredential, FacebookAuthProvider, type AuthCredential, type AuthError } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { auth, googleProvider, facebookProvider } from '@/lib/firebase/client'
@@ -17,6 +17,11 @@ export default function LoginPage() {
   // webview) 會被 Google 以「Use secure browsers」政策擋下 Google 登入
   // （Error 403: disallowed_useragent）。偵測到就提示使用者改用 Safari/Chrome 開啟。
   const [inAppBrowser, setInAppBrowser] = useState(false)
+
+  // 同一個 email 已存在 Google 帳號時，Firebase 會拒收 Facebook 憑證。要完成連結
+  // 得再開一次 Google popup —— 但那必須由使用者親手點擊觸發，直接在 catch 裡開會
+  // 被瀏覽器當成非使用者操作擋掉（手機尤其嚴格）。所以先把憑證存起來，改用按鈕。
+  const [pendingFbCredential, setPendingFbCredential] = useState<AuthCredential | null>(null)
   useEffect(() => {
     const ua = navigator.userAgent || ''
     const patterns = /FBAN|FBAV|FB_IAB|Instagram|Line\/|Messenger|Barcelona|MicroMessenger|Twitter|TikTok|musical_ly|BytedanceWebview/i
@@ -50,6 +55,18 @@ export default function LoginPage() {
     }
   }
 
+  // popup 被擋 / 被關掉是最常見的失敗，籠統的「登入失敗」看不出該做什麼。
+  function describePopupError(err: unknown): string | null {
+    const code = (err as AuthError)?.code
+    if (code === 'auth/popup-blocked') {
+      return L('瀏覽器擋下了登入視窗，請允許彈出視窗後再試一次。', 'Your browser blocked the sign-in window. Please allow pop-ups and try again.')
+    }
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      return L('登入視窗被關閉了，請再試一次。', 'The sign-in window was closed. Please try again.')
+    }
+    return null
+  }
+
   async function handleGoogleLogin() {
     try {
       setError('')
@@ -58,46 +75,61 @@ export default function LoginPage() {
       await handlePostLogin(idToken)
     } catch (err) {
       console.error('Login failed:', err)
-      setError(L('登入失敗，請重試。', 'Login failed, please try again.'))
+      setError(describePopupError(err) ?? L('登入失敗，請重試。', 'Login failed, please try again.'))
     }
   }
 
   async function handleFacebookLogin() {
     try {
       setError('')
+      setPendingFbCredential(null)
       const result = await signInWithPopup(auth, facebookProvider)
       const idToken = await result.user.getIdToken()
       await handlePostLogin(idToken)
     } catch (err: unknown) {
       const authErr = err as AuthError
       if (authErr?.code === 'auth/account-exists-with-different-credential') {
+        // 拿不到憑證時就沒有連結按鈕可按，但訊息一定要出現（以前這條路是靜默失敗的）。
         const fbCredential = FacebookAuthProvider.credentialFromError(authErr)
-        if (fbCredential) {
-          try {
-            setError(L('你的 Email 已有 Google 帳號，正在自動連結，請在 Google 彈窗中確認身份…', 'Your email already has a Google account; linking automatically — please confirm in the Google popup…'))
-            const googleResult = await signInWithPopup(auth, googleProvider)
-            try {
-              await linkWithCredential(googleResult.user, fbCredential)
-            } catch (linkErr: unknown) {
-              const le = linkErr as AuthError
-              if (le?.code !== 'auth/provider-already-linked') {
-                console.error('Account linking failed:', linkErr)
-                setError(L('帳號連結失敗，請重試或聯絡管理員。', 'Account linking failed. Please retry or contact an admin.'))
-                return
-              }
-            }
-            setError('')
-            const idToken = await googleResult.user.getIdToken()
-            await handlePostLogin(idToken)
-          } catch (googleErr) {
-            console.error('Google sign-in during linking failed:', googleErr)
-            setError(L('帳號連結失敗，請重試或聯絡管理員。', 'Account linking failed. Please retry or contact an admin.'))
-          }
-        }
-      } else {
-        console.error('Facebook login failed:', err)
-        setError(L('Facebook 登入目前暫時無法使用，請改用上方的「使用 Google 帳號登入」。', 'Facebook login is temporarily unavailable — please use "Sign in with Google" above.'))
+        setPendingFbCredential(fbCredential)
+        setError(
+          fbCredential
+            ? L('這個 Email 已經用 Google 帳號註冊過。點下方按鈕用 Google 驗證並連結 Facebook，或直接用上方的「使用 Google 帳號登入」。', 'This email is already registered with a Google account. Use the button below to verify with Google and link Facebook, or just use “Sign in with Google” above.')
+            : L('這個 Email 已經用 Google 帳號註冊過，請改用上方的「使用 Google 帳號登入」。', 'This email is already registered with a Google account — please use “Sign in with Google” above.')
+        )
+        return
       }
+      console.error('Facebook login failed:', err)
+      setError(
+        describePopupError(err) ??
+          L('Facebook 登入目前暫時無法使用，請改用上方的「使用 Google 帳號登入」。', 'Facebook login is temporarily unavailable — please use “Sign in with Google” above.')
+      )
+    }
+  }
+
+  // 由使用者點擊觸發，popup 才不會被瀏覽器擋。
+  async function handleLinkFacebook() {
+    if (!pendingFbCredential) return
+    try {
+      setError('')
+      const googleResult = await signInWithPopup(auth, googleProvider)
+      try {
+        await linkWithCredential(googleResult.user, pendingFbCredential)
+      } catch (linkErr: unknown) {
+        // 連結只是加分項；失敗也不該擋住已經驗證成功的使用者。
+        if ((linkErr as AuthError)?.code !== 'auth/provider-already-linked') {
+          console.error('Account linking failed:', linkErr)
+        }
+      }
+      setPendingFbCredential(null)
+      const idToken = await googleResult.user.getIdToken()
+      await handlePostLogin(idToken)
+    } catch (err) {
+      console.error('Google sign-in during linking failed:', err)
+      setError(
+        describePopupError(err) ??
+          L('帳號連結失敗，請直接用上方的「使用 Google 帳號登入」。', 'Account linking failed — please use “Sign in with Google” above instead.')
+      )
     }
   }
 
@@ -122,6 +154,14 @@ export default function LoginPage() {
           </div>
         )}
         {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+        {pendingFbCredential && (
+          <button
+            onClick={handleLinkFacebook}
+            className="mb-4 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+          >
+            {L('用 Google 驗證並連結 Facebook', 'Verify with Google and link Facebook')}
+          </button>
+        )}
         <button
           onClick={handleGoogleLogin}
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
