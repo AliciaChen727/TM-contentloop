@@ -9,10 +9,14 @@ result:
   commands were executed against the repo, plus spot-checks of every load-bearing
   claim (function names, commit hashes, thresholds, cron schedules, flag names, file
   paths). Results below.
-- **Doctrine + usability passes: self-review only, NOT fresh-context.** The author
-  reviewed their own files — weaker than an independent fresh-context read. A future
-  session with credits SHOULD re-run those two passes. This is the single biggest
-  open risk in this deliverable.
+- **Doctrine + usability passes: DONE 2026-07-23 (fresh-context).** Three cold-read
+  subagents reviewed all 14 skills for doctrine soundness + usability. No BLOCKING
+  findings; 6 IMPORTANT applied (build-and-env npm/yarn.lock, diagnostics-tooling
+  isolation+write-safety, config-and-flags key-shadow gotcha, failure-archaeology +
+  diagnostics-tooling composite-index scoping, self-learning-loop noisy baseline,
+  publish-pipeline vs auto-publish-agent disambiguation). The remaining `route.ts`
+  matchesPage unit test is tracked separately (not a skill issue). This closes the
+  original "single biggest open risk".
 
 ## Factual pass results (2026-07-13, verified against repo HEAD)
 All 14 re-verification commands pass as written, with ONE fix applied:

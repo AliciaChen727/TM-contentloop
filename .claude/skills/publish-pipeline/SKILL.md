@@ -5,6 +5,8 @@ description: 載入時機（觀察到的狀態）：要動草稿發布/排程相
 
 # 發布 Pipeline Playbook（驗證日 2026-07-13）
 
+> **與 `auto-publish-agent` skill 的分工**（別當成重複、也別載錯）：**本 skill＝依症狀除錯發布 pipeline**（發布失敗/限動沒出/輪播卡住/學習記錄沒寫 → 怎麼查怎麼修）。**`auto-publish-agent`＝要「建/改」自動發布功能時的參考**（HITL 關卡、狀態機、各平台尺寸/字數硬限、fallback 鐵則、檔案位置）。動草稿/發布/Meta 寫入相關 code 前兩個都值得讀：先讀 auto-publish-agent 定契約，再用本檔排實際故障。
+
 ## 架構事實
 - 核心：`lib/content/publishRunner.ts` 的 `runPublish(pageId, draft, platform, byUid)` — **無 LLM**，純編排。手動發布 route 與排程 cron（`/api/cron/publish-scheduled`）共用它，平台邏輯不重複。
 - 狀態機：草稿 → 人工核准（HITL）→ 發布/排程 → 記錄 outcome + audit。發布失敗標 `failed`（never silent, never loops）。

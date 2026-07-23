@@ -22,6 +22,7 @@ Meta 預算欄位的單位依幣別：`NO_DIVIDE` 集合（TWD/JPY/KRW…，在 
 
 ## AI 相關 key 解析順序
 Anthropic key：呼叫者自己的（`getUserApiKey`）→ 頁 owner 的 → `ANTHROPIC_API_KEY` env。Gemini：`GEMINI_API_KEY` env → user key。生圖/影片走 owner GCP Vertex SA（**不是** Gemini API key — 死路見 failure-archaeology.md）。
+- **⚠️ 已知坑：per-user stored key 會 silently shadow env。** 因為解析順序「user key 優先於 env」，Firestore `users/{uid}/settings/apiKeys` 存了舊 key 時，換掉 `ANTHROPIC_API_KEY` env **仍然 401**、且沒有 UI 可清。換 key 後還 401，先查 `settings/apiKeys`（見 failure-archaeology.md `project_anthropic_key_stored_shadow`）。
 
 ## Bug pipeline 相關
 `GITHUB_BUG_TOKEN`（fine-grained PAT，Issues R/W）、`GITHUB_BUG_REPO`（預設 `AliciaChen727/TM-contentloop`）、GitHub Actions secret `ANTHROPIC_API_KEY`（修復 agent 用）。

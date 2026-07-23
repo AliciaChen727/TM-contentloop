@@ -24,6 +24,10 @@ const db = admin.firestore()
 process.exit(0)   // 必加：admin SDK 會讓 process 掛著不結束
 ```
 
+> **⚠️ 隔離＋寫入鐵則（throwaway 腳本一樣要守）**
+> - **隔離**：查/清任何貼文/廣告/洞察資料，先套 `page-isolation-contract` 的規則——legacy FB 用 `` `${pageId}_` `` 前綴過濾、legacy IG 有 pageId 時不讀 legacy。腳本最常忽略這條，卻正好碰到 legacy collection（本檔範例查詢就在危險區）。
+> - **寫入**：admin SDK 寫入**繞過所有 Firestore rules**。動正式資料前務必依序：(1) 先 dump 現狀留檔、(2) 先跑 count-only / dry-run 確認會影響幾筆、(3) 告知使用者要改什麼——**禁盲寫**。
+
 ## 四個坑（每個都踩過）
 1. **執行位置**：腳本必須放在 repo 樹內（慣例：`apps/web/`）執行 — node 才解析得到 hoisted 根目錄 `node_modules` 的 firebase-admin。放外部目錄（如 scratchpad）→ `ERR_MODULE_NOT_FOUND`。用完 `rm`。
 2. **引號**：`.env.local` 的值多帶雙引號，`privateKey` 還有 `\\n` — 上面骨架的兩個 replace 都是必要的。
@@ -41,7 +45,7 @@ process.exit(0)   // 必加：admin SDK 會讓 process 掛著不結束
 - 寫入類操作動正式資料前：先 dump 現狀留檔，並告知使用者要動什麼。
 
 ## Firestore 查詢慣例
-- 避免 `where`+`orderBy` 組合（composite index）— 用 orderBy limit 撈近期 + 記憶體過濾（repo 全面如此）。
+- 慣例上避免 `where`+`orderBy` 組合（composite index）— 用 orderBy limit 撈近期 + 記憶體過濾。**但這是「現規模」的取捨、不是鐵則**：若查詢要掃 >數百筆、或記憶體過濾可能漏掉窗口外的符合 doc，就直接建 composite index（`firestore.indexes.json` 一條 / console 一鍵），別無條件沿用。
 - `set(..., {merge:true})` 是**深合併**：歸零一個 map 要列出全部 key，漏的 key 舊值殘留（linkClicks 事故）。
 - collectionGroup 查詢可用（`metaTokens`、`threadsTokens` 有前例）。
 

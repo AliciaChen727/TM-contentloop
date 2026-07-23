@@ -33,7 +33,8 @@ npm run build         # 關 3（production build）
 Vercel build 的 TS target 會炸 spread-Set（歷史多次）。已寫進使用者的鐵則。
 
 ## 依賴安裝
-在 `apps/web` 內 `npm install <pkg>` 可行（本 session 裝 `@anthropic-ai/claude-agent-sdk` 即如此），但會動到根目錄 `yarn.lock` — commit 時記得帶上 `yarn.lock` 與 `apps/web/package.json` 兩者。
+**正解＝在 repo 根目錄用 `corepack yarn workspace web add <pkg>`**（yarn 是本 repo 的 package manager，會正確更新 tracked `yarn.lock` + `apps/web/package.json`）。
+⚠️ `npm install <pkg>` 是捷徑但**不會同步 `yarn.lock`**（它寫的是 stray `package-lock.json`）——若只 commit `package.json` 沒同步 `yarn.lock`，Vercel 的 `yarn install` 會用到舊 lockfile → **本機過、Vercel 掛**（正是本 skill 要防的事）。真的用了 `npm install`，commit 前務必在根目錄跑一次 `yarn install` 重生 `yarn.lock`，並帶上 `yarn.lock` + `apps/web/package.json` 兩者（stray `package-lock.json` 別 commit）。
 
 ## 從零重建
 ```bash

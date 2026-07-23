@@ -20,7 +20,7 @@ description: 載入時機（觀察到的狀態）：你正要提議的方案似�
 5. **OAuth 寫死單一粉專（D67-centric）**：非 D67 admin 連接必拿誤導的 #100。現行：先 `getAllManagedPages`，`META_PAGE_IDENTIFIER` 只當補充。
 6. **`lib/alerts/detector.ts`（`detectAdAlerts`）已棄用**：通知來源已改診斷引擎，檔案保留未刪。別把新通知接回它（詳 diagnosis-engine-contract.md）。
 7. **Canva 整合兩坑**（PR #22/#23）：素材上傳 Content-Type 必須 `application/octet-stream`（否則 415）；Create Design **不能指定 preset**（只帶 asset_id）。另外 Canva API 不能就地改既有設計 — AI 想「局部修改設計稿」是做不到的，UI 已有對應話術。
-8. **Firestore `where`+`orderBy` 組合**：需要 composite index，本 repo 慣例是**避開**（fetch recent + 記憶體過濾），別引入需要建 index 的查詢。
+8. **Firestore `where`+`orderBy` 組合**：需要 composite index，本 repo 慣例是**避開**（fetch recent + 記憶體過濾）。**但這是「現規模」的取捨、不是永久鐵則**：composite index 是廉價的正常功能（`firestore.indexes.json` 一條），一旦某 collection 要掃 >數百筆、或「fetch recent + 記憶體過濾」會漏掉窗口外的符合 doc，就直接建 index，別無條件沿用（否則資料長大後會靜默退化：漏抓、egress 變大、變慢）。
 9. **Timestamp 用 `>` 直接比較**：Firestore Timestamp 物件比較不可靠，一律 `toMillis()` 再比（2026-07-12 修過一處）。
 10. **LLM 自我修正的邊界**：診斷 LLM 曾捏造數字 → 解法不是 prompt 拜託，是 code 層強制（`parseAndEnforceCards`：severity/refId 從來源覆蓋、projection 數字必勝 LLM 輸出）。任何「請 LLM 保證正確」的提案，優先改成 code 驗證。
 
