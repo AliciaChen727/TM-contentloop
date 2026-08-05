@@ -106,16 +106,34 @@ export async function POST(req: NextRequest) {
 
   // Persist only real transitions (idempotent, but avoids needless daily writes):
   // newly-dead tokens → flag false; recovered tokens → clear the flag (self-heal).
+  // This stays PER-TOKEN so each user's own reconnect banner (/api/pages reads
+  // their own metaTokens.tokenValid) is accurate.
   await Promise.all([
     ...invalid.filter(r => r.t.prevValid).map(r => markTokenStatus(r.t.ownerUid, r.t.pageId, false, r.message)),
     ...recovered.map(r => markTokenStatus(r.t.ownerUid, r.t.pageId, true)),
   ])
 
+  // A page is genuinely down only when NONE of its stored tokens work. The same
+  // page is often held by two admins (e.g. Legacy 235543696463178: one live owner
+  // token + one stale duplicate). Daily sync (api/cron/sync) iterates ALL tokens
+  // via collectionGroup and writes page-scoped data, so ANY valid token keeps the
+  // page fresh. Alerting per-token spammed a daily GitHub issue + Telegram + email
+  // for pages that were never actually broken (2026-08). So fan out page-level
+  // alerts ONLY for pages with zero working tokens — one alert per dead page.
+  const healthyPageIds = new Set(results.filter(r => r.status === 'valid').map(r => r.t.pageId))
+  const seenDeadPages = new Set<string>()
+  const pageInvalid = invalid.filter(r => {
+    if (healthyPageIds.has(r.t.pageId)) return false // another admin's token still works → page is fine
+    if (seenDeadPages.has(r.t.pageId)) return false  // dedupe: one alert per dead page, not per token
+    seenDeadPages.add(r.t.pageId)
+    return true
+  })
+
   // 紅點: fan out to the token owner (who can fix it) + super-admins. Per-day
   // deterministic id (system__{pageId}__{date}) → one bell/day, updated in place.
   const supers = superAdminUids()
   const dateStr = new Date().toISOString().slice(0, 10)
-  for (const r of invalid) {
+  for (const r of pageInvalid) {
     await writeInAppNotification(Array.from(new Set([r.t.ownerUid, ...supers])), {
       type: 'system',
       pageId: r.t.pageId,
@@ -132,17 +150,17 @@ export async function POST(req: NextRequest) {
 
   // Bug/alert pipeline. Many at once → one critical App-level report; otherwise a
   // per-page warning. reportBug is per-day idempotent, so no spam.
-  const appLevel = invalid.length >= APP_LEVEL_THRESHOLD
+  const appLevel = pageInvalid.length >= APP_LEVEL_THRESHOLD
   if (appLevel) {
     await reportBug({
       source: 'cron_token_health',
-      title: `多個粉專 Meta token 同時失效（${invalid.length}）`,
-      detail: `疑似 App 層級問題。失效粉專：\n${invalid.map(r => `- ${r.t.pageName} (${r.t.pageId}): ${r.message ?? ''}`).join('\n')}`,
-      context: { count: invalid.length, pageIds: invalid.map(r => r.t.pageId) },
+      title: `多個粉專 Meta token 同時失效（${pageInvalid.length}）`,
+      detail: `疑似 App 層級問題。失效粉專：\n${pageInvalid.map(r => `- ${r.t.pageName} (${r.t.pageId}): ${r.message ?? ''}`).join('\n')}`,
+      context: { count: pageInvalid.length, pageIds: pageInvalid.map(r => r.t.pageId) },
       severity: 'critical',
     }).catch(() => null)
   } else {
-    for (const r of invalid) {
+    for (const r of pageInvalid) {
       await reportBug({
         source: 'cron_token_health',
         title: `粉專 Meta token 失效：${r.t.pageName}`,
@@ -153,16 +171,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const emailed = invalid.length > 0 ? await sendDigestEmail(invalid, appLevel) : false
+  const emailed = pageInvalid.length > 0 ? await sendDigestEmail(pageInvalid, appLevel) : false
 
   const summary = {
     probed: tokens.length,
-    invalid: invalid.length,
+    invalidTokens: invalid.length,       // dead individual tokens (incl. stale duplicates of healthy pages)
+    invalidPages: pageInvalid.length,    // pages with ZERO working tokens → the ones we actually alert on
     recovered: recovered.length,
     skipped: results.filter(r => r.status === 'skip').length,
     appLevel,
     emailed,
-    invalidPages: invalid.map(r => ({ pageId: r.t.pageId, pageName: r.t.pageName })),
+    deadPages: pageInvalid.map(r => ({ pageId: r.t.pageId, pageName: r.t.pageName })),
   }
   console.log('[cron/token-health]', JSON.stringify(summary))
   return NextResponse.json({ ok: true, ...summary })
