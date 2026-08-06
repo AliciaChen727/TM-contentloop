@@ -25,6 +25,7 @@ const COPY = {
     footer_login: '登入',
     footer_privacy: '隱私權政策',
     footer_deletion: '資料刪除',
+    footer_operator: '由 D67 Toastmasters 營運',
   },
   en: {
     nav_login: 'Log in',
@@ -45,6 +46,7 @@ const COPY = {
     footer_login: 'Log in',
     footer_privacy: 'Privacy Policy',
     footer_deletion: 'Data Deletion',
+    footer_operator: 'Operated by D67 Toastmasters',
   },
 } as const
 
@@ -245,7 +247,13 @@ export default function HomeClient({ initialLang }: { initialLang: Lang }) {
             <Link href="/privacy" className="hover:text-gray-900">{t.footer_privacy}</Link>
             <Link href="/data-deletion" className="hover:text-gray-900">{t.footer_deletion}</Link>
           </div>
-          <span className="text-xs text-gray-400">© {new Date().getFullYear()} ContentLoop</span>
+          {/* 提供服務的企業資訊 —— Meta Access Verification 要求網站上看得到營運者與聯絡方式。 */}
+          <div className="flex flex-col items-center gap-1 text-xs text-gray-400 sm:items-end">
+            <span>© {new Date().getFullYear()} ContentLoop · {t.footer_operator}</span>
+            <a href="mailto:alicia.pw.chen@toastmasters.org.tw" className="hover:text-gray-600">
+              alicia.pw.chen@toastmasters.org.tw
+            </a>
+          </div>
         </div>
       </footer>
     </div>
