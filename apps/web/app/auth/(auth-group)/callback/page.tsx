@@ -65,7 +65,8 @@ function CallbackHandler() {
           return
         }
 
-        router.replace('/dashboard')
+        // 授權完成 → 先過 onboarding 關卡（沒有待填的粉專會自己直接轉進儀表板）。
+        router.replace('/auth/onboarding')
       } catch (err) {
         console.error('Unexpected error:', err)
         router.replace('/auth/connect?error=token')

@@ -4,6 +4,14 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 
 import { VALID_GOALS, VALID_INDUSTRIES, type Industry, type OptimizationGoal } from '@/lib/profile-types'
+import { getUserPageAccess } from '@/lib/auth/access'
+
+// pageId-scoped 讀寫必須確認呼叫者對該粉專有存取權，否則任何登入者都能讀到
+// （甚至覆寫）別人粉專的 onboardingData（含 brandName / extraContext）。
+// 這裡只要求「有任何存取權」——讀寫自己看得到的粉專屬性，viewer 也在其列。
+async function hasPageAccess(uid: string, pageId: string): Promise<boolean> {
+  return (await getUserPageAccess(uid, pageId)) !== null
+}
 
 async function verifyUser(req: NextRequest): Promise<string | null> {
   const idToken = req.headers.get('Authorization')?.replace('Bearer ', '')
@@ -22,6 +30,9 @@ export async function GET(req: NextRequest) {
 
   const pageId = req.nextUrl.searchParams.get('pageId')
   if (pageId) {
+    if (!(await hasPageAccess(uid, pageId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const snap = await adminDb.collection('pages').doc(pageId).get()
     const d = snap.data()
     return NextResponse.json({
@@ -65,6 +76,9 @@ export async function POST(req: NextRequest) {
 
   // Page-scoped save: store onboardingData directly on the page document.
   if (body.pageId) {
+    if (!(await hasPageAccess(uid, body.pageId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const patch: Record<string, unknown> = {}
     if (body.optimizationGoal !== undefined) {
       if (body.optimizationGoal === null) patch.optimizationGoal = null
