@@ -7,6 +7,8 @@ import { GaConnectCard } from '@/components/analytics/GaConnectCard'
 import { ThreadsConnectCard } from '@/components/analytics/ThreadsConnectCard'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { PageOptions } from '@/components/PageOptions'
+import { normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
 
 type SaveState = 'idle' | 'saving' | 'ok' | 'error'
 type Language = 'zh-TW' | 'en'
@@ -54,6 +56,7 @@ export default function SettingsPage() {
   const [alertEmails, setAlertEmails] = useState<string[]>([''])
   const [alertSaveState, setAlertSaveState] = useState<SaveState>('idle')
   const [pages, setPages] = useState<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }[]>([])
+  const [folders, setFolders] = useState<PageFolder[]>([])
   const [selectedPageId, setSelectedPageId] = useState('')
   const [copyBanner, setCopyBanner] = useState(false)
 
@@ -138,6 +141,7 @@ export default function SettingsPage() {
         const d = await pagesRes.json()
         const pageList: { pageId: string; pageName: string }[] = d.pages ?? []
         setPages(pageList)
+        setFolders(normalizeFolders(d.folders))
         const savedId = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
         const activeId = (savedId && pageList.find(p => p.pageId === savedId)) ? savedId : pageList[0]?.pageId ?? ''
         setSelectedPageId(activeId)
@@ -299,7 +303,7 @@ export default function SettingsPage() {
             <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">{L('目前設定粉專', 'Page being configured')}</span>
             <select value={selectedPageId} onChange={e => handlePageSwitch(e.target.value)}
               className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 text-gray-700 bg-white">
-              {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+              <PageOptions pages={pages} folders={folders} labelOf={p => p.pageName} otherLabel={L('其他', 'Other')} />
             </select>
           </div>
         )}

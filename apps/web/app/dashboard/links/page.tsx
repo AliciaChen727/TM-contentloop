@@ -6,6 +6,8 @@ import { auth } from '@/lib/firebase/client'
 import { useLang } from '@/lib/i18n/LanguageProvider'
 import { CapiSetupWizard } from '@/components/links/CapiSetupWizard'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { PageOptions } from '@/components/PageOptions'
+import { normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
 
 interface LinkRow {
   slug: string
@@ -39,6 +41,7 @@ export default function LinksPage() {
   const router = useRouter()
   const [idToken, setIdToken] = useState('')
   const [pages, setPages] = useState<PageOpt[]>([])
+  const [folders, setFolders] = useState<PageFolder[]>([])
   const [pageId, setPageId] = useState('')
   const [links, setLinks] = useState<LinkRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,9 +67,11 @@ export default function LinksPage() {
       const token = await u.getIdToken()
       setIdToken(token)
       const res = await fetch('/api/pages', { headers: { Authorization: `Bearer ${token}` } })
-      const accessiblePages: PageOpt[] = res.ok ? ((await res.json()).pages ?? []) : []
+      const body = res.ok ? await res.json() : { pages: [] }
+      const accessiblePages: PageOpt[] = body.pages ?? []
       if (accessiblePages.length === 0) { router.replace('/dashboard'); return }
       setPages(accessiblePages)
+      setFolders(normalizeFolders(body.folders))
       const pid = localStorage.getItem('selectedPageId') ?? accessiblePages[0].pageId
       const valid = accessiblePages.find(p => p.pageId === pid)?.pageId ?? accessiblePages[0].pageId
       setPageId(valid)
@@ -164,7 +169,7 @@ export default function LinksPage() {
       {pages.length > 1 && (
         <select value={pageId} onChange={e => switchPage(e.target.value)}
           className="mb-4 rounded-lg border border-gray-200 px-3 py-2 text-sm">
-          {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName || p.pageId}</option>)}
+          <PageOptions pages={pages} folders={folders} labelOf={p => p.pageName || p.pageId} otherLabel={L('其他', 'Other')} />
         </select>
       )}
 

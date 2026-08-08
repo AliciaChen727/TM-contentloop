@@ -27,6 +27,8 @@ import { OnboardingModal } from '@/components/OnboardingModal'
 import { DateField } from '@/components/ui/DateField'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import type { Capability, Role } from '@/lib/auth/roles'
+import { PageOptions } from '@/components/PageOptions'
+import { normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
 
 interface Permissions { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface PageInfo { pageId: string; pageName: string; igUserId: string | null; permissions?: Permissions | null; role?: Role; tokenValid?: boolean; canReconnect?: boolean }
@@ -65,6 +67,7 @@ export default function DashboardPage() {
   const { L } = useLang()
   const [pageData, setPageData] = useState<PageTokenData | null>(null)
   const [pages, setPages] = useState<PageInfo[]>([])
+  const [folders, setFolders] = useState<PageFolder[]>([])
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [fbPosts, setFbPosts] = useState<FbPost[]>([])
   const [igPosts, setIgPosts] = useState<IgPost[]>([])
@@ -148,6 +151,7 @@ export default function DashboardPage() {
         const d = await pagesRes.json()
         pageList = d.pages ?? []
         setPages(pageList)
+        setFolders(normalizeFolders(d.folders))
         adminFlag = d.isAdmin ?? false
       }
 
@@ -418,7 +422,7 @@ export default function DashboardPage() {
     if (!res.ok) { setAddPageError(data.error ?? L('新增失敗', 'Failed to add')); return }
     // Refresh pages list
     const pagesRes = await fetch('/api/pages', { headers: { Authorization: `Bearer ${idToken}` } })
-    if (pagesRes.ok) { const d = await pagesRes.json(); setPages(d.pages ?? []) }
+    if (pagesRes.ok) { const d = await pagesRes.json(); setPages(d.pages ?? []); setFolders(normalizeFolders(d.folders)) }
     setAddingPage(false)
     setAddPageInput('')
   }
@@ -509,7 +513,7 @@ export default function DashboardPage() {
                   onChange={e => handlePageChange(e.target.value)}
                   className="text-sm text-gray-900 font-bold border-0 bg-transparent cursor-pointer outline-none"
                 >
-                  {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+                  <PageOptions pages={pages} folders={folders} labelOf={p => p.pageName} otherLabel={L('其他', 'Other')} />
                 </select>
               ) : (
                 pageData && <p className="text-sm text-gray-900 font-bold">{pageData.pageName}</p>

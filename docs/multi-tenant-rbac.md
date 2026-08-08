@@ -171,6 +171,11 @@ groups/{groupId}/members/{uid}      # group 層級授權
 - **總會視角** = 給總會窗口一個 `groups/tm-taiwan/members/{uid}` role=`viewer`（唯讀所有分析），他就能看到旗下所有分會，**不必逐頁邀請**。
 - group 授權與 page 直接授權**取聯集、取最高角色**（見 §2.4）。
 
+> ⚠️ **不要跟「粉專分類資料夾」搞混**（2026-08-09 已實作）：`lib/pages/pageFolders.ts` +
+> `users/{uid}/settings/pageFolders` 是**純顯示**的選單分類（把 5 個 TM 分會跟個人品牌粉專分開列），
+> **完全不影響權限**，也不是 Stage D 的部分實作。命名刻意用 folder 而非 group，就是為了避免這個誤會。
+> 本節的 `groups/{groupId}` 仍**尚未實作**，`lib/auth/access.ts` 的 `TODO(Phase D)` 還在。
+
 ### 2.6 Organization vs Group — 判斷準則與未來疊加方式
 
 > 決策（2026-07-08）：**現在用 Group，Organization 為未來預留**。兩者不衝突、可共存。
@@ -183,6 +188,17 @@ groups/{groupId}/members/{uid}      # group 層級授權
 | 計費 / 方案 | 無此概念 | 計費、方案、席次掛在 org |
 | 資料隔離 | 不改變隔離（仍 per-page） | 乾淨的**租戶邊界**（競品之間互不可見） |
 | 適用 | 「一次授權多頁」「總會看旗下分會」 | 「賣給獨立商家，各自帳單、各自管團隊、彼此隔離」 |
+
+**已登記的需求（2026-08-09，owner 提出）**：owner 同時管理 5 個 TM 分會粉專，希望
+「**邀請台灣總會進來，以總會視角比較各分會表現**」。這正是 §2.3 Group 的設計用途
+（group 層 viewer → 一次看旗下所有分會，不必逐頁邀請）。
+
+- **現況可用替代**：`/dashboard/compare`（跨粉專總覽，Phase 3B Slice 17 已上線）已能並排比較
+  廣告成效／素材趨勢／受眾／自然貼文，但**僅限 caller 自己 admin 的粉專**
+  （`app/api/pages/compare/route.ts:78` 過濾 `access === 'admin'`）→ 目前只有 owner／super-admin 看得到。
+- **缺口**：要讓「總會窗口」這種外部角色看到同一份比較，就必須做 Stage D 的 group 授權；
+  現行只能逐頁邀請 5 次，且無法用單一 group 收攏。
+- **優先級**：等實際要邀請總會時再做，非現在。
 
 **何時該引入 Organization** — 以下訊號**至少出現一個**：
 1. 合作商家要**自己登入後台、自助管理自己的員工**（不再由平台方代管）。

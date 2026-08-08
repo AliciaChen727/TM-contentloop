@@ -10,6 +10,8 @@ import { DraftComposer } from '@/components/content/DraftComposer'
 import type { ContentDraft, DraftStatus, DraftTarget, GeneratedContent, CreateDraftInput, TaggingSelection } from '@/lib/content/draftTypes'
 import type { Capability, Role } from '@/lib/auth/roles'
 import type { TaggableEntity } from '@/lib/tagging/types'
+import { PageOptions } from '@/components/PageOptions'
+import { normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
 
 interface PageInfo { pageId: string; pageName: string; role?: Role; igUserId?: string | null; threadsConnected?: boolean; permissions?: { syncAds?: boolean } | null }
 type Tab = 'draft' | 'approved' | 'published' | 'other'
@@ -36,6 +38,7 @@ export default function ContentDraftsPage() {
   const { L } = useLang()
   const [idToken, setIdToken] = useState('')
   const [pages, setPages] = useState<PageInfo[]>([])
+  const [folders, setFolders] = useState<PageFolder[]>([])
   const [selectedPageId, setSelectedPageId] = useState('')
   const [drafts, setDrafts] = useState<ContentDraft[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,6 +71,7 @@ export default function ContentDraftsPage() {
         const body = res.ok ? await res.json() : { pages: [] }
         const list: PageInfo[] = (body.pages ?? []).filter((p: PageInfo) => p.role !== 'viewer' && (p.role || p.permissions == null || p.permissions.syncAds))
         setPages(list)
+        setFolders(normalizeFolders(body.folders))
         const saved = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
         const nextPageId = (list.find(p => p.pageId === saved) ?? list[0])?.pageId ?? ''
         setSelectedPageId(nextPageId)
@@ -315,7 +319,7 @@ export default function ContentDraftsPage() {
         {pages.length > 0 && (
           <select value={selectedPageId} onChange={e => setSelectedPageId(e.target.value)}
             className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700">
-            {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+            <PageOptions pages={pages} folders={folders} labelOf={p => p.pageName} otherLabel={L('其他', 'Other')} />
           </select>
         )}
         {canDraft && (

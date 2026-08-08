@@ -25,6 +25,7 @@ import { useLang, type Lang } from '@/lib/i18n/LanguageProvider'
 import { DateField } from '@/components/ui/DateField'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { trackEvent } from '@/lib/analytics/track'
+import { groupPages, normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
 
 const NAV: { id: NavId; icon: string; badge?: string }[] = [
   { id: 'overview', icon: 'chart' },
@@ -259,6 +260,7 @@ export default function AdsPage() {
   const [selectedPageId, setSelectedPageId] = useState('')
   const [selectedPageName, setSelectedPageName] = useState('')
   const [pages, setPages] = useState<{ pageId: string; pageName: string }[]>([])
+  const [folders, setFolders] = useState<PageFolder[]>([])
   const [canSidekick, setCanSidekick] = useState(false)
   const [canSync, setCanSync] = useState(false)
   const [showPageMenu, setShowPageMenu] = useState(false)
@@ -391,6 +393,7 @@ export default function AdsPage() {
           const pagesJson = await pagesRes.json()
           const allPages: Array<{ pageId: string; pageName: string; permissions?: { ads: boolean; sidekick: boolean; syncAds: boolean } | null }> = pagesJson.pages ?? []
           setPages(allPages)
+          setFolders(normalizeFolders(pagesJson.folders))
           // Sync display name + persist selection for the resolved pageId
           const matched = allPages.find(p => p.pageId === pageId)
           if (matched?.pageName) {
@@ -820,15 +823,24 @@ export default function AdsPage() {
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowPageMenu(false)} />
               <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'white', border: '1px solid var(--ad-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 180, overflow: 'hidden' }}>
-                {pages.map(p => (
-                  <div
-                    key={p.pageId}
-                    onClick={() => handlePageSwitch(p.pageId, p.pageName)}
-                    style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: p.pageId === selectedPageId ? 700 : 400, color: p.pageId === selectedPageId ? 'var(--ad-blue)' : 'var(--ad-text)', background: p.pageId === selectedPageId ? 'var(--ad-surface2)' : 'transparent' }}
-                    onMouseEnter={e => { if (p.pageId !== selectedPageId) (e.currentTarget as HTMLElement).style.background = 'var(--ad-surface)' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = p.pageId === selectedPageId ? 'var(--ad-surface2)' : 'transparent' }}
-                  >
-                    {p.pageName || p.pageId}
+                {groupPages(pages, folders, L('其他', 'Other')).map(bucket => (
+                  <div key={bucket.name ?? '_'}>
+                    {bucket.name && (
+                      <div style={{ padding: '6px 14px 3px', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--ad-text3)', background: 'var(--ad-surface)' }}>
+                        {bucket.name}
+                      </div>
+                    )}
+                    {bucket.pages.map(p => (
+                      <div
+                        key={p.pageId}
+                        onClick={() => handlePageSwitch(p.pageId, p.pageName)}
+                        style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: p.pageId === selectedPageId ? 700 : 400, color: p.pageId === selectedPageId ? 'var(--ad-blue)' : 'var(--ad-text)', background: p.pageId === selectedPageId ? 'var(--ad-surface2)' : 'transparent' }}
+                        onMouseEnter={e => { if (p.pageId !== selectedPageId) (e.currentTarget as HTMLElement).style.background = 'var(--ad-surface)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = p.pageId === selectedPageId ? 'var(--ad-surface2)' : 'transparent' }}
+                      >
+                        {p.pageName || p.pageId}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>

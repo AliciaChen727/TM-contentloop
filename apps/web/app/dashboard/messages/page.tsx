@@ -10,6 +10,8 @@ import type { MessagesData } from '@/components/dashboard/MessageStats'
 import { TopQuestions } from '@/components/dashboard/TopQuestions'
 import type { TopIntent } from '@/components/dashboard/TopQuestions'
 import { AiSidekick } from '@/components/ads/AiSidekick'
+import { PageOptions } from '@/components/PageOptions'
+import { normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
 
 interface PageInfo { pageId: string; pageName: string }
 type Range = '30d' | '90d' | 'all' | 'custom'
@@ -19,6 +21,7 @@ export default function MessagesPage() {
   const { L } = useLang()
   const [idToken, setIdToken] = useState('')
   const [pages, setPages] = useState<PageInfo[]>([])
+  const [folders, setFolders] = useState<PageFolder[]>([])
   const [selectedPageId, setSelectedPageId] = useState('')
   const [data, setData] = useState<MessagesData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -42,6 +45,7 @@ export default function MessagesPage() {
         const body = res.ok ? await res.json() : { pages: [] }
         const list: PageInfo[] = body.pages ?? []
         setPages(list)
+        setFolders(normalizeFolders(body.folders))
         const saved = typeof window !== 'undefined' ? localStorage.getItem('selectedPageId') : ''
         const active = list.find(p => p.pageId === saved) ?? list[0]
         setSelectedPageId(active?.pageId ?? '')
@@ -138,7 +142,7 @@ export default function MessagesPage() {
             onChange={e => onPageChange(e.target.value)}
             className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700"
           >
-            {pages.map(p => <option key={p.pageId} value={p.pageId}>{p.pageName}</option>)}
+          <PageOptions pages={pages} folders={folders} labelOf={p => p.pageName} otherLabel={L('其他', 'Other')} />
           </select>
         )}
         <button

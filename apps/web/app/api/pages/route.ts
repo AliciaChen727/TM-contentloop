@@ -4,6 +4,18 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { isSuperAdmin, listAllPages } from '@/lib/auth/superadmin'
 import { type Role, isRole, legacyPermsForRole } from '@/lib/auth/roles'
 import { hasPageThreadsConnection } from '@/lib/threads/client'
+import { normalizeFolders, type PageFolder } from '@/lib/pages/pageFolders'
+
+// 純顯示用的粉專分類（見 lib/pages/pageFolders.ts 的說明；與授權完全無關）。
+// 讀不到或格式壞掉 → 回空陣列 = 選單維持平鋪，不影響既有行為。
+async function readFolders(uid: string): Promise<PageFolder[]> {
+  try {
+    const doc = await adminDb.collection('users').doc(uid).collection('settings').doc('pageFolders').get()
+    return normalizeFolders(doc.data()?.folders)
+  } catch {
+    return []
+  }
+}
 
 interface LegacyPerms { ads: boolean; sidekick: boolean; syncAds: boolean }
 interface PageEntry {
@@ -58,7 +70,7 @@ export async function GET(req: NextRequest) {
       threadsConnected: await hasPageThreadsConnection(p.pageId),
       canReconnect: ownIds.has(p.pageId),
     })))
-    return NextResponse.json({ pages: allPages, isOwner: true, isAdmin: true })
+    return NextResponse.json({ pages: allPages, isOwner: true, isAdmin: true, folders: await readFolders(uid) })
   }
 
   // 1) 自己用 OAuth 連接的粉專（metaTokens）— 一律具管理權。
@@ -128,5 +140,5 @@ export async function GET(req: NextRequest) {
     ? pagesWithConnections.filter(p => ownIds.has(p.pageId) || p.role === 'admin' || p.role === 'owner')
     : pagesWithConnections
 
-  return NextResponse.json({ pages, isOwner, isAdmin })
+  return NextResponse.json({ pages, isOwner, isAdmin, folders: await readFolders(uid) })
 }
