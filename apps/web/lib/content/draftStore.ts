@@ -5,6 +5,7 @@
 import { randomUUID } from 'crypto'
 import { adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { buildPlatformEntry } from './publishResultEntry'
 import {
   type ContentDraft, type CreateDraftInput, type DraftStatus, type DraftTarget,
   canTransition,
@@ -150,13 +151,25 @@ export async function recordPublishOutcome(
   const dd = await ref.get()
   if (!dd.exists) return { ok: false, error: 'draft not found', code: 404 }
   const current = fromDoc(pageId, id, dd.data() as FirebaseFirestore.DocumentData)
-  const results = { ...(current.publishResults ?? {}), [platform]: { ...result, at: Date.now() } }
+  const now = Date.now()
+  const { entry, clearedKeys } = buildPlatformEntry(current.publishResults?.[platform], result, now)
+  const results = { ...(current.publishResults ?? {}), [platform]: entry }
   const allDone = current.target.every(t => results[t]?.postId)
   const anyDone = current.target.some(t => results[t]?.postId)
-  const patch: Record<string, unknown> = { publishResults: results, updatedAt: Date.now() }
+  const patch: Record<string, unknown> = { publishResults: results, updatedAt: now }
   if (allDone) patch.status = 'published'
   else if (result.error && !anyDone) patch.status = 'failed'
-  await ref.set(patch, { merge: true })
+
+  // ⚠️ merge:true 對巢狀 map 是深合併 → 少掉的 key 不會消失，得明確刪。
+  // 不這麼做的話，上次失敗的 error 會跟這次成功的 postId 並存（2026-08-17 實例）。
+  const writePatch: Record<string, unknown> = { ...patch }
+  if (clearedKeys.length) {
+    writePatch.publishResults = {
+      ...results,
+      [platform]: { ...entry, ...Object.fromEntries(clearedKeys.map(k => [k, FieldValue.delete()])) },
+    }
+  }
+  await ref.set(writePatch, { merge: true })
   return { ok: true, draft: { ...current, ...patch, publishResults: results } as ContentDraft }
 }
 

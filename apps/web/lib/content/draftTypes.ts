@@ -69,7 +69,11 @@ export interface ContentDraft {
   approvedByUid?: string | null
   publishResult?: { postId?: string; error?: string } | null
   // Per-platform publish outcome (S4a+). Threads published first; FB/IG later.
-  publishResults?: Partial<Record<DraftTarget, { postId?: string; permalink?: string; storyId?: string; error?: string; at: number }>>
+  // `failures` 保留該平台歷次失敗（成功後 `error` 會被清掉，但「曾經失敗」不能消失）。
+  publishResults?: Partial<Record<DraftTarget, {
+    postId?: string; permalink?: string; storyId?: string; error?: string; at: number
+    failures?: { error: string; at: number }[]
+  }>>
   idempotencyKey: string
   createdAt: number
   updatedAt: number
