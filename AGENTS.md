@@ -14,6 +14,7 @@ Toastmasters 分會用的 AI 廣告／內容成效儀表板。從 FB 粉專 + �
 | 2 | 站內通知中心（紅點）+ 排程 email 告警 | ✅ `docs/phase-2-notification-center.md` |
 | 3 | AI Sidekick 優化 loop + 自我學習（批次審查 agent / Quality evaluator / feedback memory；agent = **Anthropic 原生**，非 LangChain）| 📋 `docs/phase-3-sidekick-self-learning.md` |
 | 4 | 半自動廣告更新（Meta Marketing API 寫入，需 `ads_management` + App Review）| 📋 `docs/phase-4-ad-automation.md` |
+| 5 | 私訊分析 + FAQ 自動回覆 chatbot（讀 IG/FB DM，需 `instagram_manage_messages`/`pages_messaging` + Business Verification + 獨立 App Review，**不混現行唯讀送審**）| 📋 `docs/phase-5-messaging-analytics-chatbot.md` |
 
 系統架構詳見 `docs/architecture.md`；廣告目標→指標對照見 `docs/goal-metrics.md`。
 
@@ -88,6 +89,7 @@ users/{uid}
 |---|---|---|
 | 廣告儀表板 | `apps/web/app/dashboard/ads/page.tsx` | overview / diagnosis / creative 等 |
 | 內容表現 | `apps/web/app/dashboard/page.tsx` | posts |
+| 私訊分析 | `apps/web/app/dashboard/messages/page.tsx` | messages |
 
 ### Firestore 路徑
 - 有 `pageId`：`pages/{pageId}/sidekickConversations/{sessionId}`（對話存檔、歷史、CSV 匯出）
@@ -128,8 +130,8 @@ users/{uid}
 - UI：`components/NotificationBell.tsx` 掛在 dashboard header。BFF 架構（全走 Admin SDK + verifyIdToken）→ **不需要 firestore.rules**。
 
 ## 🤖 使用的 Model
-- `Codex-sonnet-4-6`：AI Sidekick 對話、洞察報告（`api/insights/report`）
-- `Codex-haiku-4-5`：素材生成（`api/ai/creative`）
+- `claude-sonnet-4-6`：AI Sidekick 對話、洞察報告（`api/insights/report`）、診斷卡片 agent（Slice 15 起走 tool loop，`runDiagnosisAgentWithTools`；失敗 fallback haiku 單次呼叫）
+- `claude-haiku-4-5`：素材生成（`api/ai/creative`）、診斷卡片 fallback
 - 診斷引擎本身 = 規則，**無 model**
 - 告警 email：nodemailer + Gmail（寄件者 `courage727@gmail.com`，App Password）
 
@@ -209,3 +211,20 @@ const pages = Array.from(pageMap.values())  // 每人拿到自己管理的粉專
 4. **每個 page token 各存一份** — `users/{uid}/metaTokens/{pageId}`，並把連接者註冊為該粉專 admin（`pages/{pageId}/admins/{uid}`），第一個連接者為 owner。
 
 **已知發生的 bug**：2026-05-22 之前流程是 D67-centric（先 `getPageToken(D67)`），導致非 D67 管理員（Irene）連接時必拿到誤導的 `#100` 錯誤，連不上自己的粉專。
+
+## Agent skills
+
+> 由 `setup-matt-pocock-skills` 於 2026-08-22 建立。供 mattpocock-skills plugin 的
+> engineering 系列（`triage` / `to-tickets` / `to-spec` / `wayfinder` / `domain-modeling` 等）讀取。
+
+### Issue tracker
+
+Issues 追蹤在 GitHub Issues（`AliciaChen727/TM-contentloop`），一律用 `gh` CLI 操作。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+使用五個標準 triage 標籤：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。與既有的 `ai-reported` / `agent-task`（bug pipeline 專用）分開，語意不混淆。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+單一 context：根目錄 `CONTEXT.md` + `docs/adr/`（兩者目前尚未建立，由 `domain-modeling` 在實際需要時才產生）。See `docs/agents/domain.md`.

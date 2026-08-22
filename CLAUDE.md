@@ -95,6 +95,20 @@ users/{uid}
 - 有 `pageId`：`pages/{pageId}/sidekickConversations/{sessionId}`（對話存檔、歷史、CSV 匯出）
 - 無 `pageId`：fallback 讀 `users/{uid}/aiInsights`（舊系統，不支援匯出）
 
+## ✍️ AI 文案生成換行規則（Content Drafts）
+
+`AI 生成文案` 必須支援自然段落換行，避免所有貼文被壓成單行。
+
+- 生成 API：`apps/web/app/api/ai/caption/route.ts`
+  - prompt 必須允許/鼓勵自然段落換行（hook、重點資訊、CTA 可分段）。
+  - 多平台模式回傳 JSON 時，字串內換行應使用 `\n`；解析端需容忍模型偶爾回傳 raw newline。
+- 前端輸入/預覽：
+  - `components/content/DraftComposer.tsx` 的 textarea 直接保存 newline。
+  - `components/content/PostPreview.tsx` / `components/content/DraftCard.tsx` 顯示文案時需保留 `whitespace-pre-wrap`。
+- 草稿與發布：
+  - `generated.perPlatform[*].body` 要保留原始 `\n`。
+  - 發布時 `lib/content/publishRunner.ts` 可在 body 與 hashtags 之間再補 `\n\n`，但不可清掉 AI 生成文案本身的換行。
+
 ## 🩺 診斷引擎 — 單一事實來源（改規則必讀）
 
 診斷的規則**只有一份**：`apps/web/lib/ads/diagnosis.ts`（純函式，server/client 共用）。
@@ -197,3 +211,20 @@ const pages = Array.from(pageMap.values())  // 每人拿到自己管理的粉專
 4. **每個 page token 各存一份** — `users/{uid}/metaTokens/{pageId}`，並把連接者註冊為該粉專 admin（`pages/{pageId}/admins/{uid}`），第一個連接者為 owner。
 
 **已知發生的 bug**：2026-05-22 之前流程是 D67-centric（先 `getPageToken(D67)`），導致非 D67 管理員（Irene）連接時必拿到誤導的 `#100` 錯誤，連不上自己的粉專。
+
+## Agent skills
+
+> 由 `setup-matt-pocock-skills` 於 2026-08-22 建立。供 mattpocock-skills plugin 的
+> engineering 系列（`triage` / `to-tickets` / `to-spec` / `wayfinder` / `domain-modeling` 等）讀取。
+
+### Issue tracker
+
+Issues 追蹤在 GitHub Issues（`AliciaChen727/TM-contentloop`），一律用 `gh` CLI 操作。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+使用五個標準 triage 標籤：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。與既有的 `ai-reported` / `agent-task`（bug pipeline 專用）分開，語意不混淆。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+單一 context：根目錄 `CONTEXT.md` + `docs/adr/`（兩者目前尚未建立，由 `domain-modeling` 在實際需要時才產生）。See `docs/agents/domain.md`.
