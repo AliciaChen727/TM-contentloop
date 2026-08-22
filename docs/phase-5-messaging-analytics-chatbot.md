@@ -91,7 +91,7 @@ users/{uid}/pages/{pageId}/messageStats/daily__{YYYY-MM-DD}
 ## 3. 5-2 FAQ Chatbot（讀寫）
 
 ### Webhook
-- 端點：Firebase Cloud Function（需常駐、對外、可被 Meta 呼叫）→ 訂閱 `messages` 欄位。
+- 端點：**Vercel route `apps/web/app/api/webhooks/meta/route.ts`**（⚠️ 2026-08-22 更正：原規劃寫 Firebase Cloud Function，實際 shipped 在 Next.js route）→ 訂閱 `messages` 欄位。
 - 驗證：Meta webhook 的 `hub.verify_token` + `X-Hub-Signature-256` 簽章驗證（用 App Secret）。
 - 流程：收到訊息 → 存 Firestore（沿用 5-1 model，標 inbound）→ 丟進意圖分類 → 決定回覆或轉真人。
 
@@ -219,7 +219,7 @@ Agent 核心（platform-agnostic）：(用戶訊息, 粉專知識庫) → 回覆
 **建置子刀**：5-2a FAQ/知識庫設定 UI（零風險、無 Meta 設定，✅ 進行中）→ 5-2b webhook + agent 回覆引擎（dry-run 不真發）→ 5-2c 真發送（Send API，owner 逐頁開啟）→ 5-2d（未來）LINE adapter。
 
 ### 8.1 In scope（第一版刻意保守）
-1. **Webhook 接收**（Firebase Cloud Function）：訂閱 `messages` 事件；驗 `hub.verify_token` + `X-Hub-Signature-256`（App Secret）。收到 inbound → 存 Firestore（沿用 7.2 model）→ 分類 intent。
+1. **Webhook 接收**（Vercel route，非 Cloud Function——見 §3 更正）：訂閱 `messages` 事件；驗 `hub.verify_token` + `X-Hub-Signature-256`（App Secret）。收到 inbound → 存 Firestore（沿用 7.2 model）→ 分類 intent。
 2. **FAQ 設定**（owner 可編輯，`pages/{pageId}/faqBot/config`）：
    ```
    enabled: boolean
@@ -294,6 +294,55 @@ Agent 核心（platform-agnostic）：(用戶訊息, 粉專知識庫) → 回覆
 - **決策順序（修正後）**：排程(程式) → corrections → 所有意圖答案 + 補充知識（全餵 LLM）→ 都不相關 → 轉真人。
 
 **建議先做**：①grounding 全餵（修脆弱點，餐點問題當下就好）②T1 更正即知識（讓倒讚真的有用）。T2/T3 累積回饋後再上。
+
+---
+
+## 8.9 Slice 5-2c-0 — webhook runtime 重構（2026-08-22 已交付，仍為 dry-run）
+
+**問題**：`route.ts` 原本在 `return 200` 之前同步跑 `getFewShot`（Gemini embedding）+
+`generateReply`（Claude haiku）。本機實測完整尾巴 **3.5 秒**，冷啟動 + LLM 變慢時輕易破 Meta
+的逾時門檻 → Meta 重送 webhook；而 inbox 用 `.add()`（隨機 doc id）→ 重送就重複寫。
+dry-run 階段只是多幾筆假資料，**5-2c 一開真發送就是重複發訊息給會友**。
+
+**改法**：
+1. POST 只做「驗簽 → 每則 `metaWebhookEvents/{mid}.create()` → 回 200」，agent 生成與寫
+   inbox 一律丟進 `waitUntil` 的尾巴（`@vercel/functions`；`unstable_after` 需 Next 15，本專案 14.2.35 不可用）。
+2. **冪等（狀態機，不是布林旗標）**：用 Meta 的 `mid` 當 doc id，`runTransaction` 認領：
+   `done` → 跳過；`processing` 且租約（3 分鐘）未過期 → 跳過；`failed` 或租約逾期 → **重新認領**。
+   inbox 也從 `.add()` 改 `.doc(mid).set()` 當雙保險。
+   ⚠️ 這裡踩過一次：一開始只用 `create()` 當「處理過」旗標，但因為是**先回 200 再做事**，
+   尾巴一失敗（Anthropic 529 / Firestore 抖動 / invocation 被砍）Meta 重送就撞已存在
+   → **訊息被永久丟棄且無人察覺**。舊寫法（同步做完再回）失敗時 Meta 重送還能補救，
+   新寫法等於拿「重複」換「掉訊息」——必須用狀態機把這條路補回來。
+3. 🔒 `metaWebhookEvents` 是 top-level（拿到 mid 時尚未解析出 pageId），因此**只存
+   mid/platform/entryId/senderId/時間戳 + `expireAt` TTL 30 天，不存訊息內容**；原文只在
+   記憶體傳給尾巴，最後寫進 page-scoped inbox → 不違反跨頁隔離鐵則。
+4. ⚠️ **`waitUntil` 在非 Vercel 環境不會 throw**（實測），只是不保證存活 → 不能用
+   try/catch 偵測。改以 `process.env.VERCEL` 明確分流：本機直接 `await`（可觀察可測），
+   正式站才走 waitUntil。
+
+**驗證（2026-08-22 本機實測，五種情境）**：
+
+| 情境 | 結果 |
+|---|---|
+| 首次送達 | 200 / 4972ms（本機 await 完整尾巴）/ status=done / attempts=1 / inbox=1 |
+| Meta 重送（done） | 200 / **124ms** / 跳過 / inbox 仍 1 |
+| 尾巴曾 failed → 重送 | **救回**，attempts=2、inbox 仍 1（同 doc id 覆寫） |
+| processing 租約逾期 | 重新認領，attempts=3 |
+| processing 租約有效 | 跳過，89ms |
+
+壞簽章回 401；測試資料已清除。
+
+⚠️ **本機測不到正式路徑**：程式以 `process.env.VERCEL` 分流，所以上述所有請求走的都是
+`await` 分支——**`waitUntil` 那條線上路徑本機無法驗證**。上表的 89–124ms 是「去重跳過」
+的成本，不是「快速 200」的成本。**真正的驗收在部署後**：對正式 URL 重跑同一支腳本，
+首次請求延遲應掉到 ~100ms 量級，而 inbox doc 在數秒後才出現。
+
+⚠️ **TTL policy 待辦**：`metaWebhookEvents` 是新 collection，`expireAt` 欄位在 Firestore
+console 對該 collection 開啟 TTL policy 之前**不會生效**（同 §7.4 對 `items` 的提醒），
+否則帳本會無限成長。帳本本身已刻意不存訊息內容與 senderId。
+
+**不在本刀範圍**：debounce 合併視窗、conversation 處理鎖、24h 窗追蹤、Send API 真發送、放量 mode 機器。
 
 ---
 

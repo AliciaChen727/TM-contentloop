@@ -379,6 +379,55 @@ Threads 走獨立 OAuth（`threads.net/oauth/authorize` + `graph.threads.net`）
 
 ---
 
+## 10. ⚠️ 5-2c 前必解的兩個前提（2026-08-22 查證）
+
+### 10.1 Live mode ≠ 權限對外生效（官方原文）
+
+決定「能不能回覆一般會友」的不是 Development/Live，而是**每個權限各自的 Access Level**：
+
+> **Standard Access** — 「intended for apps that will only be used by **people who have roles on them**, during app development, or for testing your app.」
+> **Advanced Access** — 「allows access to data owned by **other businesses or people**」，須逐權限通過 App Review。
+
+Messenger 平台另有明文：
+
+> 「Until your app has been submitted and approved for public use on Messenger through App Review, Page tokens only allow your Page to interact with Facebook accounts that have been granted the **Administrator, Developer, or Tester** role for your app.」
+> 「**Advanced Access is required to access conversations** between your business and people who do not have a role on your messaging app, your Instagram Professional account, your Facebook Page, or your business.」
+
+→ 832 於 2026-08-09 切 Live **不改變**這件事。這與 858 那次（`email`/`public_profile`
+停在 Not submitted、App 標 Published 卻沒 advanced access）是**同一個坑的第二次**，見
+memory `project_fb_login_858_advanced_access`。
+
+**待辦（只有 owner 看得到）**：Meta App Dashboard（App `832755139382467`）→
+**App Review → Permissions and Features** → 查 `pages_messaging` 與
+`instagram_manage_messages` 是 Standard 還是 Advanced。repo 至今**沒有記錄
+2026-08-09 那批 12 個權限逐一過了哪些**，這格補上才知道 5-2c 的放量順序。
+
+### 10.2 🚨 送審用途與 5-2c 要做的事互相矛盾
+
+§8.3 的送審策略明寫：私訊兩權限的用途說明與 screencast **務必強調「唯讀、只彙總則數、
+絕不傳訊/回覆/管理對話」**。也就是說——**就算這兩個權限過了，它是以「絕不回覆」的承諾過的**。
+
+5-2c 要做的正是自動回覆 → 拿 A 用途核准的權限做 B 用途，屬 Meta 最常抓的違規類型，
+風險是**粉專/App 被停用**，不只是退件。
+
+→ 幾乎確定要**重新送審 + 重錄 screencast**，不能默默打開 Send API。
+（好消息：chatbot 本來就是 `pages_messaging` 的官方正統用途，比原本的唯讀統計更好過審。）
+
+### 10.3 附帶查到
+
+- **`business_management` 是 `pages_messaging` / `instagram_manage_messages` 的依賴權限**，
+  官方建議送審時主動點出 → §8.3 保留它的理由可再加這一條。
+- **企業驗證有豁免**：「Business Verification is **not** required if you only send and receive
+  messages for **your own** Facebook Page.」→ 若 5-2c 第一版只服務自己管的粉專或許可繞過；
+  但 ContentLoop 是多租戶產品，對外開放時豁免不成立。送審前需再與官方文件核對。
+
+**來源**：[Access Levels](https://developers.facebook.com/docs/graph-api/overview/access-levels/)、
+[Messenger Platform Overview](https://developers.facebook.com/documentation/business-messaging/messenger-platform/overview)、
+[pages_messaging 權限參考](https://developers.facebook.com/docs/permissions/reference/pages_messaging/)、
+[Conversations API](https://developers.facebook.com/docs/messenger-platform/conversations/)
+
+---
+
 ## 附錄：本輪不送審的項目
 
 - Google/GA4 串接 — 屬 Google OAuth 審查，與 Meta 無關
