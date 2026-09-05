@@ -141,6 +141,18 @@ export async function publishToInstagram(
     const c = await createContainer(igUserId, token, withLocation({ media_type: 'REELS', video_url: mediaUrl, caption: text }), true)
     if (c.error || !c.id) return { ok: false, error: c.error ?? 'video container failed' }
     containerId = c.id
+  } else if (mediaType === 'story') {
+    // Story drafts need a STORIES container, NOT a feed/REELS container. Without
+    // this branch, a story with a video URL falls into the REELS branch above and
+    // Meta returns "Fatal" (code -1) because the video doesn't meet Reels specs
+    // (e.g. duration / codec requirements differ). Stories also don't take caption
+    // or location_id, so we bypass withLocation here.
+    const vid = isVideoUrl(mediaUrl)
+    const c = await createContainer(igUserId, token,
+      vid ? { media_type: 'STORIES', video_url: mediaUrl } : { media_type: 'STORIES', image_url: mediaUrl },
+      true)
+    if (c.error || !c.id) return { ok: false, error: c.error ?? 'story container failed' }
+    containerId = c.id
   } else {
     // Poll even for images — publishing an unready container can fail.
     const c = await createContainer(igUserId, token, withLocation({ image_url: mediaUrl, caption: text }), true)
