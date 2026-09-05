@@ -1,165 +1,171 @@
 # ContentLoop
 
-> Toastmasters 分會用的 **AI 廣告／內容成效儀表板**。從 FB 粉專 + 連動 IG 抓貼文／廣告／限動成效，存進 Firestore，用 Next.js 儀表板呈現，並提供 AI 診斷、洞察報告、AI Sidekick 與廣告異常通知。
+> **AI-powered content and ad performance dashboard for Meta social media.** ContentLoop was built for personal brands, businesses and organizations that want a one-stop dashboard to review the performance of their Meta social media presence (Facebook Pages, Instagram, Threads) and their ad results. It pulls posts, stories and ad insights from the Meta Graph API, stores them page-scoped in Firestore, and presents them in a Next.js dashboard with AI diagnosis, insight reports, an AI Sidekick, anomaly notifications and an approval-gated publishing workflow.
 
-線上版本：<https://tm-contentloop.vercel.app/> · 登入：<https://tm-contentloop.vercel.app/auth/login>
-
----
-
-## ⚠️ 維護規範（最重要，先讀這段）
-
-> **每一次「重大程式改動」或「memory 更新」，都必須回頭更新這份 README。**
-
-- **重大程式改動** = 新功能、改架構、改診斷規則、加／改 API、加外部整合、改部署方式。小修字、改 typo 不必。
-- **memory 更新** = 新增或修改 `~/.claude/.../memory/` 下的任何檔（含 `MEMORY.md`）。
-- 更新方式：改對應章節 **＋** 在文末 [變更紀錄](#變更紀錄) 補一行（日期 + 一句話 + commit）。
-- 這條規範同時記在 `CLAUDE.md`，每個 session 都會被提醒遵守。
+Live: <https://tm-contentloop.vercel.app/> · Sign in: <https://tm-contentloop.vercel.app/auth/login> · Docs: <https://aliciachen727.github.io/TM-contentloop/>
 
 ---
 
-## 專案現況
+## ⚠️ Maintenance rule (read this first)
 
-| Phase | 內容 | 狀態 | 文件 |
-|-------|------|------|------|
-| 1 | Meta OAuth + 定時抓 FB/IG 成效 + 儀表板 | ✅ 已上線 | — |
-| 2 | 站內通知中心（紅點）+ 排程 email 告警 | ✅ 已上線 | `docs/phase-2-notification-center.md` |
-| 3 | AI Sidekick 優化 loop + 自我學習（評審 / 品質分 / feedback memory，Anthropic 原生 agent） | 🔄 進行中 | `docs/phase-3-sidekick-self-learning.md` |
-| 3B | Agent 工具化（自查 Firestore、跨粉專比較、自我檢查、Bug 回報→HITL→修復） | 📋 規劃定稿 | `docs/phase-3b-agent-tooling.md` |
-| 4 | 半自動廣告更新（Meta Marketing API 寫入，需 App Review） | 📋 規劃中 | `docs/phase-4-ad-automation.md` |
+> **Every "major code change" or "memory update" must be reflected back into this README.**
 
-延伸整合：**Threads**（內容成效，獨立 OAuth）、**GA4**（電商客戶用 Google Ads 的補充數據）— 皆 PoC／骨架階段，見 `docs/`。
+- **Major code change** = new feature, architecture change, diagnosis-rule change, API added or changed, new external integration, deployment change. Typo-level edits are exempt.
+- **Memory update** = adding or editing any file under `~/.claude/.../memory/` (including `MEMORY.md`).
+- How: update the relevant section **and** add one row to the [Change Log](#change-log-變更紀錄) at the bottom (date + one-line summary + commit). Mirror the row in English in `site-docs/release-log.md` so the public docs site stays in sync.
+- The same rule lives in `CLAUDE.md` and is surfaced in every AI session.
 
 ---
 
-## 技術棧
+## Project status
 
-| 層 | 技術 |
+| Phase | Scope | Status | Doc |
+|-------|-------|--------|-----|
+| 1 | Meta OAuth + scheduled FB/IG sync + dashboards | ✅ Live | — |
+| 2 | In-app notification center (red dot) + scheduled email alerts | ✅ Live | `docs/phase-2-notification-center.md` |
+| 3 | AI Sidekick optimization loop + self-learning (evaluator / quality score / feedback memory, native Anthropic agent) | ✅ Live | `docs/phase-3-sidekick-self-learning.md` |
+| 3B | Agent tooling (Firestore tools, cross-page compare, self-check, bug report → HITL → fix agent) | ✅ Delivered | `docs/phase-3b-agent-tooling.md` |
+| 3C | ChatOps via Telegram | ✅ Delivered | `docs/phase-3c-chatops-agents.md` |
+| 4 | Semi-automated ad updates (Meta Marketing API writes, needs App Review) | 📋 Planned | `docs/phase-4-ad-automation.md` |
+| 5 | Messaging analytics (5-1 live) + FAQ auto-reply chatbot (5-2 dry-run) | 🔄 In progress | `docs/phase-5-messaging-analytics-chatbot.md` |
+
+Extended integrations: **Threads** (content performance, separate OAuth, live in the content dashboard), **GA4** (supplementary data for customers running Google Ads, self-service wizard), **LinkedIn** (planned, gated on API approval). See `docs/`.
+
+---
+
+## Tech stack
+
+| Layer | Technology |
 |---|---|
-| 前端 | Next.js 14 (App Router) + TypeScript + Tailwind CSS + shadcn/ui |
-| 後端 (BFF) | Next.js API Routes（與前端同一包）|
-| 排程後端 | Firebase Cloud Functions (Node.js 20) |
-| 資料庫 | Firestore |
-| 身份驗證 | Firebase Auth + Meta OAuth 2.0 |
-| 外部 API | Meta Graph API、Claude、Gemini、fal.ai、Canva、Threads、GA4 Data API、Gmail SMTP |
-| 部署 | Vercel（前端 + API）+ Firebase（Functions） |
+| Frontend | Next.js 14 (App Router) + TypeScript + Tailwind CSS + shadcn/ui |
+| Backend (BFF) | Next.js API Routes (same bundle as the frontend) |
+| Scheduled backend | Firebase Cloud Functions (Node.js 20), GitHub Actions cron, Vercel Cron |
+| Database | Firestore |
+| Auth | Firebase Auth + Meta OAuth 2.0 |
+| External APIs | Meta Graph API, Claude, Gemini, fal.ai, Canva, Threads, GA4 Data API, Gmail SMTP |
+| Hosting | Vercel (frontend + API) + Firebase (Functions) |
 
-**使用的 Model**：`claude-sonnet-4-6`（Sidekick 對話、洞察報告）、`claude-haiku-4-5`（素材生成）、`gemini-2.5-flash`（品質評審 judge）、`gemini-embedding-001`（few-shot 檢索）。診斷引擎本身 = 規則，無 model。圖片／影片走 owner GCP Vertex AI service account。
+**Models**: `claude-sonnet-4-6` (Sidekick chat, insight reports, diagnosis agent tool loop), `claude-haiku-4-5` (creative generation, diagnosis fallback), `gemini-2.5-flash` (quality evaluator judge), `gemini-embedding-001` (few-shot retrieval). The diagnosis engine itself is rules only, no model. Images and video go through the owner's GCP Vertex AI service account.
 
 ---
 
-## 架構（重要心智模型）
+## Architecture (the mental model that matters)
 
-這**不是**傳統前後端分離，而是 **Next.js 全端單體 + BFF**：
+This is **not** a classic split frontend/backend. It is a **Next.js full-stack monolith with a BFF layer**:
 
 ```
-瀏覽器 (React UI)
-   │  只打自家 API，從不直接讀 Firestore
+Browser (React UI)
+   │  calls only our own API, never reads Firestore directly
    ▼
-/api/*  (69 支 BFF route，跑在 Vercel)
+/api/*  (BFF routes running on Vercel)
    │  verifyIdToken + Firebase Admin SDK
-   ├─► Firestore（資料）
-   ├─► Meta / Claude / Gemini / fal.ai / Canva / Threads / GA4（外部）
-   └─► （排程）Firebase Functions：每日抓 FB/IG 成效
+   ├─► Firestore (data)
+   ├─► Meta / Claude / Gemini / fal.ai / Canva / Threads / GA4 (external)
+   └─► (scheduled) Firebase Functions + GitHub Actions cron
 ```
 
-- **前端 UI 與 API routes 同一個 codebase、一起 build、一起部署到 Vercel** → 沒分離。
-- **Firebase Functions 是唯一真正獨立的後端**（定時 cron）。
-- 詳見 `docs/architecture.md`。
+- **UI and API routes live in one codebase, build together and deploy together to Vercel.**
+- **Firebase Functions is the only truly separate backend** (scheduled publishing).
+- Details in `docs/architecture.md` and the public [Architecture page](https://aliciachen727.github.io/TM-contentloop/architecture/).
 
-### 鐵則：client 絕不直接讀 Firestore
-security rules 會擋 → 直接登入失敗。所有資料存取一律走 `/api/*` BFF。詳見 memory `project_client_firestore_login`。
+### Hard rule: the client never reads Firestore directly
+Security rules block it, so a direct read fails the login flow. All data access goes through `/api/*`. See memory `project_client_firestore_login`.
 
 ---
 
-## 目錄結構
+## Repository layout
 
 ```
 TM-contentloop/
-├─ apps/web/                  # Next.js（前端 + BFF API）← 主要程式
-│   ├─ app/                   # App Router 頁面
-│   │   ├─ page.tsx           # 行銷首頁（登入入口）
-│   │   ├─ auth/              # 登入 / 連接 Meta / callback
-│   │   ├─ dashboard/         # 儀表板（ads / settings / members…）
-│   │   └─ api/               # 69 支 BFF route（cron / ads / insights / ai / auth…）
-│   ├─ components/            # React 元件（ads/ analytics/ …）
-│   ├─ lib/                   # 純邏輯（ads/diagnosis、sidekick/、meta/、ai/…）
-│   └─ next.config.mjs        # 含 /__/auth/* rewrite（Auth 同源修正）
-├─ functions/                 # Firebase Cloud Functions（FB/IG 定時抓取）
-├─ docs/                      # 規劃文件（單一事實來源）
-├─ CLAUDE.md                  # 專案世界觀 + AI 協作規則
-└─ README.md                  # ← 本檔
+├─ apps/web/                  # Next.js (frontend + BFF API) ← main codebase
+│   ├─ app/                   # App Router pages
+│   │   ├─ page.tsx           # Marketing landing page (login entry)
+│   │   ├─ auth/              # Login / connect Meta / callback / onboarding
+│   │   ├─ dashboard/         # Dashboards (ads / content / messages / drafts / settings…)
+│   │   └─ api/               # BFF routes (cron / ads / insights / ai / auth…)
+│   ├─ components/            # React components (ads/ analytics/ content/ …)
+│   ├─ lib/                   # Pure logic (ads/diagnosis, sidekick/, meta/, ai/…)
+│   └─ next.config.mjs        # includes /__/auth/* rewrite (same-origin auth fix)
+├─ functions/                 # Firebase Cloud Functions (scheduled publishing)
+├─ site-docs/ + mkdocs.yml    # Public English docs site (GitHub Pages)
+├─ docs/                      # Planning documents (single source of truth per phase)
+├─ CLAUDE.md                  # Project worldview + AI collaboration rules
+└─ README.md                  # ← this file
 ```
 
 ---
 
-## 主要功能
+## Key features
 
-- **FB + IG 成效儀表板** — Meta 授權後定時同步貼文 / 廣告 / 限動，page-scoped 儲存。
-- **AI 診斷引擎** — 依廣告目標比對指標門檻，標出問題並給可執行建議。**規則只有一份**：`apps/web/lib/ads/diagnosis.ts`（改門檻只動這檔，三個消費端同步生效）。
-- **AI Sidekick** — 帶當下數據的對話助理，可生成文案／圖片；自我學習迴圈（行為感知 evaluator + few-shot 反哺）。
-- **自動洞察報告** — 含同業 benchmark、最佳貼文、廣告 A/B、下一步建議；Firestore 快取 + fingerprint 自動失效。
-- **站內通知 + email 告警** — per-user 通知（紅點）+ 排程告警，只有 critical/warning 發送。
-- **素材生成 × 品牌素材庫** — AI 生圖；上傳 logo 可在生圖時 sharp 像素級疊上，或一鍵帶進 Canva。
+- **FB + IG + Threads performance dashboard**: scheduled sync of posts, ads and stories after Meta authorization, stored page-scoped.
+- **AI diagnosis engine**: compares metrics against goal-specific thresholds and flags issues with actionable advice. **Rules live in one file**: `apps/web/lib/ads/diagnosis.ts` (change a threshold there and all three consumers update).
+- **AI Sidekick**: chat assistant with live metrics in context; drafts captions and generates images; self-learning loop (behavior-aware evaluator + few-shot feedback).
+- **Automated insight reports**: industry benchmarks, best posts, ad A/B, next steps; Firestore cache with fingerprint-based invalidation.
+- **In-app notifications + email alerts**: per-user red-dot notifications and scheduled alerts; only critical/warning are sent.
+- **Content drafts and publishing**: AI captions per platform, high-fidelity preview, human approval, publish or schedule to Threads / FB / IG with kill switch and quiet hours.
+- **Creative generation × brand asset library**: AI image generation; uploaded logos are composited pixel-exact with sharp, or handed to Canva in one click.
+- **Messaging analytics**: read-only IG/FB DM statistics, intent classification, response performance; FAQ auto-reply agent in dry-run.
 
 ---
 
-## 開發指令（monorepo，程式在 `apps/web`）
+## Development (monorepo, code in `apps/web`)
 
 ```bash
 cd apps/web
-npm run dev          # 本機開發
-npx tsc --noEmit     # 型別檢查
+npm run dev          # local dev
+npx tsc --noEmit     # type check
 npx eslint <files>   # lint
 npm run build        # production build
 ```
 
-**紀律**：每次改完 → `tsc` + `eslint` + `next build` **三關全綠**才 commit。
+**Discipline**: after every change, `tsc` + `eslint` + `next build` must **all pass** before committing.
 
-**部署流程（2026-06-07 起）**：
-1. 改完 → 三關全綠
-2. **先 `npm run dev` 跑 localhost（http://localhost:3000）給使用者測**
-3. 使用者確認「OK」**才** `git commit` + `git push`（main → Vercel 自動部署前端 + API）
-4. `functions/` 變更 → `firebase deploy`
+**Deploy flow (since 2026-06-07)**:
+1. Make the change → all three checks green
+2. **Run `npm run dev` and let the owner test on localhost (http://localhost:3000)**
+3. Only after the owner says "OK": `git commit` + `git push` (main → Vercel auto-deploys frontend + API)
+4. `functions/` changes → `firebase deploy`
 
-> ⚠️ 未經使用者在 localhost 測試確認前，不要逕自 push。純文件（README/docs/memory）類改動可豁免 localhost 步驟。
-
----
-
-## 環境與密鑰
-
-- Firebase 專案：`contentloop-dev`（Blaze plan）
-- Meta App：Business 類型，Development mode
-- 所有 secret／token 只存 `.env.local`（前端）或 Firebase Secret Manager / Vercel env（後端）—— **絕不 commit**。
+> ⚠️ Do not push before the owner has verified on localhost. Documentation-only changes (README / docs / memory / site-docs) are exempt from the localhost step.
 
 ---
 
-## 多粉專資料隔離（release 前必過的關卡）
+## Environment and secrets
 
-使用者可能同時是多個粉專的 Admin。**只要請求帶了 `pageId`，所有讀取貼文／洞察／廣告的程式碼都必須以該 `pageId` 為界**，對 viewer / admin / owner / super-admin 一律適用。
-
-- FB legacy collection 必加 `` `${pageId}_` `` 前綴過濾；IG legacy 有 pageId 時完全不讀。
-- 驗收：用「同時管理 A、B 兩粉專的 admin」登入，切到 A 不可看到任何 B 的資料。
-- 細節見 `CLAUDE.md` 與 memory `feedback_page_isolation`。
+- Firebase project: `contentloop-dev` (Blaze plan)
+- Meta App: Business type, Live mode (App Review passed 2026-08)
+- All secrets and tokens live only in `.env.local` (frontend) or Firebase Secret Manager / Vercel env (backend). **Never commit them.**
 
 ---
 
-## 相關文件
+## Multi-page data isolation (must pass before every release)
 
-- `CLAUDE.md` — 專案世界觀、AI 協作規則、診斷引擎單一事實來源、隔離鐵則。
-- `docs/architecture.md` — 系統架構。
-- `docs/goal-metrics.md` — 廣告目標 → 指標對照。
-- `docs/phase-*.md` — 各階段規劃。
-- **公開文件站（英文）**：https://aliciachen727.github.io/TM-contentloop/ — MkDocs Material，來源在 `site-docs/`（Home / PRD / Architecture(Mermaid) / Release Log），push `main` 動到 `site-docs/**` 或 `mkdocs.yml` 即由 `.github/workflows/docs.yml` 自動部署到 GitHub Pages。
-- AI 記憶索引：`~/.claude/projects/-Users-pei-wenchen-Files-TM-contentloop/memory/MEMORY.md`
+A user may be admin of several pages at once. **Whenever a request carries a `pageId`, every read of posts, insights or ads must be bounded by that `pageId`**, for viewer / admin / owner / super-admin alike.
+
+- FB legacy collections must be filtered by the `` `${pageId}_` `` prefix; IG legacy is never read when `pageId` is known.
+- Acceptance: sign in as an admin who manages pages A and B; viewing A must show nothing of B.
+- Details in `CLAUDE.md` and memory `feedback_page_isolation`.
 
 ---
 
-## 變更紀錄
+## Related documents
 
-> 規範：重大程式改動 / memory 更新時，在此補一行（日期 + 摘要 + commit）。最新在上。
+- `CLAUDE.md`: project worldview, AI collaboration rules, diagnosis single source of truth, isolation rules.
+- `docs/architecture.md`: system architecture.
+- `docs/goal-metrics.md`: ad goal → metric mapping.
+- `docs/phase-*.md`: per-phase planning.
+- **Public docs site (English)**: https://aliciachen727.github.io/TM-contentloop/ — MkDocs Material, sources in `site-docs/` (Home / PRD / Architecture with Mermaid / Release Log). Pushing to `main` with changes under `site-docs/**` or `mkdocs.yml` triggers `.github/workflows/docs.yml`, which deploys to GitHub Pages.
+- AI memory index: `~/.claude/projects/-Users-pei-wenchen-Files-TM-contentloop/memory/MEMORY.md`
 
-| 日期 | 變更 | Commit |
-|------|------|--------|
+---
+
+## Change Log (變更紀錄)
+
+> Rule: on every major code change or memory update, add one row here (date + summary + commit), newest first. Historical rows are kept in their original Chinese; the English mirror is the [Release Log](https://aliciachen727.github.io/TM-contentloop/release-log/) on the docs site.
+
+| Date | Change | Commit |
+|------|--------|--------|
+| 2026-09-06 | **README 全面英文化 + 重新定位 + Release Log 同步**：README 描述段落改英文，定位從「Toastmasters 分會用」改為「為個人品牌、企業與組織打造，一站式檢視 Meta 社群成效與廣告成效」；PRD / 文件站首頁同步改定位；`site-docs/release-log.md` 改為逐行鏡射本表（2026-06-04 → 今）並保留 git 推導的 2026-05 早期歷史；專案現況表更新至實況（Phase 3/3B/3C 完成、5 進行中）。維護規範新增「補列時同步英文 release log」 | （本次） |
 | 2026-09-06 | **新增 GitHub Pages 英文文件站**：根目錄 `mkdocs.yml` + `site-docs/`（Home、PRD、Architecture 十張 Mermaid 圖、Release Log 依月份整理 2026-05→08），MkDocs Material 內建搜尋、TOC、深淺色、右上 GitHub repo 連結；`.github/workflows/docs.yml` 用 `actions/deploy-pages` 部署（Pages source = GitHub Actions）。本機 `python3 -m mkdocs build --strict` 全綠 + Playwright 實開頁面確認 Mermaid 渲染（修掉兩處語法：sequence 訊息含 `;`、edge label 含 `{}`）。`site/` 加進 .gitignore | `1f29216` |
 | 2026-08-22 | **修 publishResults 深合併殘留 + 保留失敗歷史**：那篇 IG retry 成功後，Firestore 竟變成 `{ error:"Fatal", postId:"1811…" }` **error 與 postId 並存**。根因不是「忘了清」——`recordPublishOutcome` 本來就整包替換 `[platform]`（成功時物件無 `error` key），但 **`set(patch,{merge:true})` 對巢狀 map 是深合併**，少掉的 key 不會消失 → 舊 error 復活（**同 `linkClicks` 事故那條**）。目前判失敗是 `error && !postId` 所以沒出事，但任何寫 `if (r.error)` 的新程式碼都會誤判。修法：(1) 抽純函式 `lib/content/publishResultEntry.ts` 的 `buildPlatformEntry()`（比照 `matchesPage` 抽法）——成功時不帶 `error` 並回報 `clearedKeys`，呼叫端用 `FieldValue.delete()` 真正刪除；**同時把上次的 error 搬進新的 `failures[]`（上限 5 筆）**，誤導性 error 消失但「曾經失敗」不流失。(2) `draftTypes` 的 `publishResults` 加 `failures?: {error,at}[]`。(3) 新增 8 個測試，核心那個重現 8/17→8/22 真實序列。**資料補正**：DRY RUN 掃 45 篇草稿找到 **3 篇**中招（IG `Fatal`、Threads `Application does not have permission`（留言串，對應 manage_replies scope）、Threads `UNKNOWN`），全部已修正並複驗回 0 筆。77 測試全過 + 三關綠。⚠️ UI 尚未顯示 `failures`（資料存著但看不到），要不要加待決 | （本次） |
 | 2026-08-22 | **IG 發布錯誤保留 Meta 完整資訊**（原本只存到 `Fatal`）：2026-08-17 Legacy 一篇排程輪播（10 圖）FB 發成功、IG 失敗，但 `publishResults.ig.error`、`bugReports` detail、UI 徽章三處存到的都只有 **`Fatal`** 五個字 → 完全無法追查。根因＝`lib/meta/publishIg.ts` 只取 `j.error.message`，而 Meta 的 message 本身沒資訊量（`code -1` 通用錯誤），同一個 error 物件裡真正有用的欄位被整包丟掉。修法：(1) 新增純函式 `formatMetaError()` 保留 `error_user_title`/`error_user_msg`（可行動說明）+ **原始 message 絕不丟**（對照 Meta 文件的鍵）+ `code`/`error_subcode`/`type`/**`fbtrace_id`**，同字串只留一次。(2) `waitReady` 改取 `fields=status_code,status` —— container 失敗時 IG 把原因寫在 `status`，原本只查 `status_code` 只拿得到光禿禿的 `ERROR`；並補上 polling 回應自身帶 `error` 的處理（原本會被當「還沒好」一路 continue 到 90s 逾時）。(3) **輪播錯誤指出第幾張 + 檔名**（10 張平行建 container，原本不說哪張＝無法重現）。新增 `lib/meta/publishIg.test.ts`（7 測試），第一個把 2026-08-17 真實 payload `{message:"Fatal", code:-1, fbtrace_id}` 釘成回歸案例。⚠️ 實作第一版在 `error_user_title` 與 `error_user_msg` 同時存在時會丟掉原始 message（**正是本次要修的病**），由測試紅燈抓到後修實作。**不改任何成功/失敗判定**，發布流程/狀態機/publishRunner/UI 皆未動；70 測試全過 + 三關綠；此路徑僅在 IG 真實失敗時觸發，未端到端驗證。附帶查明：該篇「Retry publish」是安全的——`publish/route.ts:54` 對已有 `postId` 的平台回 `alreadyPublished`，不會重發 FB | `d4721b5` |

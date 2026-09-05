@@ -2,19 +2,19 @@
 
 ## 1. Overview
 
-**ContentLoop** is a web application that helps administrators of Facebook Pages (and their linked Instagram Business and Threads accounts) understand how their organic content and paid ads perform, receive AI-generated diagnoses and recommendations, and act on them through an approval-gated content workflow.
+**ContentLoop** was built for **personal brands, businesses and organizations** that want a **one-stop dashboard** to review the performance of their Meta social media presence (Facebook Pages, Instagram Business and Threads) together with their ad results. It pulls organic and paid metrics from the Meta APIs, turns them into AI-generated diagnoses and recommendations, and lets teams act on them through an approval-gated content workflow.
 
-The first customer is a Toastmasters district and its clubs. The product is designed from day one for **many pages managed by many admins**, including a single admin who manages several unrelated pages at once.
+The product is designed from day one for **many pages managed by many admins**, including a single admin who manages several unrelated pages at once (for example a personal brand, a company page and a community organization).
 
 ### 1.1 Problem statement
 
-Page admins in volunteer organizations and small brands:
+Page admins at small brands, businesses and community organizations:
 
 - Check Meta Business Suite sporadically and miss slow declines in reach or rising ad costs.
 - Do not know which metric matters for their campaign goal (clicks vs. conversions vs. reach vs. event sign-ups).
 - Have no benchmark to tell "bad" from "normal".
 - Spend hours writing captions and building creatives without feedback on what actually worked.
-- Cannot delegate reporting to non-admin volunteers without handing over page access.
+- Cannot delegate reporting to teammates or agencies without handing over page access.
 
 ### 1.2 Goals
 

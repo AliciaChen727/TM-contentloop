@@ -2,7 +2,7 @@
 
 **AI-powered content and advertising performance dashboard for Facebook, Instagram and Threads pages.**
 
-ContentLoop was built for Toastmasters club Facebook pages and has since grown into a multi-page, multi-admin platform. It pulls post, story and ad performance from the Meta Graph API, stores everything page-scoped in Firestore, and surfaces it in a Next.js dashboard with a rules-based diagnosis engine, an AI Sidekick, automated insight reports and an approval-gated publishing pipeline.
+ContentLoop was built for personal brands, businesses and organizations that want a one-stop dashboard to review the performance of their Meta social media presence and their ad results. It is a multi-page, multi-admin platform: it pulls post, story and ad performance from the Meta Graph API, stores everything page-scoped in Firestore, and surfaces it in a Next.js dashboard with a rules-based diagnosis engine, an AI Sidekick, automated insight reports and an approval-gated publishing pipeline.
 
 [:fontawesome-brands-github: View on GitHub](https://github.com/AliciaChen727/TM-contentloop){ .md-button .md-button--primary }
 [:material-file-document-outline: Read the PRD](prd.md){ .md-button }
