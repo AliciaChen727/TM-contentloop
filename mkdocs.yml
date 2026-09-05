@@ -1,0 +1,86 @@
+site_name: ContentLoop Docs
+site_description: AI-powered content and ad performance dashboard for Facebook, Instagram and Threads pages
+site_url: https://aliciachen727.github.io/TM-contentloop/
+site_author: Alicia Chen
+
+repo_name: AliciaChen727/TM-contentloop
+repo_url: https://github.com/AliciaChen727/TM-contentloop
+edit_uri: edit/main/site-docs/
+
+docs_dir: site-docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+
+nav:
+  - Home: index.md
+  - PRD: prd.md
+  - Architecture: architecture.md
+  - Release Log: release-log.md
+
+plugins:
+  - search:
+      lang: en
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AliciaChen727/TM-contentloop
+      name: GitHub repository
+
+copyright: Copyright &copy; 2026 ContentLoop
