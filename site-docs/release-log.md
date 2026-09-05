@@ -9,6 +9,7 @@ This page is the English mirror of the change log in the repository [README](htt
 
 ## 2026-09
 
+- **2026-09-06 · CLAUDE.md / AGENTS.md positioning aligned.** The AI collaboration files now describe ContentLoop as built for personal brands, businesses and organizations, note that the first customer was a Toastmasters district while forbidding hard-coding any single organization, and refresh the status and environment lines (Meta App in Live mode, pages are whatever the user manages).
 - **2026-09-06 · README in English, new positioning, Release Log sync.** README prose translated to English and repositioned: ContentLoop is built for personal brands, businesses and organizations that want a one-stop dashboard for Meta social media and ad performance. PRD and docs home page updated to match. This Release Log now mirrors every README change-log row. Project status table refreshed (Phases 3, 3B, 3C delivered; Phase 5 in progress).
 - **2026-09-06 · Public English docs site on GitHub Pages.** Root `mkdocs.yml` plus `site-docs/` (Home, PRD, Architecture with ten Mermaid diagrams, Release Log). MkDocs Material with search, table of contents, light/dark themes and a GitHub repo link. Deployed by `.github/workflows/docs.yml` via `actions/deploy-pages`. Verified with a strict local build and a real browser pass that caught two Mermaid syntax errors (a `;` in a sequence message and `{}` in an edge label). [`1f29216`](https://github.com/AliciaChen727/TM-contentloop/commit/1f29216)
 

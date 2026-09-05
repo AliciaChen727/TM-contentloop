@@ -1,9 +1,9 @@
 # ContentLoop — 專案世界觀 (AGENTS.md)
 
 ## 專案定位
-Toastmasters 分會用的 AI 廣告／內容成效儀表板。從 FB 粉專 + 連動 IG 抓貼文/廣告成效，存 Firestore，用 Next.js 儀表板呈現，並提供 AI 診斷、洞察報告、AI Sidekick 與廣告異常通知。
+為**個人品牌、企業與組織**打造的 AI 廣告／內容成效儀表板：讓使用者在一站式儀表板檢視 Meta 社群媒體（FB 粉專、連動 IG、Threads）的內容成效與廣告成效。從 Meta API 抓貼文/限動/廣告成效，存 Firestore（page-scoped），用 Next.js 儀表板呈現，並提供 AI 診斷、洞察報告、AI Sidekick、廣告異常通知與需人工核准的發布流程。多粉專、多管理員是第一天就有的設計前提。
 
-**現況**：Phase 1（資料抓取 + 儀表板）已上線。目前在做通知 → 優化 → 自動化的 roadmap。
+**現況**：Phase 1–3、3B、3C 已上線／交付；Phase 5-1 私訊分析已上線、5-2 自動回覆 dry-run；Phase 4 廣告寫入待 App Review。第一個客戶是 Toastmasters 分會，但程式與文案不可寫死任何單一組織。
 
 > 📌 **維護規範**：每次「重大程式改動」（新功能 / 改架構 / 改診斷規則 / 加改 API / 加外部整合 / 改部署）或「memory 更新」，都要回頭更新根目錄 `README.md` 對應章節，並在其 [變更紀錄] 補一行（日期 + 摘要 + commit）。小修字不必。
 
@@ -40,8 +40,8 @@ npm run build        # production build（commit/push 前務必跑過）
 
 ## 環境資訊
 - Firebase 專案：`contentloop-dev`（Blaze plan）
-- Meta App：Business 類型，Development mode
-- FB Page：TM 分會粉專（使用者為 Admin）
+- Meta App：Business 類型，Live mode（2026-08 通過 App Review）
+- FB Page：使用者自己管理的粉專（owner 目前含 TM 分會 + 個人品牌粉專，共 8 個）
 - IG：Business 帳號，已連動上述 Page
 
 ## 協作規則（AI 行為準則）
