@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { GradientBackdrop } from '@/components/ui/GradientBackdrop'
 
 type Lang = 'zh' | 'en'
 
@@ -151,7 +152,7 @@ export default function HomeClient({ initialLang }: { initialLang: Lang }) {
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-[42rem] -translate-x-1/2 rounded-full bg-blue-100/60 blur-3xl" />
+        <GradientBackdrop className="opacity-40 [mask-image:linear-gradient(to_bottom,black_65%,transparent)]" />
         <div className="relative mx-auto max-w-3xl px-6 pt-20 pb-16 text-center sm:pt-28">
           <span className="inline-block rounded-full border border-blue-200 bg-blue-50 px-4 py-1 text-xs font-medium text-blue-700">
             {t.hero_badge}
@@ -174,12 +175,12 @@ export default function HomeClient({ initialLang }: { initialLang: Lang }) {
             </Link>
             <a
               href="#features"
-              className="w-full rounded-full border border-gray-200 px-8 py-3 text-center text-base font-semibold text-gray-700 transition hover:bg-gray-50 sm:w-auto"
+              className="w-full rounded-full border border-gray-300 bg-white px-8 py-3 text-center text-base font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 sm:w-auto"
             >
               {t.hero_cta2}
             </a>
           </div>
-          <p className="mt-4 text-xs text-gray-400">{t.hero_note}</p>
+          <p className="mt-4 text-xs text-gray-600">{t.hero_note}</p>
         </div>
       </section>
 

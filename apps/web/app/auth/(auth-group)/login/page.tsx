@@ -4,6 +4,7 @@ import { signInWithPopup, signOut, linkWithCredential, FacebookAuthProvider, typ
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { auth, googleProvider, facebookProvider } from '@/lib/firebase/client'
+import { GradientBackdrop } from '@/components/ui/GradientBackdrop'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -134,14 +135,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-gray-50">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50">
+      <GradientBackdrop />
       <a
         href="/"
-        className="absolute left-5 top-5 flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-800"
+        className="absolute left-5 top-5 flex items-center gap-1.5 text-sm font-medium text-gray-900 transition hover:text-gray-700"
       >
         ← {L('返回首頁', 'Back to home')}
       </a>
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">ContentLoop</h1>
         <p className="mb-8 text-sm text-gray-500">{L('登入以管理你的內容成效', 'Sign in to manage your content performance')}</p>
         {inAppBrowser && (
